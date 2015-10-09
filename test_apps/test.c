@@ -10,18 +10,15 @@ void *rxfifo_read(void *read_buf);
 char devname[] = DEV_NAME;
 char devname_2[] = DEV_NAME_2;
 char devname_3[] = DEV_NAME_3;
-//char devname_4[] = DEV_NAME_4;
-//char devname_5[] = DEV_NAME_5;
+
 int bram = -1;
-//int hls_write_ctl = -1;
-//int hls_read_ctl = -1;
 int hls_write = -1;
 int hls_read = -1;
+
 char * devfilename = devname;
 char * devfilename_2 = devname_2;
 char * devfilename_3 = devname_3;
-//char * devfilename_4 = devname_4;
-//char * devfilename_5 = devname_5;
+
 unsigned int bram_axi_addr = 0x00000000;
 unsigned int hls_write_ctl_axi_addr = 0x00005000;
 unsigned int hls_read_ctl_axi_addr = 0x00007000;
@@ -37,8 +34,6 @@ int hls_fifo_mode = AXI_STREAM_FIFO;
 
 unsigned int SET_AXI_DEVICE = 50;
 unsigned int SET_AXI_CDMA = 51;
-//unsigned int RESERVED = 1;
-//unsigned int RESERVED2 = 2;
 unsigned int SET_AXI_PCIE_CTL = 52;
 unsigned int SET_AXI_PCIE_M = 53;
 unsigned int SET_AXI_INT_CTRL = 54;
@@ -82,18 +77,6 @@ int main()
 	if(bram < 0){
 		return -1;
 	}
-
-//	hls_write_ctl = open(devfilename_2, O_RDWR);
-//	if(hls_write_ctl < 0){
-//		printf("error opening file\n");
-//		return -1;
-//	}
-
-//	hls_read_ctl = open(devfilename_3, O_RDWR);
-//	if(hls_read_ctl < 0){
-//		printf("error opening file");
-//		return -1;
-//	}
 
 	hls_write = open(devfilename_2, O_RDWR);
 	if(hls_write < 0){
@@ -236,7 +219,7 @@ int main()
 	//This thread will perform a blocking read until an interrupt
 	//has occured signifying the data is availble
 	//first initialize a receive buffer
-	unsigned int rxbuff[4]; //16B
+	unsigned int rxbuff[sizeof(in)];
 
 	pthread_t rxfifo;
 
@@ -246,86 +229,9 @@ int main()
 	}
 	printf("Other Thread\n");
 
-	/*******Configure and send data to the TX FIFO (front end) **********/
+	/*******Send data to the TX FIFO (front end) **********/
 
-	//Allocate a receive register	
-	unsigned int buff2[1];
-	//Allocate a transmit register
-	unsigned int txregbuf;
-
-	//Set TX TDFR and RX RDFR  (RESET)
-//	lseek(hls_write_ctl, TDFR, 0);
-//	lseek(hls_read_ctl, RDFR, 0);
-//	txregbuf = 0x000000A5;   //sets bit RCE "Receive Complete Enable"
-//	printf("Wrote to soft reset of TX and RX FIFOs\n");
-
-	//Read TX FIFO ISR
-//	lseek(hls_write_ctl, ISR, 0);
-//	ret_val = read(hls_write_ctl, (void*)buff2, 4);  //reads a 32bit register at where ever hls_write is pointing
-//	printf("TX FIFO: ISR REG:%x\n", buff2[0]);
-
-	//Read RX FIFO ISR
-//	lseek(hls_read_ctl, ISR, 0);
-//	ret_val = read(hls_read_ctl, (void*)buff2, 4);  //reads a 32bit register at where ever hls_write is pointing
-//	printf("RX FIFO: ISR REG:%x\n", buff2[0]);
-
-	//Write to clear reset done interrupt bits
-//	txregbuf = 0xFFFFFFFF;
-//	ret_val = write(hls_write_ctl, &txregbuf, 4);
-//	ret_val = write(hls_read_ctl, &txregbuf, 4);
-
-	//Read TX ISR
-//	ret_val = read(hls_write_ctl, (void*)buff2, 4);  
-//	printf("TX FIFO: ISR REG:%x\n", buff2[0]);
-
-	//Read RX ISR
-//	ret_val = read(hls_read_ctl, (void*)buff2, 4);  
-//	printf("RX FIFO: ISR REG:%x\n", buff2[0]);
-
-	//Read TX IER
-//	lseek(hls_write_ctl, IER, 0);
-//	ret_val = read(hls_write_ctl, (void*)buff2, 4);  
-//	printf("TX FIFO: IER REG:%x\n", buff2[0]);
-
-	//Set RX IER
-//	lseek(hls_read_ctl, IER, 0);
-//	txregbuf = 0x04000000;   //sets bit RCE "Receive Complete Enable"
-//	ret_val = write(hls_read_ctl, &txregbuf, 4);  
-//	ret_val = read(hls_read_ctl, (void*)buff2, 4);  
-//	printf("RX FIFO: IER REG:%x\n", buff2[0]);
-
-	//Set TX TDR
-//	lseek(hls_write_ctl, TDR, 0);
-//	txregbuf = 0x00000002;   //sets bit RCE "Receive Complete Enable"
-//	ret_val = write(hls_write_ctl, &txregbuf, 4);  
-//	ret_val = read(hls_write_ctl, (void*)buff2, 4);  
-//	printf("TX FIFO: TDR REG:%x\n", buff2[0]);
-
-	//Read TX FIFO VACANCY TDFV
-//	lseek(hls_write_ctl, TDFV, 0);
-//	ret_val = read(hls_write_ctl, (void*)buff2, 4);  
-//	printf("TX FIFO: TDFV REG:%x\n", buff2[0]);
-
-
-	//Start transmitting data to the TX FIFO Data Interface
-//	lseek(hls_write, TDFD, 0);
-//	ioctl(hls_write, SET_CDMA_KEYHOLE_WRITE, 1); 
-//	printf("Performed keyhole config setting\n");
 	ret_val = write(hls_write, in, sizeof(in));  
-//	printf("Wrote bytes to TXFIFO\n");
-//	ioctl(hls_write, SET_CDMA_KEYHOLE_WRITE, 0); 
-//	printf("Performed keyhole config setting\n");
-	
-//	lseek(hls_write_ctl, TDFV, 0);
-//	ret_val = read(hls_write_ctl, (void*)buff2, 4);  
-//	printf("TX FIFO: TDFV REG:%x\n", buff2[0]);
-//	printf("The vacancy above should be 16B less than previous TDFV read!!\n");
-
-	//Write to the Transmit length register to begin streaming transfer
-//	lseek(hls_write_ctl, TLR, 0);
-//	txregbuf = 0x20;    //32
-//	ioctl(hls_read, SET_CDMA_KEYHOLE_READ, 1); 
-//	ret_val = write(hls_write_ctl, &txregbuf, 4);  //transmit the first 16 bytes of "in"
 
 	printf("TX FIFO: Transmitted data\n");
 
@@ -389,31 +295,8 @@ void *rxfifo_read(void *read_buf)
 		
 		default:
 			printf("RX FIFO INTERRUPT DETECTED!\n");
-			/*Write to control registers to clear interrupt*/
-//			lseek(hls_read_ctl, ISR, 0);
-//			return_val = read(hls_read_ctl, (void*)buff2, 4);
-//			printf("RX FIFO (after interrupt): ISR REG:%x\n", buff2[0]);
-
-			//Write to clear reset done interrupt bits
-//			lseek(hls_read_ctl, ISR, 0);
-//			txregbuf = 0xFFFFFFFF;
-//			return_val = write(hls_read_ctl, &txregbuf, 4);
-
-			/*Write to clear interrupt on the interrupt controller*/
-//			ioctl(hls_read, CLEAR_AXI_INTERRUPT_CTLR, 0);
-		
-			/*Read the RX fifo fill level*/	
-//			lseek(hls_read_ctl, RDFO, 0);
-//			return_val = read(hls_read_ctl, (void*)buff2, 4);
-//			printf("RX FIFO (fill level): RDFO REG:%x\n", buff2[0]);
-			
-			/*Read the RX fifo receive address*/	
-//			lseek(hls_read_ctl, RDR, 0);
-//			return_val = read(hls_read_ctl, (void*)buff2, 4);
-//			printf("RX FIFO (receive address): RDR REG:%x\n", buff2[0]);
 		
 			/* Read from peripheral */
-//			lseek(hls_read, RDFD, 0);
 			return_val = read(hls_read, (void*)buff, sizeof(buff));  
 			
 			printf("Read the values from axi fifo....\n");
