@@ -379,8 +379,12 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	{
 		interrupt_vect_dict[0x2] = 1;
 
+		/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
+		int_ctrl_addr_loc = int_ctrl_virt_addr + INT_CTRL_IAR;
+		iowrite32(0x02, (u32 *)int_ctrl_addr_loc);
+	
 		/*since we don't know exactly how to handle interrupt clearing of this device
-		 *we push the interrupt acknowleding to the user space */
+		 *we push the interrupt acknowleding of the device to the user space */
 
 		wake_up(&wq_periph);
 
@@ -1003,6 +1007,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 				/*debug stuff*/
 				//Read CTL interface
+				printk(KERN_INFO"<axi_stream_fifo_read>: Reading the AXI Stream FIFO\n");
 				axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
 				virt_addr = axi_dest + pci_bar_vir_addr;
 				kern_reg = ioread32((u32 *)virt_addr);
@@ -1026,15 +1031,11 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				//			cdma_comp = 0;
 				//			printk(KERN_INFO"<pci_cdma_read>: process awoke.\n");
 
-				/*Here we need to clear the service interrupt in the interrupt acknowledge register*/ 
-				printk(KERN_INFO"<ioctl>: Clearing the axi interrupt vector:%x\n", mod_desc->interrupt_vec);
-				int_ctrl_virt_addr_loc = int_ctrl_virt_addr + INT_CTRL_IAR;
-				iowrite32(mod_desc->interrupt_vec, (u32 *)int_ctrl_virt_addr_loc);
-
 				//Transfer buffer from kernel space to user space at the allocated DMA region
 				copy_to_user(buf, zero_copy_buf, count);
 
 				bytes = count;
+				printk(KERN_INFO"<axi_stream_fifo_read>: Leaving the READ AXI Stream FIFO routine\n");
 				break;
 
 			case SLAVE:
@@ -1110,6 +1111,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			default:printk(KERN_INFO"<pci_read>: mode not detected on read\n");
 		}
 
+		printk(KERN_INFO"<read>: Leaving the read file op\n");
 		return bytes;
 		//	}
 }

@@ -3,6 +3,8 @@
 #include <pthread.h>
 #include <sys/poll.h>
 
+#define AXI_STREAM_FIFO 1
+
 void *rxfifo_read(void *read_buf);
 
 char devname[] = DEV_NAME;
@@ -30,6 +32,8 @@ unsigned int pcie_ctl_addr = 0x00002000;
 unsigned int pcie_m_addr = 0x00003000;
 unsigned int axi_int_addr = 0x00004000;
 unsigned int in[8];
+
+int hls_fifo_mode = AXI_STREAM_FIFO;
 
 unsigned int SET_AXI_DEVICE = 50;
 unsigned int SET_AXI_CDMA = 51;
@@ -137,6 +141,20 @@ int main()
 	}
 	printf("set peripheral to axi base address %x\n", hls_read_axi_addr);
 
+	/* set mode of AXI_FIFO*/
+	if(ioctl(hls_read, SET_MODE, &hls_fifo_mode) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set axi fifo to mode: %d\n", hls_fifo_mode);
+
+	/* set mode of AXI_FIFO*/
+	if(ioctl(hls_write, SET_MODE, &hls_fifo_mode) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set axi fifo to mode: %d\n", hls_fifo_mode);
+
 	/**** Set AXI Addresses of CDMA, PCIe, and INTERRUPT CONTROLLER ****/
 	/* Any open device File can perform these configurations */
 
@@ -217,7 +235,6 @@ int main()
 	/*Start up the RX FIFO Thread*/
 	//This thread will perform a blocking read until an interrupt
 	//has occured signifying the data is availble
-return 0;
 	//first initialize a receive buffer
 	unsigned int rxbuff[4]; //16B
 
@@ -398,7 +415,8 @@ void *rxfifo_read(void *read_buf)
 			/* Read from peripheral */
 //			lseek(hls_read, RDFD, 0);
 			return_val = read(hls_read, (void*)buff, sizeof(buff));  
-
+			
+			printf("Read the values from axi fifo....\n");
 			for(i=0;i<(sizeof(buff)/4);i++)
 			{
 				printf("value read: %x\n", buff[i]);
