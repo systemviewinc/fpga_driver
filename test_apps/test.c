@@ -19,11 +19,19 @@ char * devfilename = devname;
 char * devfilename_2 = devname_2;
 char * devfilename_3 = devname_3;
 
-unsigned int bram_axi_addr = 0x00000000;
-unsigned int hls_write_ctl_axi_addr = 0x00005000;
-unsigned int hls_read_ctl_axi_addr = 0x00007000;
-unsigned int hls_write_axi_addr = 0x00020000;
-unsigned int hls_read_axi_addr = 0x00010000;
+//unsigned int bram_axi_addr = 0x00000000;
+//unsigned int hls_write_ctl_axi_addr = 0x00005000;
+//unsigned int hls_read_ctl_axi_addr = 0x00007000;
+//unsigned int hls_write_axi_addr = 0x00020000;
+//unsigned int hls_read_axi_addr = 0x00010000;
+
+unsigned int bram_axi_addr = 0x50000000;
+unsigned int hls_write_ctl_axi_addr = 0x50010000;
+unsigned int hls_read_ctl_axi_addr = 0x50030000;
+unsigned int hls_write_axi_addr = 0x50020000;
+unsigned int hls_read_axi_addr = 0x50040000;
+
+
 unsigned int cdma_addr = 0x00001000;
 unsigned int pcie_ctl_addr = 0x00002000;
 unsigned int pcie_m_addr = 0x00003000;
