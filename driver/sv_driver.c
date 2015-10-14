@@ -893,7 +893,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 //		data_transfer(axi_dest, (void *)buf, count, transfer_type);
 //		return count;
 
-		if ((cdma_capable) & (count > 32)) {
+		if ((cdma_capable) & (count > 24)) {
 
 			//using CDMA
 			printk(KERN_INFO"<pci_cdma_write>: writing peripheral using a zero copy DMA\n");
@@ -1041,7 +1041,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 				axi_dest = mod_desc->axi_addr + filep->f_pos;
 
-				if ((cdma_capable) & (count > 32)) {
+				if ((cdma_capable) & (count > 24)) {
 
 					//using CDMA
 					printk(KERN_INFO"<pci_cdma_read>: reading peripheral using a zero copy DMA\n");
