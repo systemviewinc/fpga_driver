@@ -24,16 +24,17 @@ char * devfilename_3 = devname_3;
 //unsigned int hls_read_ctl_axi_addr = 0x00007000;
 //unsigned int hls_write_axi_addr = 0x00020000;
 //unsigned int hls_read_axi_addr = 0x00010000;
+//unsigned int pcie_ctl_addr = 0x00002000;
 
-unsigned int bram_axi_addr = 0x50000000;
-unsigned int hls_write_ctl_axi_addr = 0x50010000;
-unsigned int hls_read_ctl_axi_addr = 0x50030000;
-unsigned int hls_write_axi_addr = 0x50020000;
-unsigned int hls_read_axi_addr = 0x50040000;
+unsigned int bram_axi_addr = 0x04000000;
+unsigned int hls_write_ctl_axi_addr = 0x04001000;
+unsigned int hls_read_ctl_axi_addr = 0x04003000;
+unsigned int hls_write_axi_addr = 0x04020000;
+unsigned int hls_read_axi_addr = 0x04040000;
+unsigned int pcie_ctl_addr = 0x04002000;
 
 
 unsigned int cdma_addr = 0x00001000;
-unsigned int pcie_ctl_addr = 0x00002000;
 unsigned int pcie_m_addr = 0x00003000;
 unsigned int axi_int_addr = 0x00004000;
 unsigned int in[8];
@@ -97,6 +98,32 @@ int main()
 	}
 	printf("Opened files\n");
 
+	/**** Set AXI Addresses of CDMA, PCIe, and INTERRUPT CONTROLLER ****/
+	/* Any open device File can perform these configurations */
+	if(ioctl(bram, SET_AXI_PCIE_CTL, &pcie_ctl_addr) < 0){
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set PCIE CTL to axi address %x\n", pcie_ctl_addr);
+
+	if(ioctl(bram, SET_AXI_CDMA, &cdma_addr) < 0){
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set CDMA to axi address %x\n", cdma_addr);
+
+	if(ioctl(bram, SET_AXI_PCIE_M, &pcie_m_addr) < 0){ 
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set PCIE_M to axi address %x\n", pcie_m_addr);
+
+	if(ioctl(bram, SET_AXI_INT_CTRL, &axi_int_addr) < 0){ 
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set AXI interrupt Controller to axi address %x\n", axi_int_addr);
+
 	/*******************Set AXI addresses of Peripherals********************/
 
 	if(ioctl(bram, SET_AXI_DEVICE, &bram_axi_addr) < 0) {
@@ -104,7 +131,6 @@ int main()
 		return -1;
 	}
 	printf("set peripheral to axi base address %x\n", bram_axi_addr);
-
 	if(ioctl(hls_write, SET_AXI_CTL_DEVICE, &hls_write_ctl_axi_addr) < 0) {
 		printf("ERROR doing ioctl\n");
 		return -1;
@@ -146,32 +172,6 @@ int main()
 	}
 	printf("set axi fifo to mode: %d\n", hls_fifo_mode);
 
-	/**** Set AXI Addresses of CDMA, PCIe, and INTERRUPT CONTROLLER ****/
-	/* Any open device File can perform these configurations */
-
-	if(ioctl(bram, SET_AXI_PCIE_CTL, &pcie_ctl_addr) < 0){
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	printf("set PCIE CTL to axi address %x\n", pcie_ctl_addr);
-
-	if(ioctl(bram, SET_AXI_CDMA, &cdma_addr) < 0){
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	printf("set CDMA to axi address %x\n", cdma_addr);
-
-	if(ioctl(bram, SET_AXI_PCIE_M, &pcie_m_addr) < 0){ 
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	printf("set PCIE_M to axi address %x\n", pcie_m_addr);
-
-	if(ioctl(bram, SET_AXI_INT_CTRL, &axi_int_addr) < 0){ 
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	printf("set AXI interrupt Controller to axi address %x\n", axi_int_addr);
 
 	/****** Set the mode of hls_read to be "Slave with interrupt" ***********/
 	unsigned int interrupt_vector = 0x2;
@@ -222,7 +222,7 @@ int main()
 
 	else
 		printf("BRAM TEST FAILED\n");
-
+return 0;
 	/*Start up the RX FIFO Thread*/
 	//This thread will perform a blocking read until an interrupt
 	//has occured signifying the data is availble

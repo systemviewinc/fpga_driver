@@ -62,7 +62,9 @@ MODULE_PARM_DESC(major, "MajorNumber");
 
 /*Other Constants*/
 #define KEYHOLE_WRITE 1 
-#define KEYHOLE_READ 2
+#define NORMAL_WRITE 2
+#define KEYHOLE_READ 3
+#define NORMAL_READ 4
 
 const char pci_devName[] = "pci_skel"; //name of the device
 //const char pci_devName[] = name;       //name of the device
@@ -179,8 +181,9 @@ static irqreturn_t pci_isr(int irq, void *dev_id);
 void cdma_transfer(u32 SA, u32 DA, u32 BTT, int keyhole_en);
 int cdma_ack(void);
 void cdma_config_set(u32 bit_vec, int set_unset);
-void direct_read(u32 axi_address, char __user *buf, size_t count);
-void direct_write(u32 axi_address, const char __user *buf, size_t count);
+void direct_read(u32 axi_address, char __user *buf, size_t count, int transfer_type);
+void direct_write(u32 axi_address, const char __user *buf, size_t count, int transfer_type);
+void data_transfer(u32 axi_address, void *buf, size_t count, int transfer_type);
 
 
 static struct pci_device_id ids[] = {
@@ -217,6 +220,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	}
 	//get the base memory size
 	pci_bar_size = pci_resource_len(pci_dev_struct, 0);
+	printk(KERN_INFO"<probe>pci bar size is:%d\n", pci_bar_size);
 
 	//map the hardware space to virtual space
 	pci_bar_vir_addr = ioremap(pci_bar_hw_addr, pci_bar_size);
@@ -224,6 +228,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 		printk(KERN_INFO"%s:<probe>ioremap error when mapping to vritaul address\n", pci_devName);
 		return ERROR;
 	}
+	printk(KERN_INFO"<probe>pci bar virtual address base is:%p\n", pci_bar_vir_addr);
 
 	// check kernel memory region
 	//	if (0 > check_mem_region(pci_bar_hw_addr, REG_SIZE)){
@@ -828,7 +833,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	void * virt_addr;
 	u32 axi_dest;
 //	int dbg;
-//	void * kern_buf;
+	void * kern_buf;
 //	u32 * newaddr_src;
 //	u32 * newaddr_dest;
 //	int i;
@@ -838,6 +843,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	size_t bytes;
 	int cdma_capable;
 	int keyhole_en;
+	int transfer_type;
 	//u32 ret;
 	//void * int_ctrl_addr_loc;
 
@@ -879,6 +885,14 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		/* directly to the peripheral */
 		axi_dest = mod_desc->axi_addr + filep->f_pos;
 
+//		if (mod_desc->keyhole_config & 0x1)
+//			transfer_type = KEYHOLE_WRITE;
+//		else
+//			transfer_type = NORMAL_WRITE;
+//	
+//		data_transfer(axi_dest, (void *)buf, count, transfer_type);
+//		return count;
+
 		if ((cdma_capable) & (count > 32)) {
 
 			//using CDMA
@@ -893,23 +907,6 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			copy_from_user(zero_copy_buf, buf, count);
 
 			cdma_transfer(axi_pcie_m, axi_dest, (u32)count, keyhole_en);
-
-			//			if ((cdma_set == 1) & (pcie_ctl_set == 1) & (pcie_m_set == 1) & ((u32)count > 28)) {
-
-			//using CDMA
-			//				printk(KERN_INFO"<pci_write>: writing peripheral using a zero copy DMA\n");
-
-			//Transfer buffer from user space to kernel space at the allocated DMA region
-			//				copy_from_user(zero_copy_buf, buf, count);
-
-			//				axi_dest = mod_desc->axi_addr + filep->f_pos;
-			//cdma_transfer(axi_pcie_m, mod_desc->axi_addr, (u32)count);
-			//				cdma_transfer(axi_pcie_m, axi_dest, (u32)count);
-
-			/*Go to sleep and wait for interrupt*/
-			//				wait_event_interruptible(wq, cdma_comp != 0);
-			//				cdma_comp = 0;
-			//				printk(KERN_INFO"<pci_cdma_write>: process awoke.\n");
 
 			/*function to reset the CDMA and check status
 			 *returns status register read if error*/
@@ -928,7 +925,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 			printk(KERN_INFO"<pci_write>: writing peripheral without DMA\n");
 
-			direct_write(axi_dest, buf, count);
+			direct_write(axi_dest, buf, count, 0);
 
 			/*assign buffer in the kernel space to get user space data */
 			//			kern_buf = kmalloc(count, GFP_KERNEL);
@@ -1084,7 +1081,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 					axi_dest = mod_desc->axi_addr + filep->f_pos;
 
-					direct_read(axi_dest, buf, count);
+					direct_read(axi_dest, buf, count, 0);
 
 					//			printk(KERN_INFO"<pci_read>: reading from virtual address:('%p')\n", virt_addr);
 
@@ -1117,7 +1114,46 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 }
 /******************************** Support functions ***************************************/
 
-void direct_write(u32 axi_address, const char __user *buf, size_t count)
+void data_transfer(u32 axi_address, void *buf, size_t count, int transfer_type)
+{
+	int cdma_capable;
+
+	cdma_capable = (cdma_set == 1) & (pcie_ctl_set == 1) & (pcie_m_set == 1);
+
+	//if  data is small or the cdma is not initialized and in range
+	if (((count < 32) | (cdma_capable == 0)) & (axi_address < pci_bar_size))
+	{
+		if (transfer_type == (NORMAL_READ | KEYHOLE_READ))
+			direct_read(axi_address, (char __user*)buf, count, transfer_type);
+		else if (transfer_type == (NORMAL_WRITE | KEYHOLE_WRITE))
+			direct_write(axi_address, (const char __user*)buf, count, transfer_type);
+		else	
+			printk(KERN_INFO"<data_transfer>: error no transfer type specified\n");
+	}
+
+	else if (cdma_capable == 1)
+	{
+		if (transfer_type == (NORMAL_READ | KEYHOLE_READ))
+		{
+			cdma_transfer(axi_address, axi_pcie_m, (u32)count, transfer_type);
+			//Transfer buffer from kernel space to user space at the allocated DMA region
+			copy_to_user((char __user*)buf, zero_copy_buf, count);
+		}
+		else if (transfer_type == (NORMAL_WRITE | KEYHOLE_WRITE))
+		{
+			//Transfer data from user space to kernal space at the allocated DMA region
+			copy_to_user(zero_copy_buf, (const char __user*)buf, count);
+			cdma_transfer(axi_pcie_m, axi_address, (u32)count, transfer_type);
+		}
+		else
+			printk(KERN_INFO"<data_transfer>: error no transfer type specified\n");
+	}
+
+	else
+			printk(KERN_INFO"<data_transfer>: ERROR: Address is out of range and CDMA is not initialized\n");
+}
+
+void direct_write(u32 axi_address, const char __user *buf, size_t count, int transfer_type)
 {
 	void * kern_buf;
 	void * virt_addr;
@@ -1146,7 +1182,8 @@ void direct_write(u32 axi_address, const char __user *buf, size_t count)
 		newaddr_src = (u32 *)(kern_buf + offset);
 		newaddr_dest = (u32 *)(virt_addr + offset);
 		iowrite32(*newaddr_src, newaddr_dest);
-		offset += 4;
+		if (transfer_type != KEYHOLE_WRITE)
+			offset += 4;
 		printk(KERN_INFO"<pci_write>: wrote to kernel address %p.\n", newaddr_dest);
 	}
 
@@ -1155,7 +1192,7 @@ void direct_write(u32 axi_address, const char __user *buf, size_t count)
 
 }
 
-void direct_read(u32 axi_address, char __user *buf, size_t count)
+void direct_read(u32 axi_address, char __user *buf, size_t count, int transfer_type)
 {
 	int len;
 	void * virt_addr;
@@ -1173,7 +1210,8 @@ void direct_read(u32 axi_address, char __user *buf, size_t count)
 	{
 		newaddr_src = (u32 *)(virt_addr + offset);
 		kern_buf[i] = ioread32(newaddr_src);
-		offset += 4;
+		if (transfer_type != KEYHOLE_READ)
+			offset += 4;
 		printk(KERN_INFO"<pci_read>: read from kernel address %p.\n", newaddr_src);
 	}
 
