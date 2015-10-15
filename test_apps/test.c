@@ -27,10 +27,10 @@ char * devfilename_3 = devname_3;
 //unsigned int pcie_ctl_addr = 0x00002000;
 
 unsigned int bram_axi_addr = 0x80000000;
-unsigned int hls_write_ctl_axi_addr = 0x04001000;
-unsigned int hls_read_ctl_axi_addr = 0x04003000;
-unsigned int hls_write_axi_addr = 0x04020000;
-unsigned int hls_read_axi_addr = 0x04040000;
+unsigned int hls_write_ctl_axi_addr = 0x80001000;
+unsigned int hls_read_ctl_axi_addr = 0x80002000;
+unsigned int hls_write_axi_addr = 0x80010000;
+unsigned int hls_read_axi_addr = 0x80020000;
 
 unsigned int pcie_ctl_addr = 0x00002000;
 unsigned int cdma_addr = 0x00001000;
@@ -130,53 +130,52 @@ int main()
 		return -1;
 	}
 
-//	printf("set peripheral to axi base address %x\n", bram_axi_addr);
-//	if(ioctl(hls_write, SET_AXI_CTL_DEVICE, &hls_write_ctl_axi_addr) < 0) {
-//		printf("ERROR doing ioctl\n");
-//		return -1;
-//	}
-//	printf("set peripheral to axi base address %x\n", hls_write_ctl_axi_addr);
+	printf("set peripheral to axi base address %x\n", bram_axi_addr);
+	if(ioctl(hls_write, SET_AXI_CTL_DEVICE, &hls_write_ctl_axi_addr) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set peripheral to axi base address %x\n", hls_write_ctl_axi_addr);
 
 
-//	if(ioctl(hls_read, SET_AXI_CTL_DEVICE, &hls_read_ctl_axi_addr) < 0) {
-//		printf("ERROR doing ioctl\n");
-//		return -1;
-//	}
-//	printf("set peripheral to axi base address %x\n", hls_read_ctl_axi_addr);
+	if(ioctl(hls_read, SET_AXI_CTL_DEVICE, &hls_read_ctl_axi_addr) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set peripheral to axi base address %x\n", hls_read_ctl_axi_addr);
 
 
-//	if(ioctl(hls_write, SET_AXI_DEVICE, &hls_write_axi_addr) < 0) {
-//		printf("ERROR doing ioctl\n");
-//		return -1;
-//	}
-//	printf("set peripheral to axi base address %x\n", hls_write_axi_addr);
+	if(ioctl(hls_write, SET_AXI_DEVICE, &hls_write_axi_addr) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set peripheral to axi base address %x\n", hls_write_axi_addr);
 
 
-//	if(ioctl(hls_read, SET_AXI_DEVICE, &hls_read_axi_addr) < 0) {
-//		printf("ERROR doing ioctl\n");
-//		return -1;
-//	}
-//	printf("set peripheral to axi base address %x\n", hls_read_axi_addr);
-
-	/* set mode of AXI_FIFO*/
-//	if(ioctl(hls_read, SET_MODE, &hls_fifo_mode) < 0) {
-//		printf("ERROR doing ioctl\n");
-//		return -1;
-//	}
-//	printf("set axi fifo to mode: %d\n", hls_fifo_mode);
+	if(ioctl(hls_read, SET_AXI_DEVICE, &hls_read_axi_addr) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set peripheral to axi base address %x\n", hls_read_axi_addr);
 
 	/* set mode of AXI_FIFO*/
-//	if(ioctl(hls_write, SET_MODE, &hls_fifo_mode) < 0) {
-//		printf("ERROR doing ioctl\n");
-//		return -1;
-//	}
-//	printf("set axi fifo to mode: %d\n", hls_fifo_mode);
+	if(ioctl(hls_read, SET_MODE, &hls_fifo_mode) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set axi fifo to mode: %d\n", hls_fifo_mode);
 
+	/* set mode of AXI_FIFO*/
+	if(ioctl(hls_write, SET_MODE, &hls_fifo_mode) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set axi fifo to mode: %d\n", hls_fifo_mode);
 
 	/****** Set the mode of hls_read to be "Slave with interrupt" ***********/
-//	unsigned int interrupt_vector = 0x2;
-//	ioctl(hls_read, SET_INTERRUPT, &interrupt_vector); 
-//	printf("set peripheral as slave with interrupt at vector:%x\n", interrupt_vector);
+	unsigned int interrupt_vector = 0x2;
+	ioctl(hls_read, SET_INTERRUPT, &interrupt_vector); 
+	printf("set peripheral as slave with interrupt at vector:%x\n", interrupt_vector);
 
 	/**************** Initialize test buffer ********************************/
 	in[0] = 0xAAAAAAAA;
@@ -222,7 +221,7 @@ int main()
 
 	else
 		printf("BRAM TEST FAILED\n");
-return 0;
+
 	/*Start up the RX FIFO Thread*/
 	//This thread will perform a blocking read until an interrupt
 	//has occured signifying the data is availble
