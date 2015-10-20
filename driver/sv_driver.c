@@ -64,10 +64,10 @@ MODULE_PARM_DESC(major, "MajorNumber");
 #define SET_AXI_CTL_DEVICE 63
 
 /*Other Constants*/
-#define KEYHOLE_WRITE 1 
-#define NORMAL_WRITE 2
+#define KEYHOLE_WRITE 2 
+#define NORMAL_WRITE 0
 #define KEYHOLE_READ 3
-#define NORMAL_READ 4
+#define NORMAL_READ 1
 
 const char pci_devName[] = "pci_skel"; //name of the device
 unsigned long pci_bar_hw_addr;         //hardware base address of the device
@@ -394,6 +394,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 	else if (status & 0x2)
 	{
+		printk(KERN_INFO"<pci_isr>: AXI FIFO INTERRUPT SERVICING\n");
 		interrupt_vect_dict[0x2] = 1;
 
 		/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
@@ -907,10 +908,15 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				kern_reg = 0xFFFFFFFF;
 				data_transfer(axi_dest, (void *)&kern_reg, 4, NORMAL_WRITE);
 
-				/*debug stuff*/
+				/*ISR Read for Debug*/
 				data_transfer(axi_dest, (void *)&kern_reg, 4, NORMAL_READ);
 				printk(KERN_INFO"<axi_fifo_isr_reg>:%x\n", kern_reg);
 
+				/*Read FIFO Fill level*/
+//				axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RLR;
+//				data_transfer(axi_dest, (void *)&kern_reg, 4, NORMAL_READ);
+//				printk(KERN_INFO"<axi_stream_fifo_read> Read FIFO fill level:%x bytes\n", kern_reg);
+			
 				//set CDMA KEYHOLE
 				keyhole_en = KEYHOLE_READ;
 
@@ -1137,23 +1143,23 @@ void cdma_transfer(u32 SA, u32 DA, u32 BTT, int keyhole_en)
 	printk(KERN_INFO"<pci_dma_transfer>: writing bytes to transfer ('%d') to CDMA at axi address:%x\n", BTT, axi_dest);	
 	direct_write(axi_dest, (void*)&BTT, 4, NORMAL_WRITE);
 	//readback the BTT
-	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
-	printk(KERN_INFO"<pci_dma_transfer>: CDMA BTT readback:%x\n", status);	
+//	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
+//	printk(KERN_INFO"<pci_dma_transfer>: CDMA BTT readback:%x\n", status);	
 	//read the status register
-	axi_dest = axi_cdma + CDMA_SR;
-	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
-	printk(KERN_INFO"<pci_dma_transfer>: CDMA Status after writing BTT::%x\n", status);	
+//	axi_dest = axi_cdma + CDMA_SR;
+//	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
+//	printk(KERN_INFO"<pci_dma_transfer>: CDMA Status after writing BTT::%x\n", status);	
 	
 	/*Go to sleep and wait for interrupt*/
 	wait_event_interruptible(wq, cdma_comp != 0);
 	cdma_comp = 0;
 	printk(KERN_INFO"<pci_dma_transfer>: returned from ISR.\n");
 	//read the status register
-	axi_dest = axi_cdma + CDMA_SR;
-	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
-	printk(KERN_INFO"<pci_dma_transfer>: CDMA Status after returning from ISR:%x\n", status);	
+//	axi_dest = axi_cdma + CDMA_SR;
+//	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
+//	printk(KERN_INFO"<pci_dma_transfer>: CDMA Status after returning from ISR:%x\n", status);	
 
-	if (keyhole_en > 0)
+	if ((keyhole_en == KEYHOLE_READ) | (keyhole_en == KEYHOLE_WRITE))
 	{
 		bit_vec = 0x20 | 0x10;      // "0x30" unset both CDMA keyhole read and write	
 		cdma_config_set(bit_vec, 0);	//unsets the keyhole configuration

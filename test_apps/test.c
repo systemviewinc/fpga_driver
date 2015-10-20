@@ -24,19 +24,19 @@ unsigned int pcie_ctl_addr = 0x00002000;
 unsigned int cdma_addr = 0x00001000;
 unsigned int pcie_m_addr = 0x00010000;
 unsigned int axi_int_addr = 0x00004000;
-unsigned int in[8];
+unsigned int in[50];
 
 /* User Peripheral AXI Addresses */
 //unsigned int bram_axi_addr = 0x80000000;
-unsigned int hls_write_ctl_axi_addr = 0x80001000;
-unsigned int hls_write_axi_addr = 0x80010000;
-unsigned int hls_read_ctl_axi_addr = 0x80002000;
-unsigned int hls_read_axi_addr = 0x80020000;
-
-//unsigned int hls_write_ctl_axi_addr = 0x80010000;
-//unsigned int hls_write_axi_addr = 0x80000000;
-//unsigned int hls_read_ctl_axi_addr = 0x80030000;
+//unsigned int hls_write_ctl_axi_addr = 0x80001000;
+//unsigned int hls_write_axi_addr = 0x80010000;
+//unsigned int hls_read_ctl_axi_addr = 0x80002000;
 //unsigned int hls_read_axi_addr = 0x80020000;
+
+unsigned int hls_write_ctl_axi_addr = 0x80010000;
+unsigned int hls_write_axi_addr = 0x80000000;
+unsigned int hls_read_ctl_axi_addr = 0x80030000;
+unsigned int hls_read_axi_addr = 0x80020000;
 
 int hls_fifo_mode = AXI_STREAM_FIFO;
 
@@ -178,14 +178,20 @@ int main()
 	printf("set peripheral as slave with interrupt at vector:%x\n", interrupt_vector);
 
 /********************************* BRAM TEST  ********************************************/
-	in[0] = 0xAAAAAAAA;
-	in[1] = 0xBBBBBBBB;
-	in[2] = 0xCCCCCCCC;
-	in[3] = 0xDDDDDDDD;
-	in[4] = 0xEEEEEEEE;
-	in[5] = 0xFFFFFFFF;
-	in[6] = 0x00000000;
-	in[7] = 0x11111111;
+int p=0;
+while(p<49)
+{
+	in[p++] = 0xAAAAAAA0;
+	in[p++] = 0xBBBBBBB0;
+	in[p++] = 0xCCCCCCC0;
+	in[p++] = 0xDDDDDDD0;
+	in[p++] = 0xEEEEEEE0;
+	in[p++] = 0xFFFFFFF0;
+	in[p++] = 0x11111110;
+	in[p++] = 0x22222220;
+	in[p++] = 0x33333330;
+	in[p++] = 0x44444440;
+}
 
 	int ret_val;
 
@@ -279,7 +285,7 @@ void *rxfifo_read(void *read_buf)
 	int timeout = 10000;    //in ms
 	int result;
 	unsigned int buff2[1];
-	unsigned int buff[8];  //8 32b data words
+	unsigned int buff[50];  //50 32b data words
 	int i;
 
 	/*initialize pollfds*/
