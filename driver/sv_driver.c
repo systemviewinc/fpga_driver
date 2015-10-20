@@ -27,6 +27,9 @@
 static int device_id = 100;
 static int major = 241;
 
+/*this is the user peripheral address offset*/
+const u32 peripheral_space_offset = 0x80000000;
+
 module_param(device_id, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(device_id, "DeviceID");
 
@@ -240,22 +243,23 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 	/****************** BAR 1 Mapping *******************************************/
 	//get the base hardware address
-//	pci_bar_1_addr = pci_resource_start(pci_dev_struct, 1);
-//	if (0 > pci_bar_1_addr){
-//		printk(KERN_INFO"%s<probe>BAR 1 base hardware address is not set\n", pci_devName);
-//		return ERROR;
-//	}
+	pci_bar_1_addr = pci_resource_start(pci_dev_struct, 1);
+	if (0 > pci_bar_1_addr){
+		printk(KERN_INFO"%s<probe>BAR 1 base hardware address is not set\n", pci_devName);
+		return ERROR;
+	}
 	//get the base memory size
-//	pci_bar_1_size = pci_resource_len(pci_dev_struct, 1);
-//	printk(KERN_INFO"<probe>pci bar 1 size is:%d\n", pci_bar_1_size);
+	pci_bar_1_size = pci_resource_len(pci_dev_struct, 1);
+	printk(KERN_INFO"<probe>pci bar 1 size is:%d\n", pci_bar_1_size);
 
 	//map the hardware space to virtual space
-//	pci_bar_1_vir_addr = ioremap(pci_bar_1_addr, pci_bar_1_size);
-//	if(0 == pci_bar_1_vir_addr){
-//		printk(KERN_INFO"%s:<probe>ioremap error when mapping to vritaul address\n", pci_devName);
-//		return ERROR;
-//	}
-//	printk(KERN_INFO"<probe>pci bar 1 virtual address base is:%p\n", pci_bar_1_vir_addr);
+	pci_bar_1_vir_addr = ioremap(pci_bar_1_addr, pci_bar_1_size);
+	if(0 == pci_bar_1_vir_addr){
+		printk(KERN_INFO"%s:<probe>ioremap error when mapping to virtual address\n", pci_devName);
+		return ERROR;
+	}
+	printk(KERN_INFO"<probe>pci bar 1 virtual address base is:%p\n", pci_bar_1_vir_addr);
+	/*****************************************************************************/
 
 	//enable the device
 	pci_enable_device(dev);
@@ -361,7 +365,6 @@ module_exit(pci_skel_exit);
 /********************** ISR Stuff ***************************/
 static irqreturn_t pci_isr(int irq, void *dev_id)
 {
-	void* int_ctrl_addr_loc;
 	u32 status;
 	u32 axi_dest;
 
@@ -515,11 +518,13 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE);
 			/*Check the current status*/
 			axi_dest = axi_cdma + CDMA_SR;
-			direct_read(axi_dest, (void*)&cdma_status, 4, NORMAL_READ);
+//			direct_read(axi_dest, (void*)&cdma_status, 4, NORMAL_READ);
+			data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ);
 			printk(KERN_INFO"<ioctl>: CDMA status before configuring:%x\n", cdma_status);	
 			/*Check the current config*/
 			axi_dest = axi_cdma + CDMA_CR;
-			direct_read(axi_dest, (void*)&cdma_status, 4, NORMAL_READ);
+//			direct_read(axi_dest, (void*)&cdma_status, 4, NORMAL_READ);
+			data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ);
 			printk(KERN_INFO"<ioctl>: CDMA config before configuring:%x\n", cdma_status);	
 			/*clear any pre existing interrupt*/
 			axi_dest = axi_cdma + CDMA_SR;
@@ -800,9 +805,8 @@ int pci_poll(struct file *filep, poll_table * pwait)
 
 ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff_t *f_pos)
 {
-	void * virt_addr;
-	u32 axi_dest;
 	void * kern_buf = NULL;
+	u32 axi_dest;
 	struct mod_desc * mod_desc;
 	size_t bytes;
 	int cdma_capable;
@@ -821,6 +825,11 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 	bytes = 0;
 
+	/*Allocate a Buffer in kernel space*/
+	kern_buf = kmalloc(count, GFP_KERNEL);
+
+	/*Transfer the write data to the kernel space buffer*/
+	copy_from_user(kern_buf, buf, count);
 
 	if (mod_desc->mode == AXI_STREAM_FIFO)
 	{
@@ -828,19 +837,18 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		printk(KERN_INFO"<axi_stream_fifo_write>: writing to the AXI Stream FIFO\n");
 
 		/*This is the function to move data from user space to kernel space*/
-		copy_from_user(zero_copy_buf, buf, count);
+//		copy_from_user(zero_copy_buf, buf, count);
 
 		/*Set keyhole*/
 		keyhole_en = KEYHOLE_WRITE;
 
 		/*write the data*/
 		axi_dest = mod_desc->axi_addr + AXI_STREAM_TDFD;
-		cdma_transfer(axi_pcie_m, axi_dest, (u32)count, keyhole_en);
+//		cdma_transfer(axi_pcie_m, axi_dest, (u32)count, keyhole_en);
+		data_transfer(axi_dest, kern_buf, count, keyhole_en);
 
 		/*write to ctl interface*/
 		axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TLR;
-//		virt_addr = axi_dest + pci_bar_vir_addr; 
-//		iowrite32((u32)count, (u32 *)virt_addr);i
 		kern_reg = (u32)count;
 		data_transfer(axi_dest, (void*)&kern_reg, 4, NORMAL_WRITE);
 	}
@@ -856,26 +864,25 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			transfer_type = NORMAL_WRITE;
 	
 		printk(KERN_INFO"<pci_write>: writing peripheral using a transfer_type: %x\n", transfer_type);
-		kern_buf = kmalloc(count, GFP_KERNEL);
-		copy_from_user(kern_buf, buf, count);
+//		kern_buf = kmalloc(count, GFP_KERNEL);
+//		copy_from_user(kern_buf, buf, count);
 		data_transfer(axi_dest, kern_buf, count, transfer_type);
-		kfree((const void*)kern_buf);
-		return count;
+//		kfree((const void*)kern_buf);
+//		return count;
 
 		}
+		kfree((const void*)kern_buf);
 		return bytes;
 
 	}
 
 	ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_pos)
 	{
-		void * virt_addr;
 		u32 kern_reg;
 		u32 axi_dest;
 		struct mod_desc *mod_desc;
 		int bytes;
 		int cdma_capable;
-		void * int_ctrl_virt_addr_loc;
 		int keyhole_en;
 		int transfer_type;
 		void * read_buf;
@@ -884,6 +891,8 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 		cdma_capable = (cdma_set == 1) & (pcie_ctl_set == 1) & (pcie_m_set == 1);
 
+		read_buf = kmalloc(count, GFP_KERNEL);
+	
 		bytes = 0;
 
 		switch(mod_desc->mode){
@@ -921,10 +930,11 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				keyhole_en = KEYHOLE_READ;
 
 				axi_dest = mod_desc->axi_addr + AXI_STREAM_RDFD;
-				cdma_transfer(axi_dest, axi_pcie_m, (u32)count, keyhole_en);
+//				cdma_transfer(axi_dest, axi_pcie_m, (u32)count, keyhole_en);
+				data_transfer(axi_dest, read_buf, count, keyhole_en);
 
 				//Transfer buffer from kernel space to user space at the allocated DMA region
-				copy_to_user(buf, zero_copy_buf, count);
+//				copy_to_user(buf, zero_copy_buf, count);
 
 				bytes = count;
 				printk(KERN_INFO"<axi_stream_fifo_read>: Leaving the READ AXI Stream FIFO routine\n");
@@ -941,17 +951,19 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				else
 					transfer_type = NORMAL_READ;
 	
-				read_buf = kmalloc(count, GFP_KERNEL);
+//				read_buf = kmalloc(count, GFP_KERNEL);
 
 				printk(KERN_INFO"<pci_read>: reading peripheral using a transfer_type: %x\n", transfer_type);
 
 				data_transfer(axi_dest, read_buf, count, transfer_type);
 
-				copy_to_user(buf, read_buf, count);
+//				copy_to_user(buf, read_buf, count);
 
-				kfree((const void*)read_buf);
+//				kfree((const void*)read_buf);
 
-				return count;
+//				return count;
+
+				bytes = count;
 			
 
 				break;
@@ -959,11 +971,15 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			default:printk(KERN_INFO"<pci_read>: mode not detected on read\n");
 		}
 
+		copy_to_user(buf, read_buf, count);
+	
+		kfree((const void*)read_buf);
+	
 		printk(KERN_INFO"<read>: Leaving the read file op\n");
+	
 		return bytes;
 }
 /******************************** Support functions ***************************************/
-/* This is where the magic happens */
 
 /*Data Transfer*/
 	/*This function should be used to funnel all data traffic between the
@@ -976,11 +992,21 @@ void data_transfer(u32 axi_address, void *buf, size_t count, int transfer_type)
 {
 	int cdma_capable;
 	u32 test;
+	int in_range = 0;
 
 	cdma_capable = (cdma_set == 1) & (pcie_ctl_set == 1) & (pcie_m_set == 1);
 
+	/*determine if the axi range is in direct accessible memory space*/
+	if ((axi_address + count) < pci_bar_size)
+		in_range = 1;
+	else if ((axi_address + count) < (peripheral_space_offset + pci_bar_1_size))
+	{
+		if (axi_address >= peripheral_space_offset)
+			in_range = 1;
+	}
+
 	//if  data is small or the cdma is not initialized and in range
-	if (((count < 40) | (cdma_capable == 0)) & (axi_address < pci_bar_size))
+	if (((count < 16) | (cdma_capable == 0)) & (in_range == 1))
 	{
 		if ((transfer_type == NORMAL_READ) | (transfer_type == KEYHOLE_READ))
 			direct_read(axi_address, buf, count, transfer_type);
@@ -1026,8 +1052,25 @@ void direct_write(u32 axi_address, void *buf, size_t count, int transfer_type)
 	u32 write_value;
 
 	kern_buf = buf;
-	/*this is the final virtual address*/
-	virt_addr = axi_address + pci_bar_vir_addr;
+
+	/*determine which BAR to write to*/
+	/* Also does a final check to make sure you are writing in range */
+	if ((axi_address >= peripheral_space_offset) & ((axi_address + count) < (peripheral_space_offset + pci_bar_1_size)))
+	{
+		printk(KERN_INFO"<direct_write>: Direct writing to BAR 1\n");
+		printk(KERN_INFO"<direct_read>: Direct writing to BAR 1 with axi address:%x\n", axi_address);
+		virt_addr = (axi_address - peripheral_space_offset) + pci_bar_1_vir_addr;
+	}
+	else if ((axi_address + count) < pci_bar_size)
+	{
+		virt_addr = axi_address + pci_bar_vir_addr;
+		printk(KERN_INFO"<direct_write>: Direct writing to BAR 0\n");
+	}
+	else
+	{
+	printk(KERN_INFO"<direct_write>: ERROR trying to Direct write out of memory range!\n");
+	return;
+	}
 
 	printk(KERN_INFO"<direct_write>: writing:%x \n", *(u32*)buf);
 
@@ -1057,7 +1100,27 @@ void direct_read(u32 axi_address, void *buf, size_t count, int transfer_type)
 	int i;
 
 	len = count/4;  //how many 32b transferis
-	virt_addr = axi_address + pci_bar_vir_addr;
+
+	/*determine which BAR to read from*/
+	/* Also does a final check to make sure you are writing in range */
+	if ((axi_address >= peripheral_space_offset) & ((axi_address + count) < (peripheral_space_offset + pci_bar_1_size)))
+	{
+		printk(KERN_INFO"<direct_read>: Direct reading from BAR 1\n");
+		printk(KERN_INFO"<direct_read>: Direct reading from BAR 1 with axi address:%x\n", axi_address);
+		virt_addr = (axi_address - peripheral_space_offset) + pci_bar_1_vir_addr;
+		printk(KERN_INFO"<direct_read>: Direct reading from virtual address:%p\n", virt_addr);
+	}
+	else if ((axi_address + count) < pci_bar_size)
+	{
+		printk(KERN_INFO"<direct_read>: Direct reading from BAR 0\n");
+		virt_addr = axi_address + pci_bar_vir_addr;
+	}
+	else
+	{
+		printk(KERN_INFO"<direct_read>: ERROR trying to Direct read out of memory range!\n");
+		return;
+	}
+
 	offset = 0;
 
 	for(i = 0; i<len; i++)
@@ -1074,7 +1137,6 @@ void direct_read(u32 axi_address, void *buf, size_t count, int transfer_type)
 
 void cdma_transfer(u32 SA, u32 DA, u32 BTT, int keyhole_en)
 {
-	void * cdma_virt_addr_loc;
 	u32 bit_vec;
 	u32 axi_dest;
 	u32 status;
