@@ -19,24 +19,24 @@ char * devfilename = devname;
 char * devfilename_2 = devname_2;
 char * devfilename_3 = devname_3;
 
-//unsigned int bram_axi_addr = 0x00000000;
-//unsigned int hls_write_ctl_axi_addr = 0x00005000;
-//unsigned int hls_read_ctl_axi_addr = 0x00007000;
-//unsigned int hls_write_axi_addr = 0x00020000;
-//unsigned int hls_read_axi_addr = 0x00010000;
-//unsigned int pcie_ctl_addr = 0x00002000;
-
-unsigned int bram_axi_addr = 0x80000000;
-unsigned int hls_write_ctl_axi_addr = 0x80001000;
-unsigned int hls_read_ctl_axi_addr = 0x80002000;
-unsigned int hls_write_axi_addr = 0x80010000;
-unsigned int hls_read_axi_addr = 0x80020000;
-
+/* System View Core AXI Addresses */
 unsigned int pcie_ctl_addr = 0x00002000;
 unsigned int cdma_addr = 0x00001000;
 unsigned int pcie_m_addr = 0x00010000;
 unsigned int axi_int_addr = 0x00004000;
 unsigned int in[8];
+
+/* User Peripheral AXI Addresses */
+//unsigned int bram_axi_addr = 0x80000000;
+unsigned int hls_write_ctl_axi_addr = 0x80001000;
+unsigned int hls_write_axi_addr = 0x80010000;
+unsigned int hls_read_ctl_axi_addr = 0x80002000;
+unsigned int hls_read_axi_addr = 0x80020000;
+
+//unsigned int hls_write_ctl_axi_addr = 0x80010000;
+//unsigned int hls_write_axi_addr = 0x80000000;
+//unsigned int hls_read_ctl_axi_addr = 0x80030000;
+//unsigned int hls_read_axi_addr = 0x80020000;
 
 int hls_fifo_mode = AXI_STREAM_FIFO;
 
@@ -81,10 +81,10 @@ int main()
 {
 
 	/* Open device file and initialize */
-	bram = open(devfilename, O_RDWR);
-	if(bram < 0){
-		return -1;
-	}
+//	bram = open(devfilename, O_RDWR);
+//	if(bram < 0){
+//		return -1;
+//	}
 
 	hls_write = open(devfilename_2, O_RDWR);
 	if(hls_write < 0){
@@ -99,25 +99,25 @@ int main()
 
 	/**** Set AXI Addresses of CDMA, PCIe, and INTERRUPT CONTROLLER ****/
 	/* Any open device File can perform these configurations */
-	if(ioctl(bram, SET_AXI_PCIE_CTL, &pcie_ctl_addr) < 0){
+	if(ioctl(hls_write, SET_AXI_PCIE_CTL, &pcie_ctl_addr) < 0){
 		printf("ERROR doing ioctl\n");
 		return -1;
 	}
 	printf("set PCIE CTL to axi address %x\n", pcie_ctl_addr);
 
-	if(ioctl(bram, SET_AXI_CDMA, &cdma_addr) < 0){
+	if(ioctl(hls_write, SET_AXI_CDMA, &cdma_addr) < 0){
 		printf("ERROR doing ioctl\n");
 		return -1;
 	}
 	printf("set CDMA to axi address %x\n", cdma_addr);
 
-	if(ioctl(bram, SET_AXI_PCIE_M, &pcie_m_addr) < 0){ 
+	if(ioctl(hls_write, SET_AXI_PCIE_M, &pcie_m_addr) < 0){ 
 		printf("ERROR doing ioctl\n");
 		return -1;
 	}
 	printf("set PCIE_M to axi address %x\n", pcie_m_addr);
 
-	if(ioctl(bram, SET_AXI_INT_CTRL, &axi_int_addr) < 0){ 
+	if(ioctl(hls_write, SET_AXI_INT_CTRL, &axi_int_addr) < 0){ 
 		printf("ERROR doing ioctl\n");
 		return -1;
 	}
@@ -125,12 +125,12 @@ int main()
 
 	/*******************Set AXI addresses of Peripherals********************/
 
-	if(ioctl(bram, SET_AXI_DEVICE, &bram_axi_addr) < 0) {
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
+//	if(ioctl(bram, SET_AXI_DEVICE, &bram_axi_addr) < 0) {
+//		printf("ERROR doing ioctl\n");
+//		return -1;
+//	}
+//	printf("set peripheral to axi base address %x\n", bram_axi_addr);
 
-	printf("set peripheral to axi base address %x\n", bram_axi_addr);
 	if(ioctl(hls_write, SET_AXI_CTL_DEVICE, &hls_write_ctl_axi_addr) < 0) {
 		printf("ERROR doing ioctl\n");
 		return -1;
@@ -177,7 +177,7 @@ int main()
 	ioctl(hls_read, SET_INTERRUPT, &interrupt_vector); 
 	printf("set peripheral as slave with interrupt at vector:%x\n", interrupt_vector);
 
-	/**************** Initialize test buffer ********************************/
+/********************************* BRAM TEST  ********************************************/
 	in[0] = 0xAAAAAAAA;
 	in[1] = 0xBBBBBBBB;
 	in[2] = 0xCCCCCCCC;
@@ -192,10 +192,9 @@ int main()
 	/*use lseek to move offset in file*/
 	//lseek(bram, 0x4, 0);
 
-	ret_val = write(bram, in, sizeof(in));
+/*	ret_val = write(bram, in, sizeof(in));
 	printf("wrote a value from address:('%p')\n", in);
 
-	/***************** Allocate a Receive Buffer ***************************/
 
 	unsigned int buff[sizeof(in)/4];
 
@@ -220,7 +219,10 @@ int main()
 		printf("BRAM TEST PASSED\n");
 
 	else
-		printf("BRAM TEST FAILED\n");
+		printf("BRAM TEST FAILED\n"); 
+
+
+/************************* AXI STREAMING FIFO TEST ***************************************/
 
 	/*Start up the RX FIFO Thread*/
 	//This thread will perform a blocking read until an interrupt
