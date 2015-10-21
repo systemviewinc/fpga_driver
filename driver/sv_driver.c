@@ -39,12 +39,13 @@ MODULE_PARM_DESC(major, "MajorNumber");
 
 #define ERROR   -1
 #define SUCCESS 0
+
+/*MODES*/
 #define SLAVE 0 
 #define AXI_STREAM_FIFO 1
 #define MASTER 2
+#define CDMA 3
 
-#define SYS_REG_OFFSET(REG_NUM) ((REG_NUM) * 4)
-#define USR_REG_OFFSET(REG_NUM) ((REG_NUM) * 4 + (REG_SIZE / 2))
 
 #define MAX_NUM_MASTERS 2
 #define MAX_NUM_SLI 2
@@ -146,17 +147,30 @@ const u32 AXI_STREAM_RXID   = 0x3C;
 
 
 /*this is the module description struct*/
+
 struct mod_desc 
 {
 	int minor;
 	u32 axi_addr;
 	u32 axi_addr_ctl;
-	int mode;
-	int * wait_var;
+	int * mode;
+//	int * wait_var;
+	int * int_count;
+	int int_num;
 	int master_num;
 	int keyhole_config;
 	u32 interrupt_vec;
 };
+
+/*this is the interrupt structure*/
+struct interr_struct
+{
+	int * mode;
+	int * int_count; 
+};
+
+/*This is an array of interrupt structures to hold up to 8 peripherals*/
+struct interr_struct interr_dict[8];
 
 /* ************************* file operations *************************** */
 long pci_unlocked_ioctl(struct file * filep, unsigned int cmd, unsigned long arg);
@@ -194,7 +208,8 @@ void cdma_config_set(u32 bit_vec, int set_unset);
 void direct_read(u32 axi_address, void *buf, size_t count, int transfer_type);
 void direct_write(u32 axi_address, void *buf, size_t count, int transfer_type);
 void data_transfer(u32 axi_address, void *buf, size_t count, int transfer_type);
-
+int vec2num(u32 vec);
+u32 num2vec(int num);
 
 static struct pci_device_id ids[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_XILINX, 0x7022), },
@@ -367,6 +382,8 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 {
 	u32 status;
 	u32 axi_dest;
+	int int_num;
+	int device_mode;
 
 	printk(KERN_INFO"<pci_isr>: Entered the pci ISR");
 
@@ -379,43 +396,77 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ);
 	printk(KERN_INFO"<pci_isr>: interrupt status register vector is: ('%x')\n", status);
 
-	/*bit mask and find out who interrupted*/
-	if (status & 0x1)
+	
+	int_num = vec2num(status);
+	printk(KERN_INFO"<pci_isr>: interrupt number is: ('%d')\n", int_num);
+	device_mode = *(interr_dict[int_num].mode);
+	
+	if (device_mode == CDMA)
 	{
-		/*function to reset the CDMA and check status
-		 *returns status register read if error*/
+		printk(KERN_INFO"<pci_isr>: this interrupt is from the CDMA\n");
 		cdma_status = cdma_ack();
 
 		/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
 		axi_dest = axi_interr_ctrl + INT_CTRL_IAR;
-		status = 0x01;
+		status = num2vec(int_num);
 		data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
 
 		cdma_comp = 1;      //condition for wake_up
 		wake_up_interruptible(&wq);
 	}
 
-	else if (status & 0x2)
+	else
 	{
-		printk(KERN_INFO"<pci_isr>: AXI FIFO INTERRUPT SERVICING\n");
-		interrupt_vect_dict[0x2] = 1;
-
+		printk(KERN_INFO"<pci_isr>: this interrupt is from a user peripheral\n");
+		*(interr_dict[int_num].int_count) = (*(interr_dict[int_num].int_count)) + 1;
+	
 		/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
 		axi_dest = axi_interr_ctrl + INT_CTRL_IAR;
-		status = 0x02;
+		status = num2vec(int_num);
 		data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
 	
 		/*since we don't know exactly how to handle interrupt clearing of this device
 		 *we push the interrupt acknowleding of the device to the user space */
 
 		wake_up(&wq_periph);
-
 	}
+	/*bit mask and find out who interrupted*/
+//	if (status & 0x1)
+//	{
+		/*function to reset the CDMA and check status
+		 *returns status register read if error*/
+//		cdma_status = cdma_ack();
 
-	else
-	{
+		/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
+//		axi_dest = axi_interr_ctrl + INT_CTRL_IAR;
+//		status = 0x01;
+//		data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
 
-	}
+//		cdma_comp = 1;      //condition for wake_up
+//		wake_up_interruptible(&wq);
+//	}
+
+//	else if (status & 0x2)
+//	{
+//		printk(KERN_INFO"<pci_isr>: AXI FIFO INTERRUPT SERVICING\n");
+//		interrupt_vect_dict[0x2] = 1;
+
+		/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
+//		axi_dest = axi_interr_ctrl + INT_CTRL_IAR;
+//		status = 0x02;
+//		data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
+	
+		/*since we don't know exactly how to handle interrupt clearing of this device
+		 *we push the interrupt acknowleding of the device to the user space */
+
+//		wake_up(&wq_periph);
+
+//	}
+
+//	else
+//	{
+
+//	}
 
 	return IRQ_HANDLED;
 }
@@ -423,14 +474,24 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 /* -----------------File Operations-------------------------*/
 int pci_open(struct inode *inode, struct file *filep)
 {
+	void * mode_address;
+	void * interrupt_count;
+
+	mode_address = kmalloc(sizeof(int), GFP_KERNEL);
+	interrupt_count = kmalloc(sizeof(int), GFP_KERNEL);
 
 	struct mod_desc * s;
+
 	s = (struct mod_desc *)kmalloc(sizeof(struct mod_desc), GFP_KERNEL);
 	s->minor = MINOR(inode->i_rdev);
 	s->axi_addr = 0;
 	s->axi_addr_ctl = 0;
-	s->mode = 0;   //defaults as slave only
-	s->wait_var = 0;
+	s->mode = (int*)mode_address;   //defaults as slave only
+	*(s->mode) = 0;
+//	s->wait_var = 0;
+	s->int_count = (int*)interrupt_count;
+	*(s->int_count) = 0;
+	s->int_num = 100;
 	s->master_num = 0;
 	s->interrupt_vec = 0;
 	s->keyhole_config = 0;
@@ -457,11 +518,15 @@ int pci_release(struct inode *inode, struct file *filep)
 	mod_desc = filep->private_data;
 
 	/*Query private data to see if it allocated DMA as a Master*/
-	if (mod_desc->mode == MASTER)
+	if (*(mod_desc->mode) == MASTER)
 	{
 		//unallocate DMA
-		pci_free_consistent(pci_dev_struct, 4096, dma_master_buf[mod_desc->master_num], dma_m_addr[mod_desc->master_num]);
+		pci_free_consistent(pci_dev_struct, 131702, dma_master_buf[mod_desc->master_num], dma_m_addr[mod_desc->master_num]);
 	}
+
+	kfree((const void*)mod_desc->mode);
+
+	kfree((const void*)mod_desc->int_count);
 
 	kfree((const void*)filep->private_data);
 
@@ -482,6 +547,8 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	u32 bit_vec;
 	u32 arg_loc; 
 	u32 kern_reg;
+	int int_num;
+	int * mode;
 
 	copy_from_user(&arg_loc, argp, sizeof(u32));
 
@@ -570,6 +637,11 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 				printk(KERN_INFO"<pci_ioctl_cdma_set>: PCIe CTL register:%x\n", status);
 
 			}
+
+			/*update the interr_dict with interrupt number and mode*/
+			mode = (int*)kmalloc(sizeof(int), GFP_KERNEL);
+			*mode = CDMA;
+			interr_dict[0].mode = mode;
 			break;
 
 
@@ -643,6 +715,13 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			mod_desc->interrupt_vec = arg_loc;
 			/*initialize the interrupt vector dictionary to 0*/
 			interrupt_vect_dict[arg_loc] = 0; 
+
+			int_num = vec2num(arg_loc);
+			mod_desc->int_num = int_num;
+		
+			interr_dict[int_num].int_count = mod_desc->int_count;	
+			interr_dict[int_num].mode = mod_desc->mode;
+		
 			break;
 
 		case SET_CDMA_KEYHOLE_WRITE:
@@ -677,7 +756,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 		case SET_MODE:
 			printk(KERN_INFO"<ioctl_set_mode>: Setting the mode of the peripheral\n");
-			mod_desc->mode = arg_loc;
+			*(mod_desc->mode) = arg_loc;
 
 			switch(arg_loc){
 
@@ -789,12 +868,15 @@ int pci_poll(struct file *filep, poll_table * pwait)
 	poll_wait(filep, &wq_periph, pwait);
 
 	/*see if the module has triggered an interrupt*/
-	has_data = interrupt_vect_dict[mod_desc->interrupt_vec];
-	if (has_data == 1)
+	has_data = *(mod_desc->int_count);
+//	has_data = interrupt_vect_dict[mod_desc->interrupt_vec];
+//	if (has_data == 1)
+	if (has_data > 0)
 	{
 		printk(KERN_INFO"<pci_poll>: wait event detected!!\n");
 		/*reset the has_data flag*/
-		interrupt_vect_dict[mod_desc->interrupt_vec] = 0;
+//		interrupt_vect_dict[mod_desc->interrupt_vec] = 0;
+		*(mod_desc->int_count) = (*(mod_desc->int_count)) - 1;
 		mask |= POLLIN;
 	}
 
@@ -831,7 +913,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	/*Transfer the write data to the kernel space buffer*/
 	copy_from_user(kern_buf, buf, count);
 
-	if (mod_desc->mode == AXI_STREAM_FIFO)
+	if (*(mod_desc->mode) == AXI_STREAM_FIFO)
 	{
 
 		printk(KERN_INFO"<axi_stream_fifo_write>: writing to the AXI Stream FIFO\n");
@@ -895,7 +977,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	
 		bytes = 0;
 
-		switch(mod_desc->mode){
+			switch(*(mod_desc->mode)){
 
 			case MASTER:
 				//Transfer buffer from kernel space to user space at the allocated DMA region
@@ -980,6 +1062,27 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		return bytes;
 }
 /******************************** Support functions ***************************************/
+
+int vec2num(u32 vec)
+{
+	int count = 0;
+	
+	while((vec & 0x1) == 0)
+	{
+		count = count + 1;	
+		vec = vec>>1;
+	}
+	
+	return count;
+}
+
+u32 num2vec(int num)
+{
+	u32 vec = 1;
+	vec = vec << num;
+	
+	return vec;
+}
 
 /*Data Transfer*/
 	/*This function should be used to funnel all data traffic between the
