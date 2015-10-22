@@ -99,29 +99,29 @@ int main()
 
 	/**** Set AXI Addresses of CDMA, PCIe, and INTERRUPT CONTROLLER ****/
 	/* Any open device File can perform these configurations */
-	if(ioctl(hls_write, SET_AXI_PCIE_CTL, &pcie_ctl_addr) < 0){
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	printf("set PCIE CTL to axi address %x\n", pcie_ctl_addr);
+//	if(ioctl(hls_write, SET_AXI_PCIE_CTL, &pcie_ctl_addr) < 0){
+//		printf("ERROR doing ioctl\n");
+//		return -1;
+//	}
+//	printf("set PCIE CTL to axi address %x\n", pcie_ctl_addr);
 
-	if(ioctl(hls_write, SET_AXI_CDMA, &cdma_addr) < 0){
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	printf("set CDMA to axi address %x\n", cdma_addr);
+//	if(ioctl(hls_write, SET_AXI_CDMA, &cdma_addr) < 0){
+//		printf("ERROR doing ioctl\n");
+//		return -1;
+//	}
+//	printf("set CDMA to axi address %x\n", cdma_addr);
 
-	if(ioctl(hls_write, SET_AXI_PCIE_M, &pcie_m_addr) < 0){ 
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	printf("set PCIE_M to axi address %x\n", pcie_m_addr);
+//	if(ioctl(hls_write, SET_AXI_PCIE_M, &pcie_m_addr) < 0){ 
+//		printf("ERROR doing ioctl\n");
+//		return -1;
+//	}
+//	printf("set PCIE_M to axi address %x\n", pcie_m_addr);
 
-	if(ioctl(hls_write, SET_AXI_INT_CTRL, &axi_int_addr) < 0){ 
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	printf("set AXI interrupt Controller to axi address %x\n", axi_int_addr);
+//	if(ioctl(hls_write, SET_AXI_INT_CTRL, &axi_int_addr) < 0){ 
+//		printf("ERROR doing ioctl\n");
+//		return -1;
+//	}
+//	printf("set AXI interrupt Controller to axi address %x\n", axi_int_addr);
 
 	/*******************Set AXI addresses of Peripherals********************/
 

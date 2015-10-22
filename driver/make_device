@@ -27,6 +27,7 @@ chown root /dev/pci_skel_5
 chmod 666 /dev/pci_skel_5
 
 ls -al /dev/pci_skel
-insmod ./sv_driver.ko device_id=0x7028 major=241
+#insmod ./sv_driver.ko device_id=0x7028 major=241
+insmod ./sv_driver.ko device_id=0x7028 major=241 cdma_address=0x00001000 pcie_ctl_address=0x00002000 pcie_m_address=0x00010000 int_ctlr_address=0x00004000
 lsmod | grep pci_skel
 

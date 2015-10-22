@@ -350,12 +350,17 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 		pcie_ctl_init((u32)pcie_ctl_address);
 	}
 
+	if (pcie_m_address != 0xFFFFFFFF)
+	{
+		pcie_m_init((u32)pcie_m_address);
+	}
+
 	if (int_ctlr_address != 0xFFFFFFFF)
 	{
 		int_ctlr_init((u32)int_ctlr_address);
 	}
 	
-	printk(KERN_INFO"<probe>PROBE FINISHED SUCCESSFULLY\n");
+	printk(KERN_INFO"<probe>***********************PROBE FINISHED SUCCESSFULLY**************************************\n");
 	return 0;
 }
 
@@ -607,143 +612,22 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 
 		case SET_AXI_CDMA:
-			printk(KERN_INFO"<ioctl>: *******************Setting CDMA AXI Address:%x******************************************\n", arg_loc);
-			axi_cdma = arg_loc;
-			cdma_set = 1;
-
-			/*Issue a Soft Reset*/
-			axi_dest = axi_cdma + CDMA_CR;
-			cdma_status = 0x00000100;
-			printk(KERN_INFO"<ioctl>: sending a soft reset to the CDMA\n");
-			data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE);
-			/*Remove Soft Reset*/
-			axi_dest = axi_cdma + CDMA_CR;
-			cdma_status = 0x00000000;
-			data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE);
-			/*Check the current status*/
-			axi_dest = axi_cdma + CDMA_SR;
-			//			direct_read(axi_dest, (void*)&cdma_status, 4, NORMAL_READ);
-			data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ);
-			printk(KERN_INFO"<ioctl>: CDMA status before configuring:%x\n", cdma_status);	
-			/*Check the current config*/
-			axi_dest = axi_cdma + CDMA_CR;
-			//			direct_read(axi_dest, (void*)&cdma_status, 4, NORMAL_READ);
-			data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ);
-			printk(KERN_INFO"<ioctl>: CDMA config before configuring:%x\n", cdma_status);	
-			/*clear any pre existing interrupt*/
-			axi_dest = axi_cdma + CDMA_SR;
-			cdma_status = 0x00001000;
-			printk(KERN_INFO"<ioctl>: attempting to write:%x to cdma status reg\n", cdma_status);
-			data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE);
-
-			cdma_status = 0x00001000;
-			axi_dest = axi_cdma + CDMA_CR;
-			data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE);
-
-			if (zero_buf_set == 0)
-			{
-				/*DMA Allocation*/
-				/*This sets the DMA read and write kernel buffers and obtains the
-				 * dma_addr's to be sent to the CDMA core upon R/W transactions*/
-
-				zero_copy_buf = pci_alloc_consistent(pci_dev_struct, 131072, &dma_addr);
-				if(NULL == zero_copy_buf)
-				{
-					printk("%s:<probe>DMA zero copy buff allocation ERROR\n", pci_devName);
-					return ERROR;
-				}
-				zero_buf_set = 1;
-				printk(KERN_INFO"<ioctl_CDMA_Set>: dma address is:%x\n", (u32)dma_addr);
-			}
-
-			/*This checks to see if the user has set the pcie_ctl base address
-			 * if so, we can go ahead and write the dma_addr to the pcie translation
-			 * register.*/
-			if(pcie_ctl_set == 1)
-			{
-				/*convert to u32 to send to CDMA*/
-				dma_addr_loc = (u32)dma_addr;
-				//update pcie_ctl_virt address with register offset
-				axi_dest = axi_pcie_ctl + AXIBAR2PCIEBAR_0L;
-
-				//write DMA addr to PCIe CTL for address translation
-				data_transfer(axi_dest, (void *)(&dma_addr_loc), 4, NORMAL_WRITE);
-				printk(KERN_INFO"<pci_ioctl_cdma_set>: writing dma address ('%x') to pcie_ctl at AXI address:%x\n", dma_addr_loc, axi_dest);
-				//check the pcie-ctl got the translation address
-				data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ);
-				printk(KERN_INFO"<pci_ioctl_cdma_set>: PCIe CTL register:%x\n", status);
-
-			}
-
-			/*update the interr_dict with interrupt number and mode*/
-			mode = (int*)kmalloc(sizeof(int), GFP_KERNEL);
-			*mode = CDMA;
-			interr_dict[0].mode = mode;
+			cdma_init(arg_loc);
 			break;
 
 
 		case SET_AXI_PCIE_CTL:
-			printk(KERN_INFO"<ioctl>: Setting PCIe Control Axi Address\n");
-			axi_pcie_ctl = arg_loc;
-			pcie_ctl_set = 1;
-
-			if(cdma_set == 1)
-			{
-				/*convert to u32 to send to CDMA*/
-				dma_addr_loc = (u32)dma_addr;
-
-				//update pcie_ctl_virt address with register offset
-				axi_dest = axi_pcie_ctl + AXIBAR2PCIEBAR_0L;
-
-				//write DMA addr to PCIe CTL for address translation
-				data_transfer(axi_dest, (void *)(&dma_addr_loc), 4, NORMAL_WRITE);
-				printk(KERN_INFO"<pci_ioctl_cdma_set>: writing dma address ('%x') to pcie_ctl at AXI address:%x\n", dma_addr_loc, axi_dest);
-
-				//check the pcie-ctl got the translation address
-				data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ);
-				printk(KERN_INFO"<pci_ioctl_cdma_set>: PCIe CTL register:%x\n", status);
-
-			}
+			pcie_ctl_init(arg_loc);
 			break;
 
 		case SET_AXI_PCIE_M:
-			printk(KERN_INFO"<ioctl>: Setting PCIe Master Axi Address\n");
-			axi_pcie_m = arg_loc;
-			pcie_m_set = 1;
-
-			/*Here we need to set more AXI addresses for each AXI->PCIe BAR*/
-			/* ....... */
-
+			pcie_m_init(arg_loc);
 			break;
 
 			/*This is the Interrupt controller that will MUX in all interrupts from axi masters and produce
 			 *one interrupt output to the the PCIe controller.  This is because we want to use one msi vector. */
 		case SET_AXI_INT_CTRL:
-			printk(KERN_INFO"<ioctl>: Setting Interrupt Controller Axi Address\n");
-			axi_interr_ctrl = arg_loc;
-			int_ctrl_set = 1;
-
-			/*Write to Interrupt Enable Register (IER)*/
-			/* Write to enable all possible interrupt inputs */
-			status = 0xFFFFFFFF;
-			axi_dest = axi_interr_ctrl + INT_CTRL_IER;
-			data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
-
-			/*Write to the Master Enable Register (MER) */
-			/* Write to enable the hardware interrupts */
-			status = 0x3;
-			axi_dest = axi_interr_ctrl + INT_CTRL_MER;
-			data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
-
-			//			status = ioread32((u32 *)int_ctrl_virt_addr_loc);  //binary "11"
-			data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ);
-			printk(KERN_INFO"<pci_axi_interrupt_control_set>: read: ('%x') from MER register\n", status);
-
-			/*Here we need to clear the service interrupt in the interrupt acknowledge register*/ 
-			status = 0xFFFFFFFF;
-			axi_dest = axi_interr_ctrl + INT_CTRL_IAR;
-			data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
-
+			int_ctlr_init(arg_loc);
 			break;
 
 		case SET_INTERRUPT:
@@ -1168,7 +1052,7 @@ void pcie_ctl_init(u32 axi_address)
 
 void cdma_init(u32 axi_address)
 {
-	u32 axi_cdma;
+//	u32 axi_cdma;
 	u32 axi_dest;
 	u32 cdma_status;
 	u32 dma_addr_loc;
