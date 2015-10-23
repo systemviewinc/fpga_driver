@@ -24,35 +24,6 @@
 #include <linux/delay.h>
 #include <linux/moduleparam.h>
 
-/*Set default values for insmod parameters*/
-static int device_id = 100;
-static int major = 241;
-static int cdma_address = 0xFFFFFFFF;
-static int pcie_ctl_address = 0xFFFFFFFF;
-static int pcie_m_address = 0xFFFFFFFF;
-static int int_ctlr_address = 0xFFFFFFFF;
-
-/*this is the user peripheral address offset*/
-const u32 peripheral_space_offset = 0x80000000;
-
-module_param(device_id, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-MODULE_PARM_DESC(device_id, "DeviceID");
-
-module_param(major, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-MODULE_PARM_DESC(major, "MajorNumber");
-
-module_param(cdma_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-MODULE_PARM_DESC(cdma_address, "CDMAAddress");
-
-module_param(pcie_ctl_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-MODULE_PARM_DESC(pcie_ctl_address, "PCIeCTLAddress");
-
-module_param(pcie_m_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-MODULE_PARM_DESC(pcie_m_address, "PCIeMAddress");
-
-module_param(int_ctlr_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-MODULE_PARM_DESC(int_ctlr_address, "IntCtlrAddress");
-
 #define ERROR   -1
 #define SUCCESS 0
 
@@ -89,6 +60,33 @@ MODULE_PARM_DESC(int_ctlr_address, "IntCtlrAddress");
 #define KEYHOLE_READ 3
 #define NORMAL_READ 1
 
+
+/*Set default values for insmod parameters*/
+static int device_id = 100;
+static int major = 241;
+static int cdma_address = 0xFFFFFFFF;
+static int pcie_ctl_address = 0xFFFFFFFF;
+static int pcie_m_address = 0xFFFFFFFF;
+static int int_ctlr_address = 0xFFFFFFFF;
+
+module_param(device_id, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(device_id, "DeviceID");
+
+module_param(major, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(major, "MajorNumber");
+
+module_param(cdma_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(cdma_address, "CDMAAddress");
+
+module_param(pcie_ctl_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(pcie_ctl_address, "PCIeCTLAddress");
+
+module_param(pcie_m_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(pcie_m_address, "PCIeMAddress");
+
+module_param(int_ctlr_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(int_ctlr_address, "IntCtlrAddress");
+
 const char pci_devName[] = "pci_skel"; //name of the device
 unsigned long pci_bar_hw_addr;         //hardware base address of the device
 unsigned long pci_bar_size;            //hardware bar memory size
@@ -97,6 +95,9 @@ unsigned long pci_bar_1_size;            //hardware bar memory size
 struct pci_dev * pci_dev_struct = NULL; //pci device struct
 void * pci_bar_vir_addr = NULL;        //hardware base virtual address
 void * pci_bar_1_vir_addr = NULL;        //hardware base virtual address
+
+/*this is the user peripheral address offset*/
+const u32 peripheral_space_offset = 0x80000000;
 
 u32 axi_cdma;
 u32 axi_pcie_ctl;
@@ -925,9 +926,13 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			printk(KERN_INFO"<axi_fifo_isr_reg>:%x\n", kern_reg);
 
 			/*Read FIFO Fill level*/
-			//				axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RLR;
-			//				data_transfer(axi_dest, (void *)&kern_reg, 4, NORMAL_READ);
-			//				printk(KERN_INFO"<axi_stream_fifo_read> Read FIFO fill level:%x bytes\n", kern_reg);
+			axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RLR;
+			data_transfer(axi_dest, (void *)&kern_reg, 4, NORMAL_READ);
+			printk(KERN_INFO"<axi_stream_fifo_read> Read FIFO fill level:%x bytes\n", kern_reg);
+
+			/*So we don't read more data than is available*/
+			if (kern_reg < count)
+				count = kern_reg;
 
 			//set CDMA KEYHOLE
 			keyhole_en = KEYHOLE_READ;

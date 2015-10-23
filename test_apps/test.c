@@ -285,7 +285,7 @@ void *rxfifo_read(void *read_buf)
 	int timeout = 10000;    //in ms
 	int result;
 	unsigned int buff2[1];
-	unsigned int buff[50];  //50 32b data words
+	unsigned int buff[100];  //50 32b data words
 	int i;
 
 	/*initialize pollfds*/
@@ -312,10 +312,12 @@ void *rxfifo_read(void *read_buf)
 			printf("RX FIFO INTERRUPT DETECTED!\n");
 		
 			/* Read from peripheral */
-			return_val = read(hls_read, (void*)buff, sizeof(buff));  
+	//		return_val = read(hls_read, (void*)buff, sizeof(buff));  
+			return_val = read(hls_read, (void*)buff, 250);  
 			
-			printf("Read the values from axi fifo....\n");
-			for(i=0;i<(sizeof(buff)/4);i++)
+			printf("Number of bytes read:%x\n", return_val);
+
+			for(i=0;i<(return_val/4);i++)
 			{
 				printf("value read: %x\n", buff[i]);
 			}
