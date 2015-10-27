@@ -1,0 +1,13 @@
+insmod sv_driver.ko cdma_address="0x00001000" device_id="0x7028" int_ctlr_address="0x00004000" pcie_ctl_address="0x00002000" pcie_m_address="0x00010000" 
+
+rm -rf /dev/vsi_system_vc709_packet_p_arg_2_seq_o
+rm -rf /dev/vsi_system_vc709_packet_p_arg_1_seq_i
+
+mknod /dev/vsi_system_vc709_packet_p_arg_2_seq_o c 241 1
+chown root /dev/vsi_system_vc709_packet_p_arg_2_seq_o
+chmod 666  /dev/vsi_system_vc709_packet_p_arg_2_seq_o
+mknod /dev/vsi_system_vc709_packet_p_arg_1_seq_i c 241 2
+chown root /dev/vsi_system_vc709_packet_p_arg_1_seq_i
+chmod 666  /dev/vsi_system_vc709_packet_p_arg_1_seq_i
+
+

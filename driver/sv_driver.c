@@ -1263,6 +1263,7 @@ void direct_write(u32 axi_address, void *buf, size_t count, int transfer_type)
 		write_value = *newaddr_src;
 		newaddr_dest = (u32 *)(virt_addr + offset);
 		iowrite32(write_value, newaddr_dest);
+//		*newaddr_dest = write_value;   *this works too*
 		printk(KERN_INFO"<direct_write>: wrote:%x to virtual address:('%p')\n", write_value, newaddr_dest);
 		if (transfer_type != KEYHOLE_WRITE)
 			offset += 4;
@@ -1308,6 +1309,7 @@ void direct_read(u32 axi_address, void *buf, size_t count, int transfer_type)
 	{
 		newaddr_src = (u32 *)(virt_addr + offset);
 		kern_buf[i] = ioread32(newaddr_src);
+//		kern_buf[i] = *newaddr_src;  *this works too*
 		if (transfer_type != KEYHOLE_READ)
 			offset += 4;
 		printk(KERN_INFO"<direct_read>: read: %x from kernel address %p.\n", kern_buf[i], newaddr_src);

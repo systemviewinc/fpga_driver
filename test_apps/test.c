@@ -9,7 +9,7 @@ void *rxfifo_read(void *read_buf);
 
 char devname[] = DEV_NAME;
 char devname_2[] = DEV_NAME_2;
-char devname_3[] = DEV_NAME_3;
+//char devname_3[] = DEV_NAME_3;
 
 int bram = -1;
 int hls_write = -1;
@@ -17,7 +17,7 @@ int hls_read = -1;
 
 char * devfilename = devname;
 char * devfilename_2 = devname_2;
-char * devfilename_3 = devname_3;
+//char * devfilename_3 = devname_3;
 
 /* System View Core AXI Addresses */
 unsigned int pcie_ctl_addr = 0x00002000;
@@ -86,12 +86,12 @@ int main()
 //		return -1;
 //	}
 
-	hls_write = open(devfilename_2, O_RDWR);
+	hls_write = open(devfilename, O_RDWR);
 	if(hls_write < 0){
 		return -1;
 	}
 
-	hls_read = open(devfilename_3, O_RDWR);
+	hls_read = open(devfilename_2, O_RDWR);
 	if(hls_read < 0){
 		return -1;
 	}
