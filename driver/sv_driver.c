@@ -258,8 +258,8 @@ static struct pci_device_id ids[] = {
 MODULE_DEVICE_TABLE(pci, ids);
 
 static const struct of_device_id sv_driver_match[] = {
-	    { .compatible = "xlnx,sv_driver_plat", },
-		    {},
+	{ .compatible = "xlnx,sv_driver_plat", },
+	{},
 };
 
 static struct platform_driver sv_plat_driver = {
@@ -288,7 +288,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	 * 	 	 */
 
 	printk(KERN_INFO"%s:<probe>******************************** BEGIN PROBE ROUTINE *****************************************\n", pci_devName);
-	
+
 	pci_dev_struct = dev;
 	dev_struct = &dev->dev;
 
@@ -398,7 +398,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	{
 		int_ctlr_init((u32)int_ctlr_address);
 	}
-	
+
 	cdma_capable = (cdma_set == 1) & (pcie_m_set == 1) & (int_ctrl_set == 1) & (pcie_ctl_set == 1);
 
 	printk(KERN_INFO"<probe>***********************PROBE FINISHED SUCCESSFULLY**************************************\n");
@@ -415,22 +415,9 @@ static int sv_plat_probe(struct platform_device *pdev)
 	platform_dev_struct = pdev;
 	dev_struct = &pdev->dev;
 
-	//	pci_dev_struct = dev;
-//	if(NULL == pci_dev_struct){
-//		printk(KERN_INFO"%s:<probe>struct pci_dev_struct is NULL\n", pci_devName);
-//		return ERROR;
-//	}
-//
-	/****************** BAR 0 Mapping *******************************************/
-	//get the base hardware address
-//	pci_bar_hw_addr = pci_resource_start(pci_dev_struct, 0);
-//	if (0 > pci_bar_hw_addr){
-//		printk(KERN_INFO"%s<probe>base hardware address is not set\n", pci_devName);
-//		return ERROR;
-//	}
 	resource_1 = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	//get the base memory size
-//	pci_bar_size = pci_resource_len(pci_dev_struct, 0);
+	//	pci_bar_size = pci_resource_len(pci_dev_struct, 0);
 	pci_bar_size = resource_1->end - resource_1->start;
 	printk(KERN_INFO"<probe>pci bar size is:%d\n", pci_bar_size);
 
@@ -444,30 +431,21 @@ static int sv_plat_probe(struct platform_device *pdev)
 	printk(KERN_INFO"<probe>pci bar virtual address base is:%p\n", pci_bar_vir_addr);
 
 	/****************** BAR 1 Mapping *******************************************/
-	//get the base hardware address
-//	pci_bar_1_addr = pci_resource_start(pci_dev_struct, 1);
-//	if (0 > pci_bar_1_addr){
-//		printk(KERN_INFO"%s<probe>BAR 1 base hardware address is not set\n", pci_devName);
-//		return ERROR;
-//	}
 
-//	resource_2 = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+	//	resource_2 = platform_get_resource(pdev, IORESOURCE_MEM, 1);
 	//get the base memory size
-//	pci_bar_1_size = resource_2->end - resource_2->start;
-//	printk(KERN_INFO"<probe>pci bar 1 size is:%d\n", pci_bar_1_size);
+	//	pci_bar_1_size = resource_2->end - resource_2->start;
+	//	printk(KERN_INFO"<probe>pci bar 1 size is:%d\n", pci_bar_1_size);
 
 	//map the hardware space to virtual space
-//	pci_bar_1_vir_addr = devm_ioremap_resource(&pdev->dev, resource_2);
-//	if(0 == pci_bar_1_vir_addr){
-//		printk(KERN_INFO"%s:<probe>ioremap error when mapping to virtual address\n", pci_devName);
-//		return ERROR;
-//	}
-//	printk(KERN_INFO"<probe>pci bar 1 virtual address base is:%p\n", pci_bar_1_vir_addr);
+	//	pci_bar_1_vir_addr = devm_ioremap_resource(&pdev->dev, resource_2);
+	//	if(0 == pci_bar_1_vir_addr){
+	//		printk(KERN_INFO"%s:<probe>ioremap error when mapping to virtual address\n", pci_devName);
+	//		return ERROR;
+	//	}
+	//	printk(KERN_INFO"<probe>pci bar 1 virtual address base is:%p\n", pci_bar_1_vir_addr);
 	/*****************************************************************************/
 
-	//enable the device
-//	pci_enable_device(dev);
-//	printk(KERN_INFO"<probe>device enabled\n");
 
 	//set DMA mask
 	if(0 != dma_set_mask(&pdev->dev, 0xFFFF0000)){
@@ -475,24 +453,6 @@ static int sv_plat_probe(struct platform_device *pdev)
 		return ERROR;
 	}
 	printk(KERN_INFO"<probe>dma mask set\n");
-
-	//enable bus mastering
-//	pci_set_master(dev);
-//	printk(KERN_INFO"<probe>pci set as master\n");
-
-	//enable MSI interrupts
-//	if(0 > pci_enable_msi(pci_dev_struct)){
-//		printk(KERN_INFO"%s:<probe>MSI enable error\n", pci_devName);
-//		return ERROR;
-//	}
-//	printk(KERN_INFO"<probe>pci enabled msi interrupt\n");
-
-	//request IRQ
-//	if(0 > request_irq(pci_dev_struct->irq, &pci_isr, IRQF_SHARED, pci_devName, pci_dev_struct)){
-//		printk(KERN_INFO"%s:<probe>request IRQ error\n", pci_devName);
-//		return ERROR;
-//	}
-//	
 
 	irq_num = platform_get_irq(pdev, 0);
 	printk(KERN_INFO"<probe>IRQ number is:%x\n", irq_num);
@@ -508,9 +468,6 @@ static int sv_plat_probe(struct platform_device *pdev)
 		printk(KERN_INFO"%s:<probe>char driver not registered\n", "sv_driver");
 		return ERROR;
 	}
-
-//	if (skel_get_revision(dev) == 0x42)
-//		return -ENODEV;
 
 	//set defaults
 	cdma_set = 0;
@@ -558,7 +515,7 @@ static void remove(struct pci_dev *dev)
 
 	if(zero_buf_set == 1) 
 	{
-//		pci_free_consistent(pci_dev_struct, 131072, zero_copy_buf, dma_addr);
+		//		pci_free_consistent(pci_dev_struct, 131072, zero_copy_buf, dma_addr);
 		dma_free_coherent(dev_struct, 131072, zero_copy_buf, dma_addr);
 	}
 
@@ -574,9 +531,9 @@ static int sv_plat_remove(struct platform_device *pdev)
 
 	if(zero_buf_set == 1) 
 	{
-//		dma_free_coherent(&platform_dev_struct->dev, 131072, zero_copy_buf, dma_addr);
+		//		dma_free_coherent(&platform_dev_struct->dev, 131072, zero_copy_buf, dma_addr);
 		dma_free_coherent(dev_struct, 131072, zero_copy_buf, dma_addr);
-//		pci_free_consistent(pci_dev_struct, 131072, zero_copy_buf, dma_addr);
+		//		pci_free_consistent(pci_dev_struct, 131072, zero_copy_buf, dma_addr);
 	}
 
 	unregister_chrdev(major, pci_devName);
@@ -591,22 +548,6 @@ static struct pci_driver pci_driver = {
 	.probe = probe,
 	.remove = remove,
 };
-
-//static struct platform_driver sv_plat_driver = {
-//	.probe   = sv_plat_probe,
-//	.remove  = sv_plat_remove,
-//	.driver  = {
-//		.name = "sv_driver_plat",
-//		.of_match_table = of_match_ptr(sv_driver_match),
-//	},
-//};
-
-
-//static const struct of_device_id sv_driver_match[] = {
-//	    { .compatible = "xlnx, sv_driver_plat", },
-//		    {},
-//};
-//MODULE_DEVICE_TABLE(of, sv_driver_match);
 
 
 static int __init sv_driver_init(void)
@@ -626,17 +567,17 @@ static int __init sv_driver_init(void)
 			break;
 
 		case PLATFORM:
-		
+
 			printk(KERN_INFO"<platform_init>: Device ID: ('%d')\n", device_id);
 			printk(KERN_INFO"<platform_init>: Major Number: ('%d')\n", major);
-		
+
 			init_waitqueue_head(&wq);
 			init_waitqueue_head(&wq_periph);
-			
+
 			bar_0_axi_offset = 0x40000000;
-		
+
 			return platform_driver_register(&sv_plat_driver);
-		
+
 			break;
 
 		default:;
@@ -716,43 +657,6 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 		wake_up(&wq_periph);
 	}
-	/*bit mask and find out who interrupted*/
-	//	if (status & 0x1)
-	//	{
-	/*function to reset the CDMA and check status
-	 *returns status register read if error*/
-	//		cdma_status = cdma_ack();
-
-	/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
-	//		axi_dest = axi_interr_ctrl + INT_CTRL_IAR;
-	//		status = 0x01;
-	//		data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
-
-	//		cdma_comp = 1;      //condition for wake_up
-	//		wake_up_interruptible(&wq);
-	//	}
-
-	//	else if (status & 0x2)
-	//	{
-	//		printk(KERN_INFO"<pci_isr>: AXI FIFO INTERRUPT SERVICING\n");
-	//		interrupt_vect_dict[0x2] = 1;
-
-	/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
-	//		axi_dest = axi_interr_ctrl + INT_CTRL_IAR;
-	//		status = 0x02;
-	//		data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
-
-	/*since we don't know exactly how to handle interrupt clearing of this device
-	 *we push the interrupt acknowleding of the device to the user space */
-
-	//		wake_up(&wq_periph);
-
-	//	}
-
-	//	else
-	//	{
-
-	//	}
 
 	return IRQ_HANDLED;
 }
@@ -1345,8 +1249,8 @@ void cdma_init(u32 axi_address)
 		/*This sets the DMA read and write kernel buffers and obtains the
 		 * dma_addr's to be sent to the CDMA core upon R/W transactions*/
 
-//		zero_copy_buf = pci_alloc_consistent(pci_dev_struct, 131072, &dma_addr);
-//		zero_copy_buf = dma_alloc_coherent(&platform_dev_struct->dev, 131072, &dma_addr, GFP_KERNEL);
+		//		zero_copy_buf = pci_alloc_consistent(pci_dev_struct, 131072, &dma_addr);
+		//		zero_copy_buf = dma_alloc_coherent(&platform_dev_struct->dev, 131072, &dma_addr, GFP_KERNEL);
 		zero_copy_buf = dma_alloc_coherent(dev_struct, 131072, &dma_addr, GFP_KERNEL);
 		if(NULL == zero_copy_buf)
 		{
@@ -1416,11 +1320,11 @@ u32 num2vec(int num)
 
 void data_transfer(u32 axi_address, void *buf, size_t count, int transfer_type)
 {
-//	int cdma_capable;
+	//	int cdma_capable;
 	u32 test;
 	int in_range = 0;
 
-//	cdma_capable = (cdma_set == 1) & (pcie_ctl_set == 1) & (pcie_m_set == 1);
+	//	cdma_capable = (cdma_set == 1) & (pcie_ctl_set == 1) & (pcie_m_set == 1);
 
 	/*determine if the axi range is in direct accessible memory space*/
 	if ((axi_address + count) < (bar_0_axi_offset + pci_bar_size))
