@@ -23,6 +23,10 @@
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/moduleparam.h>
+#include <linux/of.h>
+#include <linux/of_irq.h>
+#include <linux/platform_device.h>
+
 
 #define ERROR   -1
 #define SUCCESS 0
@@ -60,6 +64,9 @@
 #define KEYHOLE_READ 3
 #define NORMAL_READ 1
 
+#define PCI 1
+#define PLATFORM 2
+
 
 /*Set default values for insmod parameters*/
 static int device_id = 100;
@@ -68,6 +75,7 @@ static int cdma_address = 0xFFFFFFFF;
 static int pcie_ctl_address = 0xFFFFFFFF;
 static int pcie_m_address = 0xFFFFFFFF;
 static int int_ctlr_address = 0xFFFFFFFF;
+static int driver_type = PCI;
 
 module_param(device_id, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(device_id, "DeviceID");
@@ -87,17 +95,23 @@ MODULE_PARM_DESC(pcie_m_address, "PCIeMAddress");
 module_param(int_ctlr_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(int_ctlr_address, "IntCtlrAddress");
 
+module_param(driver_type, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(driver_type, "DriverType");
+
 const char pci_devName[] = "pci_skel"; //name of the device
 unsigned long pci_bar_hw_addr;         //hardware base address of the device
 unsigned long pci_bar_size;            //hardware bar memory size
 unsigned long pci_bar_1_addr;         //hardware base address of the device
 unsigned long pci_bar_1_size;            //hardware bar memory size
 struct pci_dev * pci_dev_struct = NULL; //pci device struct
+struct platform_device * platform_dev_struct = NULL;
+struct device *	dev_struct = NULL;
 void * pci_bar_vir_addr = NULL;        //hardware base virtual address
 void * pci_bar_1_vir_addr = NULL;        //hardware base virtual address
 
 /*this is the user peripheral address offset*/
 const u32 peripheral_space_offset = 0x80000000;
+static u32 bar_0_axi_offset = 0x00000000;
 
 u32 axi_cdma;
 u32 axi_pcie_ctl;
@@ -114,6 +128,8 @@ u8 pcie_m_set;
 u8 int_ctrl_set;
 void * zero_copy_buf;
 int cdma_status;
+static int cdma_capable = 0;
+unsigned int irq_num;
 
 //const int pci_major = 241;             //major number not dynamic
 
@@ -210,10 +226,12 @@ read:           pci_read,
 };
 
 /* ************************device init and exit *********************** */
-static int __init pci_skel_init(void);
-static void pci_skel_exit(void);
+static int __init sv_driver_init(void);
+static void sv_driver_exit(void);
 static int probe(struct pci_dev * dev, const struct pci_device_id * id);
+static int sv_plat_probe(struct platform_device *pdev);
 static void remove(struct pci_dev * dev);
+static int sv_plat_remove(struct platform_device * dev);
 static unsigned char skel_get_revision(struct pci_dev * dev);
 
 /************************** ISR functions **************************** */
@@ -239,6 +257,22 @@ static struct pci_device_id ids[] = {
 };
 MODULE_DEVICE_TABLE(pci, ids);
 
+static const struct of_device_id sv_driver_match[] = {
+	    { .compatible = "xlnx,sv_driver_plat", },
+		    {},
+};
+
+static struct platform_driver sv_plat_driver = {
+	.probe   = sv_plat_probe,
+	.remove  = sv_plat_remove,
+	.driver  = {
+		.name = "sv_driver_plat",
+		.of_match_table = of_match_ptr(sv_driver_match),
+	},
+};
+
+MODULE_DEVICE_TABLE(of, sv_driver_match);
+
 static unsigned char skel_get_revision(struct pci_dev *dev)
 {
 	u8 revision;
@@ -254,7 +288,10 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	 * 	 	 */
 
 	printk(KERN_INFO"%s:<probe>******************************** BEGIN PROBE ROUTINE *****************************************\n", pci_devName);
+	
 	pci_dev_struct = dev;
+	dev_struct = &dev->dev;
+
 	if(NULL == pci_dev_struct){
 		printk(KERN_INFO"%s:<probe>struct pci_dev_struct is NULL\n", pci_devName);
 		return ERROR;
@@ -340,6 +377,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	cdma_set = 0;
 	pcie_ctl_set = 0;
 	pcie_m_set = 0;
+	int_ctrl_set = 0;
 
 	if (cdma_address != 0xFFFFFFFF)
 	{
@@ -361,6 +399,146 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 		int_ctlr_init((u32)int_ctlr_address);
 	}
 	
+	cdma_capable = (cdma_set == 1) & (pcie_m_set == 1) & (int_ctrl_set == 1) & (pcie_ctl_set == 1);
+
+	printk(KERN_INFO"<probe>***********************PROBE FINISHED SUCCESSFULLY**************************************\n");
+	return 0;
+}
+
+static int sv_plat_probe(struct platform_device *pdev)
+{
+	struct resource * resource_1;
+	struct resource * resource_2;
+
+	printk(KERN_INFO"%s:<probe>******************************** BEGIN PROBE ROUTINE *****************************************\n", pci_devName);
+
+	platform_dev_struct = pdev;
+	dev_struct = &pdev->dev;
+
+	//	pci_dev_struct = dev;
+//	if(NULL == pci_dev_struct){
+//		printk(KERN_INFO"%s:<probe>struct pci_dev_struct is NULL\n", pci_devName);
+//		return ERROR;
+//	}
+//
+	/****************** BAR 0 Mapping *******************************************/
+	//get the base hardware address
+//	pci_bar_hw_addr = pci_resource_start(pci_dev_struct, 0);
+//	if (0 > pci_bar_hw_addr){
+//		printk(KERN_INFO"%s<probe>base hardware address is not set\n", pci_devName);
+//		return ERROR;
+//	}
+	resource_1 = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	//get the base memory size
+//	pci_bar_size = pci_resource_len(pci_dev_struct, 0);
+	pci_bar_size = resource_1->end - resource_1->start;
+	printk(KERN_INFO"<probe>pci bar size is:%d\n", pci_bar_size);
+
+	//map the hardware space to virtual space
+	pci_bar_vir_addr = devm_ioremap_resource(&pdev->dev, resource_1);
+
+	if(0 == pci_bar_vir_addr){
+		printk(KERN_INFO"%s:<probe>ioremap error when mapping to vritaul address\n", pci_devName);
+		return ERROR;
+	}
+	printk(KERN_INFO"<probe>pci bar virtual address base is:%p\n", pci_bar_vir_addr);
+
+	/****************** BAR 1 Mapping *******************************************/
+	//get the base hardware address
+//	pci_bar_1_addr = pci_resource_start(pci_dev_struct, 1);
+//	if (0 > pci_bar_1_addr){
+//		printk(KERN_INFO"%s<probe>BAR 1 base hardware address is not set\n", pci_devName);
+//		return ERROR;
+//	}
+
+//	resource_2 = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+	//get the base memory size
+//	pci_bar_1_size = resource_2->end - resource_2->start;
+//	printk(KERN_INFO"<probe>pci bar 1 size is:%d\n", pci_bar_1_size);
+
+	//map the hardware space to virtual space
+//	pci_bar_1_vir_addr = devm_ioremap_resource(&pdev->dev, resource_2);
+//	if(0 == pci_bar_1_vir_addr){
+//		printk(KERN_INFO"%s:<probe>ioremap error when mapping to virtual address\n", pci_devName);
+//		return ERROR;
+//	}
+//	printk(KERN_INFO"<probe>pci bar 1 virtual address base is:%p\n", pci_bar_1_vir_addr);
+	/*****************************************************************************/
+
+	//enable the device
+//	pci_enable_device(dev);
+//	printk(KERN_INFO"<probe>device enabled\n");
+
+	//set DMA mask
+	if(0 != dma_set_mask(&pdev->dev, 0xFFFF0000)){
+		printk(KERN_INFO"%s:<probe>set DMA mask error\n", pci_devName);
+		return ERROR;
+	}
+	printk(KERN_INFO"<probe>dma mask set\n");
+
+	//enable bus mastering
+//	pci_set_master(dev);
+//	printk(KERN_INFO"<probe>pci set as master\n");
+
+	//enable MSI interrupts
+//	if(0 > pci_enable_msi(pci_dev_struct)){
+//		printk(KERN_INFO"%s:<probe>MSI enable error\n", pci_devName);
+//		return ERROR;
+//	}
+//	printk(KERN_INFO"<probe>pci enabled msi interrupt\n");
+
+	//request IRQ
+//	if(0 > request_irq(pci_dev_struct->irq, &pci_isr, IRQF_SHARED, pci_devName, pci_dev_struct)){
+//		printk(KERN_INFO"%s:<probe>request IRQ error\n", pci_devName);
+//		return ERROR;
+//	}
+//	
+
+	irq_num = platform_get_irq(pdev, 0);
+	printk(KERN_INFO"<probe>IRQ number is:%x\n", irq_num);
+
+	//request IRQ
+	if(0 > request_irq(irq_num, &pci_isr, IRQF_SHARED, pci_devName, pdev)){
+		printk(KERN_INFO"%s:<probe>request IRQ error\n", pci_devName);
+		return ERROR;
+	}
+
+	//register the char device
+	if(0 > register_chrdev(major, "sv_driver", &pci_fops)){
+		printk(KERN_INFO"%s:<probe>char driver not registered\n", "sv_driver");
+		return ERROR;
+	}
+
+//	if (skel_get_revision(dev) == 0x42)
+//		return -ENODEV;
+
+	//set defaults
+	cdma_set = 0;
+	pcie_ctl_set = 0;
+	pcie_m_set = 0;
+
+	if (cdma_address != 0xFFFFFFFF)
+	{
+		cdma_init((u32)cdma_address);
+	}
+
+	if (pcie_m_address != 0xFFFFFFFF)
+	{
+		pcie_m_init((u32)pcie_m_address);
+	}
+
+	if (int_ctlr_address != 0xFFFFFFFF)
+	{
+		int_ctlr_init((u32)int_ctlr_address);
+	}
+
+	/*ARM works a little differently for DMA than PCIe in that that translation
+	 * is not handled by the core by writing to a register. For Zynq, the axi to DDR address
+	 * mapping is 1-1 and should be written directly to the returned DMA handle */
+	axi_pcie_m = axi_pcie_m + (u32)dma_addr;
+
+	cdma_capable = (cdma_set == 1) & (pcie_m_set == 1) & (int_ctrl_set == 1);
+
 	printk(KERN_INFO"<probe>***********************PROBE FINISHED SUCCESSFULLY**************************************\n");
 	return 0;
 }
@@ -380,10 +558,29 @@ static void remove(struct pci_dev *dev)
 
 	if(zero_buf_set == 1) 
 	{
-		pci_free_consistent(pci_dev_struct, 131072, zero_copy_buf, dma_addr);
+//		pci_free_consistent(pci_dev_struct, 131072, zero_copy_buf, dma_addr);
+		dma_free_coherent(dev_struct, 131072, zero_copy_buf, dma_addr);
 	}
 
 	unregister_chrdev(major, pci_devName);
+
+}
+
+static int sv_plat_remove(struct platform_device *pdev)
+{
+	iounmap(pci_bar_vir_addr);
+
+	free_irq(irq_num, platform_dev_struct);
+
+	if(zero_buf_set == 1) 
+	{
+//		dma_free_coherent(&platform_dev_struct->dev, 131072, zero_copy_buf, dma_addr);
+		dma_free_coherent(dev_struct, 131072, zero_copy_buf, dma_addr);
+//		pci_free_consistent(pci_dev_struct, 131072, zero_copy_buf, dma_addr);
+	}
+
+	unregister_chrdev(major, pci_devName);
+	printk(KERN_INFO"<remove>***********************PLATFORM DEVICE REMOVED**************************************\n");
 
 }
 
@@ -395,30 +592,76 @@ static struct pci_driver pci_driver = {
 	.remove = remove,
 };
 
-static int __init pci_skel_init(void)
+//static struct platform_driver sv_plat_driver = {
+//	.probe   = sv_plat_probe,
+//	.remove  = sv_plat_remove,
+//	.driver  = {
+//		.name = "sv_driver_plat",
+//		.of_match_table = of_match_ptr(sv_driver_match),
+//	},
+//};
+
+
+//static const struct of_device_id sv_driver_match[] = {
+//	    { .compatible = "xlnx, sv_driver_plat", },
+//		    {},
+//};
+//MODULE_DEVICE_TABLE(of, sv_driver_match);
+
+
+static int __init sv_driver_init(void)
 {
-	printk(KERN_INFO"<pci_init>: Device ID: ('%d')\n", device_id);
-	printk(KERN_INFO"<pci_init>: Major Number: ('%d')\n", major);
+	switch(driver_type){
+		case PCI:
+			printk(KERN_INFO"<pci_init>: Device ID: ('%d')\n", device_id);
+			printk(KERN_INFO"<pci_init>: Major Number: ('%d')\n", major);
 
-	init_waitqueue_head(&wq);
-	init_waitqueue_head(&wq_periph);
+			init_waitqueue_head(&wq);
+			init_waitqueue_head(&wq_periph);
 
-	ids[0].vendor =  PCI_VENDOR_ID_XILINX;
-	ids[0].device =  (u32)device_id;
-	//MODULE_DEVICE_TABLE(pci, ids);
+			ids[0].vendor =  PCI_VENDOR_ID_XILINX;
+			ids[0].device =  (u32)device_id;
 
-	return pci_register_driver(&pci_driver);
+			return pci_register_driver(&pci_driver);
+			break;
+
+		case PLATFORM:
+		
+			printk(KERN_INFO"<platform_init>: Device ID: ('%d')\n", device_id);
+			printk(KERN_INFO"<platform_init>: Major Number: ('%d')\n", major);
+		
+			init_waitqueue_head(&wq);
+			init_waitqueue_head(&wq_periph);
+			
+			bar_0_axi_offset = 0x40000000;
+		
+			return platform_driver_register(&sv_plat_driver);
+		
+			break;
+
+		default:;
+	}
 }
 
-static void __exit pci_skel_exit(void)
+static void __exit sv_driver_exit(void)
 {
-	pci_unregister_driver(&pci_driver);
+	switch(driver_type){
+		case PCI:
+			pci_unregister_driver(&pci_driver);
+			break;
+
+		case PLATFORM:
+			platform_driver_unregister(&sv_plat_driver);
+			break;
+
+		default:;
+	}
 }
 
 MODULE_LICENSE("GPL");
 
-module_init(pci_skel_init);
-module_exit(pci_skel_exit);
+module_init(sv_driver_init);
+module_exit(sv_driver_exit);
 
 /********************** ISR Stuff ***************************/
 static irqreturn_t pci_isr(int irq, void *dev_id)
@@ -993,37 +1236,37 @@ void int_ctlr_init(u32 axi_address)
 	u32 status;
 	u32 axi_dest;
 
-		printk(KERN_INFO"<int_ctlr_init>: Setting Interrupt Controller Axi Address\n");
-			axi_interr_ctrl = axi_address;
-			int_ctrl_set = 1;
+	printk(KERN_INFO"<int_ctlr_init>: Setting Interrupt Controller Axi Address\n");
+	axi_interr_ctrl = axi_address;
+	int_ctrl_set = 1;
 
-			/*Write to Interrupt Enable Register (IER)*/
-			/* Write to enable all possible interrupt inputs */
-			status = 0xFFFFFFFF;
-			axi_dest = axi_interr_ctrl + INT_CTRL_IER;
-			data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
+	/*Write to Interrupt Enable Register (IER)*/
+	/* Write to enable all possible interrupt inputs */
+	status = 0xFFFFFFFF;
+	axi_dest = axi_interr_ctrl + INT_CTRL_IER;
+	data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
 
-			/*Write to the Master Enable Register (MER) */
-			/* Write to enable the hardware interrupts */
-			status = 0x3;
-			axi_dest = axi_interr_ctrl + INT_CTRL_MER;
-			data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
+	/*Write to the Master Enable Register (MER) */
+	/* Write to enable the hardware interrupts */
+	status = 0x3;
+	axi_dest = axi_interr_ctrl + INT_CTRL_MER;
+	data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
 
-			//			status = ioread32((u32 *)int_ctrl_virt_addr_loc);  //binary "11"
-			data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ);
-			printk(KERN_INFO"<int_ctlr_init>: read: ('%x') from MER register\n", status);
+	//			status = ioread32((u32 *)int_ctrl_virt_addr_loc);  //binary "11"
+	data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ);
+	printk(KERN_INFO"<int_ctlr_init>: read: ('%x') from MER register\n", status);
 
-			/*Here we need to clear the service interrupt in the interrupt acknowledge register*/ 
-			status = 0xFFFFFFFF;
-			axi_dest = axi_interr_ctrl + INT_CTRL_IAR;
-			data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
+	/*Here we need to clear the service interrupt in the interrupt acknowledge register*/ 
+	status = 0xFFFFFFFF;
+	axi_dest = axi_interr_ctrl + INT_CTRL_IAR;
+	data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
 }
 
 void pcie_m_init(u32 axi_address)
 {
-			printk(KERN_INFO"<pcie_m_init>: Setting PCIe Master Axi Address\n");
-			axi_pcie_m = axi_address;
-			pcie_m_set = 1;
+	printk(KERN_INFO"<pcie_m_init>: Setting PCIe Master Axi Address\n");
+	axi_pcie_m = axi_address;
+	pcie_m_set = 1;
 }
 
 void pcie_ctl_init(u32 axi_address)
@@ -1032,32 +1275,32 @@ void pcie_ctl_init(u32 axi_address)
 	u32 axi_dest;
 	u32 status;
 
-			printk(KERN_INFO"<pcie_ctl_init>: Setting PCIe Control Axi Address\n");
-			axi_pcie_ctl = axi_address;
-			pcie_ctl_set = 1;
+	printk(KERN_INFO"<pcie_ctl_init>: Setting PCIe Control Axi Address\n");
+	axi_pcie_ctl = axi_address;
+	pcie_ctl_set = 1;
 
-			if(cdma_set == 1)
-			{
-				/*convert to u32 to send to CDMA*/
-				dma_addr_loc = (u32)dma_addr;
+	if(cdma_set == 1)
+	{
+		/*convert to u32 to send to CDMA*/
+		dma_addr_loc = (u32)dma_addr;
 
-				//update pcie_ctl_virt address with register offset
-				axi_dest = axi_pcie_ctl + AXIBAR2PCIEBAR_0L;
+		//update pcie_ctl_virt address with register offset
+		axi_dest = axi_pcie_ctl + AXIBAR2PCIEBAR_0L;
 
-				//write DMA addr to PCIe CTL for address translation
-				data_transfer(axi_dest, (void *)(&dma_addr_loc), 4, NORMAL_WRITE);
-				printk(KERN_INFO"<pci_ioctl_cdma_set>: writing dma address ('%x') to pcie_ctl at AXI address:%x\n", dma_addr_loc, axi_dest);
+		//write DMA addr to PCIe CTL for address translation
+		data_transfer(axi_dest, (void *)(&dma_addr_loc), 4, NORMAL_WRITE);
+		printk(KERN_INFO"<pci_ioctl_cdma_set>: writing dma address ('%x') to pcie_ctl at AXI address:%x\n", dma_addr_loc, axi_dest);
 
-				//check the pcie-ctl got the translation address
-				data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ);
-				printk(KERN_INFO"<pci_ioctl_cdma_set>: PCIe CTL register:%x\n", status);
+		//check the pcie-ctl got the translation address
+		data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ);
+		printk(KERN_INFO"<pci_ioctl_cdma_set>: PCIe CTL register:%x\n", status);
 
-			}
+	}
 }
 
 void cdma_init(u32 axi_address)
 {
-//	u32 axi_cdma;
+	//	u32 axi_cdma;
 	u32 axi_dest;
 	u32 cdma_status;
 	u32 dma_addr_loc;
@@ -1102,7 +1345,9 @@ void cdma_init(u32 axi_address)
 		/*This sets the DMA read and write kernel buffers and obtains the
 		 * dma_addr's to be sent to the CDMA core upon R/W transactions*/
 
-		zero_copy_buf = pci_alloc_consistent(pci_dev_struct, 131072, &dma_addr);
+//		zero_copy_buf = pci_alloc_consistent(pci_dev_struct, 131072, &dma_addr);
+//		zero_copy_buf = dma_alloc_coherent(&platform_dev_struct->dev, 131072, &dma_addr, GFP_KERNEL);
+		zero_copy_buf = dma_alloc_coherent(dev_struct, 131072, &dma_addr, GFP_KERNEL);
 		if(NULL == zero_copy_buf)
 		{
 			printk("%s:<cdma_init>DMA zero copy buff allocation ERROR\n", pci_devName);
@@ -1171,14 +1416,14 @@ u32 num2vec(int num)
 
 void data_transfer(u32 axi_address, void *buf, size_t count, int transfer_type)
 {
-	int cdma_capable;
+//	int cdma_capable;
 	u32 test;
 	int in_range = 0;
 
-	cdma_capable = (cdma_set == 1) & (pcie_ctl_set == 1) & (pcie_m_set == 1);
+//	cdma_capable = (cdma_set == 1) & (pcie_ctl_set == 1) & (pcie_m_set == 1);
 
 	/*determine if the axi range is in direct accessible memory space*/
-	if ((axi_address + count) < pci_bar_size)
+	if ((axi_address + count) < (bar_0_axi_offset + pci_bar_size))
 		in_range = 1;
 	else if ((axi_address + count) < (peripheral_space_offset + pci_bar_1_size))
 	{
@@ -1242,9 +1487,9 @@ void direct_write(u32 axi_address, void *buf, size_t count, int transfer_type)
 		printk(KERN_INFO"<direct_read>: Direct writing to BAR 1 with axi address:%x\n", axi_address);
 		virt_addr = (axi_address - peripheral_space_offset) + pci_bar_1_vir_addr;
 	}
-	else if ((axi_address + count) < pci_bar_size)
+	else if ((axi_address + count) < (bar_0_axi_offset + pci_bar_size))
 	{
-		virt_addr = axi_address + pci_bar_vir_addr;
+		virt_addr = (axi_address - bar_0_axi_offset) + pci_bar_vir_addr;
 		printk(KERN_INFO"<direct_write>: Direct writing to BAR 0\n");
 	}
 	else
@@ -1263,7 +1508,7 @@ void direct_write(u32 axi_address, void *buf, size_t count, int transfer_type)
 		write_value = *newaddr_src;
 		newaddr_dest = (u32 *)(virt_addr + offset);
 		iowrite32(write_value, newaddr_dest);
-//		*newaddr_dest = write_value;   *this works too*
+		//		*newaddr_dest = write_value;   *this works too*
 		printk(KERN_INFO"<direct_write>: wrote:%x to virtual address:('%p')\n", write_value, newaddr_dest);
 		if (transfer_type != KEYHOLE_WRITE)
 			offset += 4;
@@ -1292,10 +1537,10 @@ void direct_read(u32 axi_address, void *buf, size_t count, int transfer_type)
 		virt_addr = (axi_address - peripheral_space_offset) + pci_bar_1_vir_addr;
 		printk(KERN_INFO"<direct_read>: Direct reading from virtual address:%p\n", virt_addr);
 	}
-	else if ((axi_address + count) < pci_bar_size)
+	else if ((axi_address + count) < (bar_0_axi_offset + pci_bar_size))
 	{
 		printk(KERN_INFO"<direct_read>: Direct reading from BAR 0\n");
-		virt_addr = axi_address + pci_bar_vir_addr;
+		virt_addr = (axi_address - bar_0_axi_offset) + pci_bar_vir_addr;
 	}
 	else
 	{
@@ -1309,7 +1554,7 @@ void direct_read(u32 axi_address, void *buf, size_t count, int transfer_type)
 	{
 		newaddr_src = (u32 *)(virt_addr + offset);
 		kern_buf[i] = ioread32(newaddr_src);
-//		kern_buf[i] = *newaddr_src;  *this works too*
+		//		kern_buf[i] = *newaddr_src;  *this works too*
 		if (transfer_type != KEYHOLE_READ)
 			offset += 4;
 		printk(KERN_INFO"<direct_read>: read: %x from kernel address %p.\n", kern_buf[i], newaddr_src);
