@@ -1,0 +1,8 @@
+insmod ./sv_driver.ko device_id=0x7028 major=241 driver_type=2 cdma_address="0x40001000" int_ctrl_address="0x40004000" pcie_m_address="0x00000000"
+rm -rf /dev/bram
+
+mknod /dev/bram c 241 1
+chown root /dev/bram
+chmod 666  /dev/bram
+
+
