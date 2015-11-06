@@ -103,24 +103,28 @@ unsigned long pci_bar_hw_addr;         //hardware base address of the device
 unsigned long pci_bar_size;            //hardware bar memory size
 unsigned long pci_bar_1_addr;         //hardware base address of the device
 unsigned long pci_bar_1_size;            //hardware bar memory size
+unsigned long pci_bar_2_addr;         //hardware base address of the device
+unsigned long pci_bar_2_size;            //hardware bar memory size
 struct pci_dev * pci_dev_struct = NULL; //pci device struct
 struct platform_device * platform_dev_struct = NULL;
 struct device *	dev_struct = NULL;
 void * pci_bar_vir_addr = NULL;        //hardware base virtual address
 void * pci_bar_1_vir_addr = NULL;        //hardware base virtual address
+void * pci_bar_2_vir_addr = NULL;        //hardware base virtual address
 
 /*this is the user peripheral address offset*/
-const u32 peripheral_space_offset = 0x80000000;
-static u32 bar_0_axi_offset = 0x00000000;
+const u64 peripheral_space_offset = 0x0000000100000000;
+static u64 bar_0_axi_offset = 0x40000000;
+const u64 peripheral_space_1_offset = 0x0000000200000000;
 
-u32 axi_cdma;
-u32 axi_pcie_ctl;
-u32 axi_interr_ctrl;
-u32 axi_pcie_m;
+u64 axi_cdma;
+u64 axi_pcie_ctl;
+u64 axi_interr_ctrl;
+u64 axi_pcie_m;
 
-u32 axi_dev0;                 // base address of axi slave mapped to minor 0
-u32 axi_dev1;                 // base address of axi slave mapped to minor 1
-u32 axi_dev2;                 // base address of axi slave mapped to minor 2
+//u32 axi_dev0;                 // base address of axi slave mapped to minor 0
+//u32 axi_dev1;                 // base address of axi slave mapped to minor 1
+//u32 axi_dev2;                 // base address of axi slave mapped to minor 2
 u8 cdma_set;
 u8 pcie_ctl_set;
 static u8 zero_buf_set = 0;
@@ -153,7 +157,9 @@ const u32 AXIBAR2PCIEBAR_0L = 0x20c;
 const u32 CDMA_CR           = 0x00;
 const u32 CDMA_SR           = 0x04;
 const u32 CDMA_DA           = 0x20;
+const u32 CDMA_DA_MSB       = 0x24;
 const u32 CDMA_SA           = 0x18;
+const u32 CDMA_SA_MSB       = 0x1C;
 const u32 CDMA_BTT          = 0x28;
 
 const u32 INT_CTRL_IER      = 0x08;
@@ -184,8 +190,8 @@ const u32 AXI_STREAM_RXID   = 0x3C;
 struct mod_desc 
 {
 	int minor;
-	u32 axi_addr;
-	u32 axi_addr_ctl;
+	u64 axi_addr;
+	u64 axi_addr_ctl;
 	int * mode;
 	//	int * wait_var;
 	int * int_count;
@@ -237,18 +243,18 @@ static unsigned char skel_get_revision(struct pci_dev * dev);
 /************************** ISR functions **************************** */
 static irqreturn_t pci_isr(int irq, void *dev_id);
 /* ********************** other functions **************************8 */
-void cdma_transfer(u32 SA, u32 DA, u32 BTT, int keyhole_en);
+void cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en);
 int cdma_ack(void);
 void cdma_config_set(u32 bit_vec, int set_unset);
-void direct_read(u32 axi_address, void *buf, size_t count, int transfer_type);
-void direct_write(u32 axi_address, void *buf, size_t count, int transfer_type);
-void data_transfer(u32 axi_address, void *buf, size_t count, int transfer_type);
+void direct_read(u64 axi_address, void *buf, size_t count, int transfer_type);
+void direct_write(u64 axi_address, void *buf, size_t count, int transfer_type);
+void data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type);
 int vec2num(u32 vec);
 u32 num2vec(int num);
-void cdma_init(u32 axi_address);
-void pcie_ctl_init(u32 axi_address);
-void pcie_m_init(u32 axi_address);
-void int_ctlr_init(u32 axi_address);
+void cdma_init(u64 axi_address);
+void pcie_ctl_init(u64 axi_address);
+void pcie_m_init(u64 axi_address);
+void int_ctlr_init(u64 axi_address);
 /* ****************************************************************** */
 
 static struct pci_device_id ids[] = {
@@ -335,6 +341,27 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	printk(KERN_INFO"<probe>pci bar 1 virtual address base is:%p\n", pci_bar_1_vir_addr);
 	/*****************************************************************************/
 
+
+	/****************** BAR 2 Mapping *******************************************/
+	//get the base hardware address
+	pci_bar_2_addr = pci_resource_start(pci_dev_struct, 2);
+	if (0 > pci_bar_2_addr){
+		printk(KERN_INFO"%s<probe>BAR 2 base hardware address is not set\n", pci_devName);
+		return ERROR;
+	}
+	//get the base memory size
+	pci_bar_2_size = pci_resource_len(pci_dev_struct, 2);
+	printk(KERN_INFO"<probe>pci bar 2 size is:%d\n", pci_bar_2_size);
+
+	//map the hardware space to virtual space
+	pci_bar_2_vir_addr = ioremap(pci_bar_2_addr, pci_bar_2_size);
+	if(0 == pci_bar_2_vir_addr){
+		printk(KERN_INFO"%s:<probe>ioremap error when mapping to virtual address\n", pci_devName);
+		return ERROR;
+	}
+	printk(KERN_INFO"<probe>pci bar 2 virtual address base is:%p\n", pci_bar_2_vir_addr);
+	/*****************************************************************************/
+
 	//enable the device
 	pci_enable_device(dev);
 	printk(KERN_INFO"<probe>device enabled\n");
@@ -381,25 +408,28 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 	if (cdma_address != 0xFFFFFFFF)
 	{
-		cdma_init((u32)cdma_address);
+		cdma_init((u64)cdma_address);
 	}
 
 	if (pcie_ctl_address != 0xFFFFFFFF)
 	{
-		pcie_ctl_init((u32)pcie_ctl_address);
+		pcie_ctl_init((u64)pcie_ctl_address);
 	}
 
 	if (pcie_m_address != 0xFFFFFFFF)
 	{
-		pcie_m_init((u32)pcie_m_address);
+		pcie_m_init((u64)pcie_m_address);
 	}
 
 	if (int_ctlr_address != 0xFFFFFFFF)
 	{
-		int_ctlr_init((u32)int_ctlr_address);
+		int_ctlr_init((u64)int_ctlr_address);
 	}
 
 	cdma_capable = (cdma_set == 1) & (pcie_m_set == 1) & (int_ctrl_set == 1) & (pcie_ctl_set == 1);
+
+	/*Since we isolated the AXI bus, this is the new offest for the slave interface of the PCIe*/
+	axi_pcie_m = 0;
 
 	printk(KERN_INFO"<probe>***********************PROBE FINISHED SUCCESSFULLY**************************************\n");
 	return 0;
@@ -476,23 +506,23 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 	if (cdma_address != 0xFFFFFFFF)
 	{
-		cdma_init((u32)cdma_address);
+		cdma_init((u64)cdma_address);
 	}
 
 	if (pcie_m_address != 0xFFFFFFFF)
 	{
-		pcie_m_init((u32)pcie_m_address);
+		pcie_m_init((u64)pcie_m_address);
 	}
 
 	if (int_ctlr_address != 0xFFFFFFFF)
 	{
-		int_ctlr_init((u32)int_ctlr_address);
+		int_ctlr_init((u64)int_ctlr_address);
 	}
 
 	/*ARM works a little differently for DMA than PCIe in that that translation
 	 * is not handled by the core by writing to a register. For Zynq, the axi to DDR address
 	 * mapping is 1-1 and should be written directly to the returned DMA handle */
-	axi_pcie_m = axi_pcie_m + (u32)dma_addr;
+	axi_pcie_m = axi_pcie_m + (u64)dma_addr;
 
 	cdma_capable = (cdma_set == 1) & (pcie_m_set == 1) & (int_ctrl_set == 1);
 
@@ -608,7 +638,7 @@ module_exit(sv_driver_exit);
 static irqreturn_t pci_isr(int irq, void *dev_id)
 {
 	u32 status;
-	u32 axi_dest;
+	u64 axi_dest;
 	int int_num;
 	int device_mode;
 
@@ -727,7 +757,7 @@ int pci_release(struct inode *inode, struct file *filep)
 /*item for file_operations: unlocked ioctl*/
 long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 {
-	u32 axi_dest;
+	u64 axi_dest;
 	u32 cdma_status;
 	u32 status;
 	void __user *argp = (void __user *)arg;
@@ -735,12 +765,12 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	struct mod_desc *mod_desc;
 	static int master_count = 0;
 	u32 bit_vec;
-	u32 arg_loc; 
+	u64 arg_loc; 
 	u32 kern_reg;
 	int int_num;
 	int * mode;
 
-	copy_from_user(&arg_loc, argp, sizeof(u32));
+	copy_from_user(&arg_loc, argp, sizeof(u64));
 
 	printk("<ioctl>Entering IOCTL with command: %d\n", cmd);
 
@@ -781,7 +811,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		case SET_INTERRUPT:
 			printk(KERN_INFO"<ioctl>: Setting device as an Interrupt source with vector:%x\n", arg_loc);
 			/*Store the Interrupt Vector*/
-			mod_desc->interrupt_vec = arg_loc;
+			mod_desc->interrupt_vec = (u32)arg_loc;
 			/*initialize the interrupt vector dictionary to 0*/
 			interrupt_vect_dict[arg_loc] = 0; 
 
@@ -957,7 +987,7 @@ int pci_poll(struct file *filep, poll_table * pwait)
 ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff_t *f_pos)
 {
 	void * kern_buf = NULL;
-	u32 axi_dest;
+	u64 axi_dest;
 	struct mod_desc * mod_desc;
 	size_t bytes;
 	int cdma_capable;
@@ -1030,7 +1060,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_pos)
 {
 	u32 kern_reg;
-	u32 axi_dest;
+	u64 axi_dest;
 	struct mod_desc *mod_desc;
 	int bytes;
 	int cdma_capable;
@@ -1135,10 +1165,10 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	return bytes;
 }
 /******************************** Support functions ***************************************/
-void int_ctlr_init(u32 axi_address)
+void int_ctlr_init(u64 axi_address)
 {
 	u32 status;
-	u32 axi_dest;
+	u64 axi_dest;
 
 	printk(KERN_INFO"<int_ctlr_init>: Setting Interrupt Controller Axi Address\n");
 	axi_interr_ctrl = axi_address;
@@ -1166,17 +1196,17 @@ void int_ctlr_init(u32 axi_address)
 	data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
 }
 
-void pcie_m_init(u32 axi_address)
+void pcie_m_init(u64 axi_address)
 {
 	printk(KERN_INFO"<pcie_m_init>: Setting PCIe Master Axi Address\n");
 	axi_pcie_m = axi_address;
 	pcie_m_set = 1;
 }
 
-void pcie_ctl_init(u32 axi_address)
+void pcie_ctl_init(u64 axi_address)
 {
 	u32 dma_addr_loc;
-	u32 axi_dest;
+	u64 axi_dest;
 	u32 status;
 
 	printk(KERN_INFO"<pcie_ctl_init>: Setting PCIe Control Axi Address\n");
@@ -1202,10 +1232,10 @@ void pcie_ctl_init(u32 axi_address)
 	}
 }
 
-void cdma_init(u32 axi_address)
+void cdma_init(u64 axi_address)
 {
 	//	u32 axi_cdma;
-	u32 axi_dest;
+	u64 axi_dest;
 	u32 cdma_status;
 	u32 dma_addr_loc;
 	int * mode;
@@ -1318,7 +1348,7 @@ u32 num2vec(int num)
  *reads and writes if the CDMA is either unavailable or inefficient to
  *be used*/
 
-void data_transfer(u32 axi_address, void *buf, size_t count, int transfer_type)
+void data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type)
 {
 	//	int cdma_capable;
 	u32 test;
@@ -1370,7 +1400,7 @@ void data_transfer(u32 axi_address, void *buf, size_t count, int transfer_type)
 		printk(KERN_INFO"<data_transfer>: ERROR: Address is out of range and CDMA is not initialized\n");
 }
 
-void direct_write(u32 axi_address, void *buf, size_t count, int transfer_type)
+void direct_write(u64 axi_address, void *buf, size_t count, int transfer_type)
 {
 	void * kern_buf;
 	void * virt_addr;
@@ -1421,7 +1451,7 @@ void direct_write(u32 axi_address, void *buf, size_t count, int transfer_type)
 
 }
 
-void direct_read(u32 axi_address, void *buf, size_t count, int transfer_type)
+void direct_read(u64 axi_address, void *buf, size_t count, int transfer_type)
 {
 	int len;
 	void * virt_addr;
@@ -1467,12 +1497,22 @@ void direct_read(u32 axi_address, void *buf, size_t count, int transfer_type)
 	memcpy(buf, (const void*)kern_buf, count);
 }
 
-void cdma_transfer(u32 SA, u32 DA, u32 BTT, int keyhole_en)
+void cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en)
 {
 	u32 bit_vec;
-	u32 axi_dest;
+	u64 axi_dest;
 	u32 status;
+	u32 SA_MSB;
+	u32 SA_LSB;
+	u32 DA_MSB;
+	u32 DA_LSB; 
 
+	SA_MSB = (u32)(SA>>32);
+	SA_LSB = (u32)SA;
+
+	DA_MSB = (u32)(DA>>32);
+	DA_LSB = (u32)DA;
+	
 	switch(keyhole_en){
 
 		case KEYHOLE_READ:
@@ -1505,19 +1545,27 @@ void cdma_transfer(u32 SA, u32 DA, u32 BTT, int keyhole_en)
 	//	printk(KERN_INFO"<pci_dma_transfer>: CDMA is now out of reset, resuming......\n");	
 	//	}
 
-	//Writing SA, which is the PCIe_Master AXI address	
+	//Writing SA_MSB	
+	axi_dest = axi_cdma + CDMA_SA_MSB;
+	direct_write(axi_dest, (void*)&SA_MSB, 4, NORMAL_WRITE);
+	printk(KERN_INFO"<pci_dma_transfer>: writing dma SA_MSB address ('%x') to CDMA at axi address:%x\n", SA_MSB, axi_dest);
+	//Writing SA_LSB	
 	axi_dest = axi_cdma + CDMA_SA;
-	direct_write(axi_dest, (void*)&SA, 4, NORMAL_WRITE);
-	printk(KERN_INFO"<pci_dma_transfer>: writing dma SA address ('%x') to CDMA at axi address:%x\n", SA, axi_dest);
+	direct_write(axi_dest, (void*)&SA_LSB, 4, NORMAL_WRITE);
+	printk(KERN_INFO"<pci_dma_transfer>: writing dma SA_LSB address ('%x') to CDMA at axi address:%x\n", SA_LSB, axi_dest);
 	//read the status register
 	axi_dest = axi_cdma + CDMA_SR;
 	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
 	printk(KERN_INFO"<pci_dma_transfer>: CDMA Status after writing SA:%x\n", status);	
 
-	//Writing DA, which is the target peripheral AXI address	
+	//Writing DA_MSB	
+	axi_dest = axi_cdma + CDMA_DA_MSB;
+	direct_write(axi_dest, (void*)&DA_MSB, 4, NORMAL_WRITE);
+	printk(KERN_INFO"<pci_dma_transfer>: writing DA_MSB address ('%x') to CDMA at axi address:%x\n", DA_MSB, axi_dest);
+	//Writing DA_LSB
 	axi_dest = axi_cdma + CDMA_DA;
-	direct_write(axi_dest, (void*)&DA, 4, NORMAL_WRITE);
-	printk(KERN_INFO"<pci_dma_transfer>: writing DA address ('%x') to CDMA at axi address:%x\n", DA, axi_dest);
+	direct_write(axi_dest, (void*)&DA_LSB, 4, NORMAL_WRITE);
+	printk(KERN_INFO"<pci_dma_transfer>: writing DA_LSB address ('%x') to CDMA at axi address:%x\n", DA_LSB, axi_dest);
 	//read the status register
 	axi_dest = axi_cdma + CDMA_SR;
 	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
@@ -1565,7 +1613,7 @@ void cdma_config_set(u32 bit_vec, int set_unset)
 	u32 current_CR;
 	u32 new_CR;
 	u32 set_vec;
-	u32 axi_dest;
+	u64 axi_dest;
 
 
 	axi_dest = axi_cdma + CDMA_CR;
@@ -1592,7 +1640,7 @@ int cdma_ack(void)
 {
 	u32 cdma_status;
 	u32 status;
-	u32 axi_dest;
+	u64 axi_dest;
 
 	/*acknowledge the CDMA interrupt (to reset it)*/
 	cdma_status = 0x00001000;
