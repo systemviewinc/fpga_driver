@@ -20,10 +20,10 @@ char * devfilename_2 = devname_2;
 //char * devfilename_3 = devname_3;
 
 /* System View Core AXI Addresses */
-unsigned int pcie_ctl_addr = 0x00002000;
-unsigned int cdma_addr = 0x00001000;
-unsigned int pcie_m_addr = 0x00010000;
-unsigned int axi_int_addr = 0x00004000;
+unsigned int pcie_ctl_addr = 0x40002000;
+unsigned int cdma_addr = 0x40001000;
+unsigned int pcie_m_addr = 0x40010000;
+unsigned int axi_int_addr = 0x40004000;
 unsigned int in[50];
 
 /* User Peripheral AXI Addresses */
@@ -33,12 +33,12 @@ unsigned int in[50];
 //unsigned int hls_read_ctl_axi_addr = 0x80002000;
 //unsigned int hls_read_axi_addr = 0x80020000;
 
-unsigned int hls_write_ctl_axi_addr = 0x80010000;
-unsigned int hls_write_axi_addr = 0x80000000;
-unsigned int hls_read_ctl_axi_addr = 0x80030000;
-unsigned int hls_read_axi_addr = 0x80020000;
+unsigned long hls_write_ctl_axi_addr = 0x110000000;
+unsigned long hls_write_axi_addr = 0x100000000;
+unsigned long hls_read_ctl_axi_addr = 0x210000000;
+unsigned long hls_read_axi_addr = 0x200000000;
 
-int hls_fifo_mode = AXI_STREAM_FIFO;
+unsigned long hls_fifo_mode = AXI_STREAM_FIFO;
 
 unsigned int SET_AXI_DEVICE = 50;
 unsigned int SET_AXI_CDMA = 51;
@@ -173,10 +173,9 @@ int main()
 	printf("set axi fifo to mode: %d\n", hls_fifo_mode);
 
 	/****** Set the mode of hls_read to be "Slave with interrupt" ***********/
-	unsigned int interrupt_vector = 0x2;
+	unsigned int interrupt_vector = 0x5;
 	ioctl(hls_read, SET_INTERRUPT, &interrupt_vector); 
 	printf("set peripheral as slave with interrupt at vector:%x\n", interrupt_vector);
-
 /********************************* BRAM TEST  ********************************************/
 int p=0;
 while(p<49)

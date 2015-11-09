@@ -39,7 +39,7 @@
 
 
 #define MAX_NUM_MASTERS 2
-#define MAX_NUM_SLI 2
+#define MAX_NUM_SLI 4
 
 #define MAX_NUM_INT MAX_NUM_MASTERS + MAX_NUM_SLI
 
@@ -323,13 +323,13 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 	/****************** BAR 1 Mapping *******************************************/
 	//get the base hardware address
-	pci_bar_1_addr = pci_resource_start(pci_dev_struct, 1);
+	pci_bar_1_addr = pci_resource_start(pci_dev_struct, 2);
 	if (0 > pci_bar_1_addr){
 		printk(KERN_INFO"%s<probe>BAR 1 base hardware address is not set\n", pci_devName);
 		return ERROR;
 	}
 	//get the base memory size
-	pci_bar_1_size = pci_resource_len(pci_dev_struct, 1);
+	pci_bar_1_size = pci_resource_len(pci_dev_struct, 2);
 	printk(KERN_INFO"<probe>pci bar 1 size is:%d\n", pci_bar_1_size);
 
 	//map the hardware space to virtual space
@@ -344,13 +344,13 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 	/****************** BAR 2 Mapping *******************************************/
 	//get the base hardware address
-	pci_bar_2_addr = pci_resource_start(pci_dev_struct, 2);
+	pci_bar_2_addr = pci_resource_start(pci_dev_struct, 4);
 	if (0 > pci_bar_2_addr){
 		printk(KERN_INFO"%s<probe>BAR 2 base hardware address is not set\n", pci_devName);
 		return ERROR;
 	}
 	//get the base memory size
-	pci_bar_2_size = pci_resource_len(pci_dev_struct, 2);
+	pci_bar_2_size = pci_resource_len(pci_dev_struct, 4);
 	printk(KERN_INFO"<probe>pci bar 2 size is:%d\n", pci_bar_2_size);
 
 	//map the hardware space to virtual space
@@ -772,19 +772,19 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 	copy_from_user(&arg_loc, argp, sizeof(u64));
 
-	printk("<ioctl>Entering IOCTL with command: %d\n", cmd);
+	printk("<ioctl>Entering IOCTL with command: %d and arg %lx\n", cmd, arg_loc);
 
 	mod_desc = filep->private_data;   
 
 	switch(cmd){
 
 		case SET_AXI_DEVICE:
-			printk(KERN_INFO"<ioctl>: Setting Peripheral Axi Address:%x\n", arg_loc);
+			printk(KERN_INFO"<ioctl>: Setting Peripheral Axi Address:%lx\n", arg_loc);
 			mod_desc->axi_addr = arg_loc;
 			break;
 
 		case SET_AXI_CTL_DEVICE:
-			printk(KERN_INFO"<ioctl>: Setting Peripheral CTL AXI Address:%x\n", arg_loc);
+			printk(KERN_INFO"<ioctl>: Setting Peripheral CTL AXI Address:%lx\n", arg_loc);
 			mod_desc->axi_addr_ctl = arg_loc;
 			break;
 
@@ -809,7 +809,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			break;
 
 		case SET_INTERRUPT:
-			printk(KERN_INFO"<ioctl>: Setting device as an Interrupt source with vector:%x\n", arg_loc);
+			printk(KERN_INFO"<ioctl>: Setting device as an Interrupt source with vector:%lx\n", arg_loc);
 			/*Store the Interrupt Vector*/
 			mod_desc->interrupt_vec = (u32)arg_loc;
 			/*initialize the interrupt vector dictionary to 0*/
