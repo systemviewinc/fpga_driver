@@ -815,8 +815,9 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			/*initialize the interrupt vector dictionary to 0*/
 			interrupt_vect_dict[arg_loc] = 0; 
 
-			int_num = vec2num(arg_loc);
+			int_num = vec2num((u32)arg_loc);
 			mod_desc->int_num = int_num;
+			printk(KERN_INFO"<ioctl>: Interrupt Number:%d\n", int_num);
 
 			interr_dict[int_num].int_count = mod_desc->int_count;	
 			interr_dict[int_num].mode = mod_desc->mode;
@@ -1008,7 +1009,11 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 	/*Allocate a Buffer in kernel space*/
 	kern_buf = kmalloc(count, GFP_KERNEL);
-
+	if (!kern_buf)
+	{
+		printk(KERN_INFO"<pci_write>: ERROR Initializing kmalloc\n");
+		return bytes;
+	}
 	/*Transfer the write data to the kernel space buffer*/
 	copy_from_user(kern_buf, buf, count);
 
@@ -1016,7 +1021,6 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	{
 
 		printk(KERN_INFO"<axi_stream_fifo_write>: writing to the AXI Stream FIFO\n");
-
 		/*This is the function to move data from user space to kernel space*/
 		//		copy_from_user(zero_copy_buf, buf, count);
 

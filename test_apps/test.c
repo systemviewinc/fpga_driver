@@ -33,10 +33,10 @@ unsigned int in[50];
 //unsigned int hls_read_ctl_axi_addr = 0x80002000;
 //unsigned int hls_read_axi_addr = 0x80020000;
 
-unsigned long hls_write_ctl_axi_addr = 0x110000000;
-unsigned long hls_write_axi_addr = 0x100000000;
-unsigned long hls_read_ctl_axi_addr = 0x210000000;
-unsigned long hls_read_axi_addr = 0x200000000;
+unsigned long hls_write_ctl_axi_addr = 0x180010000;
+unsigned long hls_write_axi_addr = 0x180000000;
+unsigned long hls_read_ctl_axi_addr = 0x280010000;
+unsigned long hls_read_axi_addr = 0x280000000;
 
 unsigned long hls_fifo_mode = AXI_STREAM_FIFO;
 
@@ -173,9 +173,10 @@ int main()
 	printf("set axi fifo to mode: %d\n", hls_fifo_mode);
 
 	/****** Set the mode of hls_read to be "Slave with interrupt" ***********/
-	unsigned int interrupt_vector = 0x5;
+	unsigned int interrupt_vector = 0x10;  /*2^5 - NOTE - THIS IS POWER OF 2!!!*/
 	ioctl(hls_read, SET_INTERRUPT, &interrupt_vector); 
 	printf("set peripheral as slave with interrupt at vector:%x\n", interrupt_vector);
+
 /********************************* BRAM TEST  ********************************************/
 int p=0;
 while(p<49)
@@ -237,18 +238,17 @@ while(p<49)
 
 	pthread_t rxfifo;
 
-	if(pthread_create(&rxfifo, NULL, rxfifo_read, rxbuff))
-	{
-		printf("Error creating thread\n");
-	}
-	printf("Other Thread\n");
+//	if(pthread_create(&rxfifo, NULL, rxfifo_read, rxbuff))
+//	{
+//		printf("Error creating thread\n");
+//	}
+//	printf("Other Thread\n");
 
 	/*******Send data to the TX FIFO (front end) **********/
-
 	ret_val = write(hls_write, in, sizeof(in));  
 
 	printf("TX FIFO: Transmitted data\n");
-
+return 0;
 	//Should have written.... wait for RX FIFO interrupt.
 
 
