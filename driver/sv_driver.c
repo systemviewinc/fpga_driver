@@ -1,9 +1,16 @@
-/*************************************************************/
-/* System View Device Driver*/
+/*************************************************************
+ * System View Device Driver
 
-/* Blah blah blah */
-/* Blah blah blah */
-/************************************************************/
+ * Date: 11/10/2015
+
+ * Author:   System View Inc.
+
+ * Description:   This driver is to be used to control the
+ *                Xilinx interface IP created by System View
+ *                Inc. This driver can be set to operate as
+ *                a PCIe Device Driver or as a Platform Device
+ *                Driver depending on the input parameter.
+************************************************************/
 
 
 
@@ -68,7 +75,7 @@
 #define PLATFORM 2
 
 
-/*Set default values for insmod parameters*/
+/***********Set default values for insmod parameters***************************/
 static int device_id = 100;
 static int major = 241;
 static int cdma_address = 0xFFFFFFFF;
@@ -97,6 +104,7 @@ MODULE_PARM_DESC(int_ctlr_address, "IntCtlrAddress");
 
 module_param(driver_type, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(driver_type, "DriverType");
+/*****************************************************************************/
 
 const char pci_devName[] = "pci_skel"; //name of the device
 unsigned long pci_bar_hw_addr;         //hardware base address of the device
@@ -193,7 +201,6 @@ struct mod_desc
 	u64 axi_addr;
 	u64 axi_addr_ctl;
 	int * mode;
-	//	int * wait_var;
 	int * int_count;
 	int int_num;
 	int master_num;
@@ -311,7 +318,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	}
 	//get the base memory size
 	pci_bar_size = pci_resource_len(pci_dev_struct, 0);
-	printk(KERN_INFO"<probe>pci bar size is:%d\n", pci_bar_size);
+	printk(KERN_INFO"<probe>pci bar size is:%lu\n", pci_bar_size);
 
 	//map the hardware space to virtual space
 	pci_bar_vir_addr = ioremap(pci_bar_hw_addr, pci_bar_size);
@@ -330,7 +337,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	}
 	//get the base memory size
 	pci_bar_1_size = pci_resource_len(pci_dev_struct, 2);
-	printk(KERN_INFO"<probe>pci bar 1 size is:%d\n", pci_bar_1_size);
+	printk(KERN_INFO"<probe>pci bar 1 size is:%lu\n", pci_bar_1_size);
 
 	//map the hardware space to virtual space
 	pci_bar_1_vir_addr = ioremap(pci_bar_1_addr, pci_bar_1_size);
@@ -351,7 +358,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	}
 	//get the base memory size
 	pci_bar_2_size = pci_resource_len(pci_dev_struct, 4);
-	printk(KERN_INFO"<probe>pci bar 2 size is:%d\n", pci_bar_2_size);
+	printk(KERN_INFO"<probe>pci bar 2 size is:%lu\n", pci_bar_2_size);
 
 	//map the hardware space to virtual space
 	pci_bar_2_vir_addr = ioremap(pci_bar_2_addr, pci_bar_2_size);
@@ -438,7 +445,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 static int sv_plat_probe(struct platform_device *pdev)
 {
 	struct resource * resource_1;
-	struct resource * resource_2;
+//	struct resource * resource_2;
 
 	printk(KERN_INFO"%s:<probe>******************************** BEGIN PROBE ROUTINE *****************************************\n", pci_devName);
 
@@ -449,7 +456,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 	//get the base memory size
 	//	pci_bar_size = pci_resource_len(pci_dev_struct, 0);
 	pci_bar_size = resource_1->end - resource_1->start;
-	printk(KERN_INFO"<probe>pci bar size is:%d\n", pci_bar_size);
+	printk(KERN_INFO"<probe>pci bar size is:%lu\n", pci_bar_size);
 
 	//map the hardware space to virtual space
 	pci_bar_vir_addr = devm_ioremap_resource(&pdev->dev, resource_1);
@@ -567,8 +574,10 @@ static int sv_plat_remove(struct platform_device *pdev)
 	}
 
 	unregister_chrdev(major, pci_devName);
+
 	printk(KERN_INFO"<remove>***********************PLATFORM DEVICE REMOVED**************************************\n");
 
+	return 0;
 }
 
 static struct pci_driver pci_driver = {
@@ -612,6 +621,9 @@ static int __init sv_driver_init(void)
 
 		default:;
 	}
+
+	printk(KERN_INFO"<platform_init>: !!!!ERROR!!!!! No correct driver type detected!\n");
+	return 0;
 }
 
 static void __exit sv_driver_exit(void)
@@ -674,6 +686,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 	else
 	{
+		return 0;
 		printk(KERN_INFO"<pci_isr>: this interrupt is from a user peripheral\n");
 		*(interr_dict[int_num].int_count) = (*(interr_dict[int_num].int_count)) + 1;
 
@@ -758,33 +771,33 @@ int pci_release(struct inode *inode, struct file *filep)
 long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 {
 	u64 axi_dest;
-	u32 cdma_status;
-	u32 status;
+//	u32 cdma_status;
+//	u32 status;
 	void __user *argp = (void __user *)arg;
-	u32 dma_addr_loc;
+//	u32 dma_addr_loc;
 	struct mod_desc *mod_desc;
 	static int master_count = 0;
 	u32 bit_vec;
 	u64 arg_loc; 
 	u32 kern_reg;
 	int int_num;
-	int * mode;
+//	int * mode;
 
 	copy_from_user(&arg_loc, argp, sizeof(u64));
 
-	printk("<ioctl>Entering IOCTL with command: %d and arg %lx\n", cmd, arg_loc);
+	printk("<ioctl>Entering IOCTL with command: %d and arg %llx\n", cmd, arg_loc);
 
 	mod_desc = filep->private_data;   
 
 	switch(cmd){
 
 		case SET_AXI_DEVICE:
-			printk(KERN_INFO"<ioctl>: Setting Peripheral Axi Address:%lx\n", arg_loc);
+			printk(KERN_INFO"<ioctl>: Setting Peripheral Axi Address:%llx\n", arg_loc);
 			mod_desc->axi_addr = arg_loc;
 			break;
 
 		case SET_AXI_CTL_DEVICE:
-			printk(KERN_INFO"<ioctl>: Setting Peripheral CTL AXI Address:%lx\n", arg_loc);
+			printk(KERN_INFO"<ioctl>: Setting Peripheral CTL AXI Address:%llx\n", arg_loc);
 			mod_desc->axi_addr_ctl = arg_loc;
 			break;
 
@@ -809,7 +822,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			break;
 
 		case SET_INTERRUPT:
-			printk(KERN_INFO"<ioctl>: Setting device as an Interrupt source with vector:%lx\n", arg_loc);
+			printk(KERN_INFO"<ioctl>: Setting device as an Interrupt source with vector:%llx\n", arg_loc);
 			/*Store the Interrupt Vector*/
 			mod_desc->interrupt_vec = (u32)arg_loc;
 			/*initialize the interrupt vector dictionary to 0*/
@@ -1017,6 +1030,11 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	/*Transfer the write data to the kernel space buffer*/
 	copy_from_user(kern_buf, buf, count);
 
+	printk(KERN_INFO"\n\n");	
+	printk(KERN_INFO"<pci_write>: ************************************************************************\n");	
+	printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION BEGIN  **************************\n");	
+	printk(KERN_INFO"<pci_write>: ************************************************************************\n");	
+
 	if (*(mod_desc->mode) == AXI_STREAM_FIFO)
 	{
 
@@ -1057,6 +1075,11 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 	}
 	kfree((const void*)kern_buf);
+	printk(KERN_INFO"\n");	
+	printk(KERN_INFO"<pci_write>: ************************************************************************\n");	
+	printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION END  **************************\n");	
+	printk(KERN_INFO"<pci_write>: ************************************************************************\n");	
+	printk(KERN_INFO"\n");	
 	return bytes;
 
 }
@@ -1079,6 +1102,11 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	read_buf = kmalloc(count, GFP_KERNEL);
 
 	bytes = 0;
+
+	printk(KERN_INFO"\n\n");	
+	printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
+	printk(KERN_INFO"<pci_read>: ******************** READ TRANSACTION BEGIN  **************************\n");	
+	printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
 
 	switch(*(mod_desc->mode)){
 
@@ -1164,7 +1192,11 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 	kfree((const void*)read_buf);
 
-	printk(KERN_INFO"<read>: Leaving the read file op\n");
+	printk(KERN_INFO"\n");	
+	printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
+	printk(KERN_INFO"<pci_read>: ******************** READ TRANSACTION END  **************************\n");	
+	printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
+	printk(KERN_INFO"\n");	
 
 	return bytes;
 }
@@ -1227,12 +1259,16 @@ void pcie_ctl_init(u64 axi_address)
 
 		//write DMA addr to PCIe CTL for address translation
 		data_transfer(axi_dest, (void *)(&dma_addr_loc), 4, NORMAL_WRITE);
-		printk(KERN_INFO"<pci_ioctl_cdma_set>: writing dma address ('%x') to pcie_ctl at AXI address:%x\n", dma_addr_loc, axi_dest);
+		printk(KERN_INFO"<pci_ioctl_cdma_set>: writing dma address ('%x') to pcie_ctl at AXI address:%llx\n", dma_addr_loc, axi_dest);
 
 		//check the pcie-ctl got the translation address
 		data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ);
 		printk(KERN_INFO"<pci_ioctl_cdma_set>: PCIe CTL register:%x\n", status);
 
+		if (status == dma_addr_loc)
+			printk(KERN_INFO"<pci_ioctl_cdma_set>: PCIe CTL register set SUCCESS:%x\n", status);
+		else
+			printk(KERN_INFO"<pci_ioctl_cdma_set>:!!!!!!!!!!! PCIe CTL register FAILURE !!!!!!!!!!!!!!!:%x\n", status);
 	}
 }
 
@@ -1244,7 +1280,7 @@ void cdma_init(u64 axi_address)
 	u32 dma_addr_loc;
 	int * mode;
 
-	printk(KERN_INFO"<cdma_init>: *******************Setting CDMA AXI Address:%x******************************************\n", axi_address);
+	printk(KERN_INFO"<cdma_init>: *******************Setting CDMA AXI Address:%llx ******************************************\n", axi_address);
 	axi_cdma = axi_address;
 	cdma_set = 1;
 
@@ -1311,7 +1347,7 @@ void cdma_init(u64 axi_address)
 
 		//write DMA addr to PCIe CTL for address translation
 		data_transfer(axi_dest, (void *)(&dma_addr_loc), 4, NORMAL_WRITE);
-		printk(KERN_INFO"<cdma_init>: writing dma address ('%x') to pcie_ctl at AXI address:%x\n", dma_addr_loc, axi_dest);
+		printk(KERN_INFO"<cdma_init>: writing dma address ('%x') to pcie_ctl at AXI address:%llx\n", dma_addr_loc, axi_dest);
 		//check the pcie-ctl got the translation address
 		data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ);
 		printk(KERN_INFO"<cdma_init>: PCIe CTL register:%x\n", cdma_status);
@@ -1421,22 +1457,22 @@ void direct_write(u64 axi_address, void *buf, size_t count, int transfer_type)
 	/* Also does a final check to make sure you are writing in range */
 	if ((axi_address >= peripheral_space_offset) & ((axi_address + count) < (peripheral_space_offset + pci_bar_1_size)))
 	{
-		printk(KERN_INFO"<direct_write>: Direct writing to BAR 1\n");
-		printk(KERN_INFO"<direct_read>: Direct writing to BAR 1 with axi address:%x\n", axi_address);
+		printk(KERN_INFO"		<direct_write>: Direct writing to BAR 1\n");
+		printk(KERN_INFO"		<direct_write>: Direct writing to BAR 1 with axi address:%llx\n", axi_address);
 		virt_addr = (axi_address - peripheral_space_offset) + pci_bar_1_vir_addr;
 	}
 	else if ((axi_address + count) < (bar_0_axi_offset + pci_bar_size))
 	{
 		virt_addr = (axi_address - bar_0_axi_offset) + pci_bar_vir_addr;
-		printk(KERN_INFO"<direct_write>: Direct writing to BAR 0\n");
+		printk(KERN_INFO"		<direct_write>: Direct writing to BAR 0\n");
 	}
 	else
 	{
-		printk(KERN_INFO"<direct_write>: ERROR trying to Direct write out of memory range!\n");
+		printk(KERN_INFO"		<direct_write>: ERROR trying to Direct write out of memory range!\n");
 		return;
 	}
 
-	printk(KERN_INFO"<direct_write>: writing:%x \n", *(u32*)buf);
+	printk(KERN_INFO"		<direct_write>: writing:%x \n", *(u32*)buf);
 
 	offset = 0;
 	len = count/4;
@@ -1447,7 +1483,7 @@ void direct_write(u64 axi_address, void *buf, size_t count, int transfer_type)
 		newaddr_dest = (u32 *)(virt_addr + offset);
 		iowrite32(write_value, newaddr_dest);
 		//		*newaddr_dest = write_value;   *this works too*
-		printk(KERN_INFO"<direct_write>: wrote:%x to virtual address:('%p')\n", write_value, newaddr_dest);
+		printk(KERN_INFO"		<direct_write>: wrote:%x to virtual address:('%p')\n", write_value, newaddr_dest);
 		if (transfer_type != KEYHOLE_WRITE)
 			offset += 4;
 	}
@@ -1470,19 +1506,18 @@ void direct_read(u64 axi_address, void *buf, size_t count, int transfer_type)
 	/* Also does a final check to make sure you are writing in range */
 	if ((axi_address >= peripheral_space_offset) & ((axi_address + count) < (peripheral_space_offset + pci_bar_1_size)))
 	{
-		printk(KERN_INFO"<direct_read>: Direct reading from BAR 1\n");
-		printk(KERN_INFO"<direct_read>: Direct reading from BAR 1 with axi address:%x\n", axi_address);
+		printk(KERN_INFO"		<direct_read>: Direct reading from BAR 1 with axi address:%llx\n", axi_address);
 		virt_addr = (axi_address - peripheral_space_offset) + pci_bar_1_vir_addr;
-		printk(KERN_INFO"<direct_read>: Direct reading from virtual address:%p\n", virt_addr);
+		printk(KERN_INFO"		<direct_read>: Direct reading from virtual address:%p\n", virt_addr);
 	}
 	else if ((axi_address + count) < (bar_0_axi_offset + pci_bar_size))
 	{
-		printk(KERN_INFO"<direct_read>: Direct reading from BAR 0\n");
+		printk(KERN_INFO"		<direct_read>: Direct reading from BAR 0\n");
 		virt_addr = (axi_address - bar_0_axi_offset) + pci_bar_vir_addr;
 	}
 	else
 	{
-		printk(KERN_INFO"<direct_read>: ERROR trying to Direct read out of memory range!\n");
+		printk(KERN_INFO"		<direct_read>: ERROR trying to Direct read out of memory range!\n");
 		return;
 	}
 
@@ -1495,7 +1530,7 @@ void direct_read(u64 axi_address, void *buf, size_t count, int transfer_type)
 		//		kern_buf[i] = *newaddr_src;  *this works too*
 		if (transfer_type != KEYHOLE_READ)
 			offset += 4;
-		printk(KERN_INFO"<direct_read>: read: %x from kernel address %p.\n", kern_buf[i], newaddr_src);
+		printk(KERN_INFO"		<direct_read>: read: %x from kernel address %p.\n", kern_buf[i], newaddr_src);
 	}
 
 	memcpy(buf, (const void*)kern_buf, count);
@@ -1521,23 +1556,23 @@ void cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en)
 
 		case KEYHOLE_READ:
 			bit_vec = 0x00000010;   //the bit for KEYHOLE READ		
-			printk(KERN_INFO"<keyhole_read_set>: Setting the CDMA Keyhole READ as ENABLED\n");
+			printk(KERN_INFO"	<keyhole_read_set>: Setting the CDMA Keyhole READ as ENABLED\n");
 			cdma_config_set(bit_vec, 1);   //value of one means we want to SET the register
 			break;
 
 		case KEYHOLE_WRITE:
 			bit_vec = 0x00000020;   //the bit for KEYHOLE WRITE
-			printk(KERN_INFO"<keyhole_write_set>: Setting the CDMA Keyhole WRITE as ENABLED\n");
+			printk(KERN_INFO"	<keyhole_write_set>: Setting the CDMA Keyhole WRITE as ENABLED\n");
 			cdma_config_set(bit_vec, 1);   //value of one means we want to SET the register
 			break;
 
-		default:printk(KERN_INFO"<keyhole_setting> no keyhole swtting will be used.\n");
+		default:printk(KERN_INFO"	<keyhole_setting> no keyhole swtting will be used.\n");
 	}
 
 	//read the config register
 	axi_dest = axi_cdma + CDMA_CR;
 	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
-	printk(KERN_INFO"<pci_dma_transfer>: CDMA Configuration before transmission:%x\n", status);	
+	printk(KERN_INFO"	<pci_dma_transfer>: CDMA Configuration before transmission:%x\n", status);	
 	//	if ((status & 0x4) == 0x4)
 	//	{
 	//	printk(KERN_INFO"<pci_dma_transfer>: CDMA is still in reset, now waiting......\n");	
@@ -1552,42 +1587,45 @@ void cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en)
 	//Writing SA_MSB	
 	axi_dest = axi_cdma + CDMA_SA_MSB;
 	direct_write(axi_dest, (void*)&SA_MSB, 4, NORMAL_WRITE);
-	printk(KERN_INFO"<pci_dma_transfer>: writing dma SA_MSB address ('%x') to CDMA at axi address:%x\n", SA_MSB, axi_dest);
+	printk(KERN_INFO"	<pci_dma_transfer>: ********* CDMA TRANSFER INITIALIZATION *************\n\n");	
+	printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA_MSB address ('%x') to CDMA at axi address:%llx\n", SA_MSB, axi_dest);
 	//Writing SA_LSB	
 	axi_dest = axi_cdma + CDMA_SA;
 	direct_write(axi_dest, (void*)&SA_LSB, 4, NORMAL_WRITE);
-	printk(KERN_INFO"<pci_dma_transfer>: writing dma SA_LSB address ('%x') to CDMA at axi address:%x\n", SA_LSB, axi_dest);
+	printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA_LSB address ('%x') to CDMA at axi address:%llx\n", SA_LSB, axi_dest);
 	//read the status register
 	axi_dest = axi_cdma + CDMA_SR;
 	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
-	printk(KERN_INFO"<pci_dma_transfer>: CDMA Status after writing SA:%x\n", status);	
+//	printk(KERN_INFO"<pci_dma_transfer>: CDMA Status after writing SA:%x\n", status);	
 
 	//Writing DA_MSB	
 	axi_dest = axi_cdma + CDMA_DA_MSB;
 	direct_write(axi_dest, (void*)&DA_MSB, 4, NORMAL_WRITE);
-	printk(KERN_INFO"<pci_dma_transfer>: writing DA_MSB address ('%x') to CDMA at axi address:%x\n", DA_MSB, axi_dest);
+	printk(KERN_INFO"	<pci_dma_transfer>: writing DA_MSB address ('%x') to CDMA at axi address:%llx\n", DA_MSB, axi_dest);
 	//Writing DA_LSB
 	axi_dest = axi_cdma + CDMA_DA;
 	direct_write(axi_dest, (void*)&DA_LSB, 4, NORMAL_WRITE);
-	printk(KERN_INFO"<pci_dma_transfer>: writing DA_LSB address ('%x') to CDMA at axi address:%x\n", DA_LSB, axi_dest);
+	printk(KERN_INFO"	<pci_dma_transfer>: writing DA_LSB address ('%x') to CDMA at axi address:%llx\n", DA_LSB, axi_dest);
 	//read the status register
 	axi_dest = axi_cdma + CDMA_SR;
 	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
-	printk(KERN_INFO"<pci_dma_transfer>: CDMA Status after writing DA:%x\n", status);	
+//	printk(KERN_INFO"<pci_dma_transfer>: CDMA Status after writing DA:%x\n", status);	
 
 	//readback the SA
-	axi_dest = axi_cdma + CDMA_SA;
-	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
-	printk(KERN_INFO"<pci_dma_transfer>: CDMA SA readback:%x\n", status);	
+//	axi_dest = axi_cdma + CDMA_SA;
+//	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
+//	printk(KERN_INFO"<pci_dma_transfer>: CDMA SA readback:%x\n", status);	
 	//readback the DA
-	axi_dest = axi_cdma + CDMA_DA;
-	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
-	printk(KERN_INFO"<pci_dma_transfer>: CDMA DA readback:%x\n", status);	
+//	axi_dest = axi_cdma + CDMA_DA;
+//	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
+//	printk(KERN_INFO"<pci_dma_transfer>: CDMA DA readback:%x\n", status);	
 
 	//Writing BTT	
 	axi_dest = axi_cdma + CDMA_BTT;
-	printk(KERN_INFO"<pci_dma_transfer>: writing bytes to transfer ('%d') to CDMA at axi address:%x\n", BTT, axi_dest);	
+	printk(KERN_INFO"	<pci_dma_transfer>: writing bytes to transfer ('%d') to CDMA at axi address:%llx\n", BTT, axi_dest);	
 	direct_write(axi_dest, (void*)&BTT, 4, NORMAL_WRITE);
+
+	printk(KERN_INFO"	<pci_dma_transfer>: ********* CDMA TRANSFER INITIALIZED *************\n");	
 	//readback the BTT
 	//	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
 	//	printk(KERN_INFO"<pci_dma_transfer>: CDMA BTT readback:%x\n", status);	
@@ -1599,7 +1637,7 @@ void cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en)
 	/*Go to sleep and wait for interrupt*/
 	wait_event_interruptible(wq, cdma_comp != 0);
 	cdma_comp = 0;
-	printk(KERN_INFO"<pci_dma_transfer>: returned from ISR.\n");
+	printk(KERN_INFO"	<pci_dma_transfer>: returned from ISR.\n");
 	//read the status register
 	//	axi_dest = axi_cdma + CDMA_SR;
 	//	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
@@ -1610,6 +1648,7 @@ void cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en)
 		bit_vec = 0x20 | 0x10;      // "0x30" unset both CDMA keyhole read and write	
 		cdma_config_set(bit_vec, 0);	//unsets the keyhole configuration
 	}
+	printk(KERN_INFO"	<pci_dma_transfer>: ********* CDMA TRANSFER FINISHED *************\n");	
 }
 
 void cdma_config_set(u32 bit_vec, int set_unset)
@@ -1650,15 +1689,15 @@ int cdma_ack(void)
 	cdma_status = 0x00001000;
 	axi_dest = axi_cdma + CDMA_SR;
 	data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE);
-	printk(KERN_INFO"<cdma_ack>: writing SR config ('%x') to CDMA at AXI address:%x\n", cdma_status, axi_dest);
+	printk(KERN_INFO"	<cdma_ack>: writing SR config ('%x') to CDMA at AXI address:%llx\n", cdma_status, axi_dest);
 
 	/* Check the status of the CDMA to see if successful */
 	data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ);
-	printk(KERN_INFO"<cdma_ack>: CDMA status:%x\n", status);
+	printk(KERN_INFO"	<cdma_ack>: CDMA status:%x\n", status);
 	if (status != 0x2)    //this is the expected status report  
 	{
-		printk(KERN_INFO"<cdma_ack>: CDMA status ERROR\n");
-		printk(KERN_INFO"<cdma_ack>: Issuing soft reset to CDMA\n");
+		printk(KERN_INFO"	<cdma_ack>: CDMA status ERROR\n");
+		printk(KERN_INFO"	<cdma_ack>: Issuing soft reset to CDMA\n");
 		axi_dest = axi_cdma + CDMA_CR;
 		cdma_status = 0x4;
 		data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE);

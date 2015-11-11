@@ -248,17 +248,16 @@ while(p<49)
 	ret_val = write(hls_write, in, sizeof(in));  
 
 	printf("TX FIFO: Transmitted data\n");
-return 0;
 	//Should have written.... wait for RX FIFO interrupt.
 
 
 	/*wait for the RX FIFO Thread to return data*/
-	if(pthread_join(rxfifo, NULL)) 
-	{
-		printf("Error joining threads\n");
-	}
+//	if(pthread_join(rxfifo, NULL)) 
+//	{
+//		printf("Error joining threads\n");
+//	}
 
-	printf("Threads joined!\n");
+//	printf("Threads joined!\n");
 	
 //	ioctl(hls_read, SET_CDMA_KEYHOLE_READ, 0); 
 
@@ -312,6 +311,7 @@ void *rxfifo_read(void *read_buf)
 		
 			/* Read from peripheral */
 	//		return_val = read(hls_read, (void*)buff, sizeof(buff));  
+		return 0;
 			return_val = read(hls_read, (void*)buff, 250);  
 			
 			printf("Number of bytes read:%x\n", return_val);
