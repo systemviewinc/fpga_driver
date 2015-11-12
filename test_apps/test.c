@@ -33,10 +33,10 @@ unsigned int in[50];
 //unsigned int hls_read_ctl_axi_addr = 0x80002000;
 //unsigned int hls_read_axi_addr = 0x80020000;
 
-unsigned long hls_write_ctl_axi_addr = 0x180010000;
-unsigned long hls_write_axi_addr = 0x180000000;
-unsigned long hls_read_ctl_axi_addr = 0x280010000;
-unsigned long hls_read_axi_addr = 0x280000000;
+unsigned long hls_write_ctl_axi_addr = 0x80010000;
+unsigned long hls_write_axi_addr = 0x80000000;
+unsigned long hls_read_ctl_axi_addr = 0xC0010000;
+unsigned long hls_read_axi_addr = 0xC0000000;
 
 unsigned long hls_fifo_mode = AXI_STREAM_FIFO;
 
@@ -130,7 +130,6 @@ int main()
 //		return -1;
 //	}
 //	printf("set peripheral to axi base address %x\n", bram_axi_addr);
-
 	if(ioctl(hls_write, SET_AXI_CTL_DEVICE, &hls_write_ctl_axi_addr) < 0) {
 		printf("ERROR doing ioctl\n");
 		return -1;
@@ -176,7 +175,6 @@ int main()
 	unsigned int interrupt_vector = 0x10;  /*2^5 - NOTE - THIS IS POWER OF 2!!!*/
 	ioctl(hls_read, SET_INTERRUPT, &interrupt_vector); 
 	printf("set peripheral as slave with interrupt at vector:%x\n", interrupt_vector);
-
 /********************************* BRAM TEST  ********************************************/
 int p=0;
 while(p<49)
@@ -238,26 +236,29 @@ while(p<49)
 
 	pthread_t rxfifo;
 
-//	if(pthread_create(&rxfifo, NULL, rxfifo_read, rxbuff))
-//	{
-//		printf("Error creating thread\n");
-//	}
-//	printf("Other Thread\n");
+	if(pthread_create(&rxfifo, NULL, rxfifo_read, rxbuff))
+	{
+		printf("Error creating thread\n");
+	}
+	printf("Other Thread\n");
 
 	/*******Send data to the TX FIFO (front end) **********/
+//	ret_val = write(hls_write, in, sizeof(in));  
+//	sleep(5);
 	ret_val = write(hls_write, in, sizeof(in));  
+
 
 	printf("TX FIFO: Transmitted data\n");
 	//Should have written.... wait for RX FIFO interrupt.
 
 
 	/*wait for the RX FIFO Thread to return data*/
-//	if(pthread_join(rxfifo, NULL)) 
-//	{
-//		printf("Error joining threads\n");
-//	}
+	if(pthread_join(rxfifo, NULL)) 
+	{
+		printf("Error joining threads\n");
+	}
 
-//	printf("Threads joined!\n");
+	printf("Threads joined!\n");
 	
 //	ioctl(hls_read, SET_CDMA_KEYHOLE_READ, 0); 
 
@@ -311,7 +312,7 @@ void *rxfifo_read(void *read_buf)
 		
 			/* Read from peripheral */
 	//		return_val = read(hls_read, (void*)buff, sizeof(buff));  
-		return 0;
+
 			return_val = read(hls_read, (void*)buff, 250);  
 			
 			printf("Number of bytes read:%x\n", return_val);
