@@ -246,7 +246,8 @@ while(p<49)
 //	ret_val = write(hls_write, in, sizeof(in));  
 //	sleep(5);
 	ret_val = write(hls_write, in, sizeof(in));  
-
+	if (ret_val == 0)
+		printf("WRITE ERROR\n");
 
 	printf("TX FIFO: Transmitted data\n");
 	//Should have written.... wait for RX FIFO interrupt.
@@ -314,6 +315,8 @@ void *rxfifo_read(void *read_buf)
 	//		return_val = read(hls_read, (void*)buff, sizeof(buff));  
 
 			return_val = read(hls_read, (void*)buff, 250);  
+			if (return_val == 0)
+				printf("READ ERROR\n");
 			
 			printf("Number of bytes read:%x\n", return_val);
 
