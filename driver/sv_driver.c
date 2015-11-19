@@ -121,9 +121,9 @@ void * pci_bar_1_vir_addr = NULL;        //hardware base virtual address
 void * pci_bar_2_vir_addr = NULL;        //hardware base virtual address
 
 /*this is the user peripheral address offset*/
-const u64 peripheral_space_offset = 0x0000000100000000;
+static u64 peripheral_space_offset = 0x80000000;
 static u64 bar_0_axi_offset = 0x40000000;
-const u64 peripheral_space_1_offset = 0x0000000200000000;
+static u64 peripheral_space_1_offset = 0xC00000000;
 
 u64 axi_cdma;
 u64 axi_pcie_ctl;
@@ -340,12 +340,20 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	printk(KERN_INFO"<probe>pci bar 1 size is:%lu\n", pci_bar_1_size);
 
 	//map the hardware space to virtual space
-	pci_bar_1_vir_addr = ioremap(pci_bar_1_addr, pci_bar_1_size);
-	if(0 == pci_bar_1_vir_addr){
-		printk(KERN_INFO"%s:<probe>ioremap error when mapping to virtual address\n", pci_devName);
-		return ERROR;
+	if (pci_bar_1_size > 0)
+	{
+		pci_bar_1_vir_addr = ioremap(pci_bar_1_addr, pci_bar_1_size);
+		if(0 == pci_bar_1_vir_addr){
+			printk(KERN_INFO"%s:<probe>ioremap error when mapping to virtual address\n", pci_devName);
+			return ERROR;
+		}
+		printk(KERN_INFO"<probe>pci bar 1 virtual address base is:%p\n", pci_bar_1_vir_addr);
 	}
-	printk(KERN_INFO"<probe>pci bar 1 virtual address base is:%p\n", pci_bar_1_vir_addr);
+	else
+	{
+		peripheral_space_offset = 0;
+		printk(KERN_INFO"%s<probe>BAR 1 is not in use\n", pci_devName);
+	}
 	/*****************************************************************************/
 
 
@@ -360,13 +368,21 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	pci_bar_2_size = pci_resource_len(pci_dev_struct, 2);
 	printk(KERN_INFO"<probe>pci bar 2 size is:%lu\n", pci_bar_2_size);
 
-	//map the hardware space to virtual space
-	pci_bar_2_vir_addr = ioremap(pci_bar_2_addr, pci_bar_2_size);
-	if(0 == pci_bar_2_vir_addr){
-		printk(KERN_INFO"%s:<probe>ioremap error when mapping to virtual address\n", pci_devName);
-		return ERROR;
+	if (pci_bar_2_size > 0)
+	{
+		//map the hardware space to virtual space
+		pci_bar_2_vir_addr = ioremap(pci_bar_2_addr, pci_bar_2_size);
+		if(0 == pci_bar_2_vir_addr){
+			printk(KERN_INFO"%s:<probe>ioremap error when mapping to virtual address\n", pci_devName);
+			return ERROR;
+		}
+		printk(KERN_INFO"<probe>pci bar 2 virtual address base is:%p\n", pci_bar_2_vir_addr);
 	}
-	printk(KERN_INFO"<probe>pci bar 2 virtual address base is:%p\n", pci_bar_2_vir_addr);
+	else
+	{
+		peripheral_space_1_offset = 0;
+		printk(KERN_INFO"%s<probe>BAR 2 is not in use\n", pci_devName);
+	}
 	/*****************************************************************************/
 
 	//enable the device
@@ -481,6 +497,9 @@ static int sv_plat_probe(struct platform_device *pdev)
 	//		return ERROR;
 	//	}
 	//	printk(KERN_INFO"<probe>pci bar 1 virtual address base is:%p\n", pci_bar_1_vir_addr);
+	peripheral_space_offset = 0;
+        pci_bar_1_size = 0;
+
 	/*****************************************************************************/
 
 
@@ -509,7 +528,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 	//set defaults
 	cdma_set = 0;
 	pcie_ctl_set = 0;
-	pcie_m_set = 0;
+	pcie_m_set = 0; 
 
 	if (cdma_address != 0xFFFFFFFF)
 	{

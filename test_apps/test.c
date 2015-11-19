@@ -20,10 +20,10 @@ char * devfilename_2 = devname_2;
 //char * devfilename_3 = devname_3;
 
 /* System View Core AXI Addresses */
-unsigned int pcie_ctl_addr = 0x40002000;
-unsigned int cdma_addr = 0x40001000;
-unsigned int pcie_m_addr = 0x40010000;
-unsigned int axi_int_addr = 0x40004000;
+//unsigned int pcie_ctl_addr = 0x40002000;
+//unsigned int cdma_addr = 0x40001000;
+//unsigned int pcie_m_addr = 0x40010000;
+//unsigned int axi_int_addr = 0x40004000;
 unsigned int in[50];
 
 /* User Peripheral AXI Addresses */
@@ -33,9 +33,9 @@ unsigned int in[50];
 //unsigned int hls_read_ctl_axi_addr = 0x80002000;
 //unsigned int hls_read_axi_addr = 0x80020000;
 
-unsigned long hls_write_ctl_axi_addr = 0x80010000;
+unsigned long hls_write_ctl_axi_addr = 0x80020000;
 unsigned long hls_write_axi_addr = 0x80000000;
-unsigned long hls_read_ctl_axi_addr = 0xC0010000;
+unsigned long hls_read_ctl_axi_addr = 0xC0020000;
 unsigned long hls_read_axi_addr = 0xC0000000;
 
 unsigned long hls_fifo_mode = AXI_STREAM_FIFO;
@@ -177,7 +177,7 @@ int main()
 	printf("set peripheral as slave with interrupt at vector:%x\n", interrupt_vector);
 /********************************* BRAM TEST  ********************************************/
 int p=0;
-while(p<49)
+while(p<256)
 {
 	in[p++] = 0xAAAAAAA0;
 	in[p++] = 0xBBBBBBB0;
@@ -187,8 +187,8 @@ while(p<49)
 	in[p++] = 0xFFFFFFF0;
 	in[p++] = 0x11111110;
 	in[p++] = 0x22222220;
-	in[p++] = 0x33333330;
-	in[p++] = 0x44444440;
+//	in[p++] = 0x33333330;
+//	in[p++] = 0x44444440;
 }
 
 	int ret_val;
