@@ -1,4 +1,21 @@
-to compile the driver for zynq
+
+To create the boot loader for zynq: 
+
+ - Compile the FPGA .bit file
+ 
+ - in Vivado, File-> Export Hardware 
+
+ - in Vivado, File -> open SDK 
+
+ - Create an FSBL project
+
+ - 
+
+
+
+
+
+to compile the driver for zynq:
 
  - run settings.sh  in /opt/xilinx/....
 
