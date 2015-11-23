@@ -1251,6 +1251,13 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			if (read_bytes < (u32)count)
 				count = read_bytes;
 
+			/*Check to make sure we are doing an 8 byte aligned read*/
+			if ((count % 8) > 0)
+			{
+		
+				count = count - (count % 8);			
+				printk(KERN_INFO"<axi_stream_fifo_read> Read value changed to: 0x%x for alignment.\n", count);
+			}
 			//set CDMA KEYHOLE
 			keyhole_en = KEYHOLE_READ;
 
