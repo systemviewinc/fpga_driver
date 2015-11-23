@@ -33,6 +33,7 @@
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
+#include <linux/mutex.h>
 
 
 #define ERROR   -1
@@ -142,6 +143,9 @@ void * zero_copy_buf;
 int cdma_status;
 static int cdma_capable = 0;
 unsigned int irq_num;
+
+/*CDMA Semaphore*/
+struct mutex CDMA_sem;
 
 //const int pci_major = 241;             //major number not dynamic
 
@@ -673,6 +677,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	int int_num;
 	int device_mode;
 	int ret;
+	u32 vec_serviced;
 
 	printk(KERN_INFO"<pci_isr>: Entered the pci ISR");
 
@@ -686,39 +691,69 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	printk(KERN_INFO"<pci_isr>: interrupt status register vector is: ('%x')\n", status);
 
 
-	int_num = vec2num(status);
-	printk(KERN_INFO"<pci_isr>: interrupt number is: ('%d')\n", int_num);
-	device_mode = *(interr_dict[int_num].mode);
-
-	if (device_mode == CDMA)
+	while(status > 0)
 	{
-		printk(KERN_INFO"<pci_isr>: this interrupt is from the CDMA\n");
-		//cdma_status = cdma_ack();
+		int_num = vec2num(status);
+		printk(KERN_INFO"<pci_isr>: interrupt number is: ('%d')\n", int_num);
+		device_mode = *(interr_dict[int_num].mode);
+	
+		if (device_mode == CDMA)
+		{
+			printk(KERN_INFO"<pci_isr>: this interrupt is from the CDMA\n");
+			//cdma_status = cdma_ack();
+			vec_serviced = vec_serviced | num2vec(int_num);
+			/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
+		//	axi_dest = axi_interr_ctrl + INT_CTRL_IAR;
+		//	status = num2vec(int_num);
+		//	ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
 
-		/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
-		axi_dest = axi_interr_ctrl + INT_CTRL_IAR;
-		status = num2vec(int_num);
-		ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
+		//	cdma_comp = 1;      //condition for wake_up
+		//	wake_up_interruptible(&wq);
+		}
 
+		else
+		{
+			printk(KERN_INFO"<pci_isr>: this interrupt is from a user peripheral\n");
+			*(interr_dict[int_num].int_count) = (*(interr_dict[int_num].int_count)) + 1;
+
+			vec_serviced = vec_serviced | num2vec(int_num);
+			/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
+		//	axi_dest = axi_interr_ctrl + INT_CTRL_IAR;
+		//	status = num2vec(int_num);
+		//	ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
+
+			/*since we don't know exactly how to handle interrupt clearing of this device
+			 *we push the interrupt acknowleding of the device to the user space */
+
+		//	wake_up(&wq_periph);
+		}
+	/*This is the interrupt status register*/
+	axi_dest = axi_interr_ctrl + INT_CTRL_ISR;
+	printk(KERN_INFO"<pci_isr>: Checking the ISR vector for any additional vectors....\n");
+	ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ);
+
+	/*Here we mask off any vector we already know about*/
+	status = status & (~vec_serviced); 
+
+	printk(KERN_INFO"<pci_isr>: the new interrupt status register vector is: ('%x')\n", status);
+
+	}
+
+	/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
+	axi_dest = axi_interr_ctrl + INT_CTRL_IAR;
+	status = num2vec(int_num);
+	ret = data_transfer(axi_dest, (void *)&vec_serviced, 4, NORMAL_WRITE);
+
+	printk(KERN_INFO"<pci_isr>: All interrupts serviced. The following Vector is acknowledged: %x\n", vec_serviced);
+
+	if (vec_serviced & 1)
+	{	
 		cdma_comp = 1;      //condition for wake_up
 		wake_up_interruptible(&wq);
 	}
 
-	else
-	{
-		printk(KERN_INFO"<pci_isr>: this interrupt is from a user peripheral\n");
-		*(interr_dict[int_num].int_count) = (*(interr_dict[int_num].int_count)) + 1;
-
-		/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
-		axi_dest = axi_interr_ctrl + INT_CTRL_IAR;
-		status = num2vec(int_num);
-		ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
-
-		/*since we don't know exactly how to handle interrupt clearing of this device
-		 *we push the interrupt acknowleding of the device to the user space */
-
+	if (vec_serviced & 0x10)
 		wake_up(&wq_periph);
-	}
 
 	return IRQ_HANDLED;
 }
@@ -1077,6 +1112,10 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			return 0;
 		}
 
+		axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFV;
+		ret = data_transfer(axi_dest, (void *)&kern_reg, 4, NORMAL_READ);
+		printk(KERN_INFO"<pci_write>: Transmit Data FIFO Fill Level:%x\n", kern_reg);
+	
 		/*write to ctl interface*/
 		axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TLR;
 
@@ -1367,10 +1406,14 @@ void cdma_init(u64 axi_address)
 	u32 dma_addr_loc;
 	int * mode;
 	int ret;
+//	struct semaphore CDMA_sem;
 
 	printk(KERN_INFO"<cdma_init>: *******************Setting CDMA AXI Address:%llx ******************************************\n", axi_address);
 	axi_cdma = axi_address;
 	cdma_set = 1;
+
+	/*Initialize the semaphore for this CDMA*/
+	mutex_init(&CDMA_sem);
 
 	/*Issue a Soft Reset*/
 	axi_dest = axi_cdma + CDMA_CR;
@@ -1651,6 +1694,17 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en)
 	u32 DA_LSB;
 	int ack_status; 
 
+	printk(KERN_INFO"	<cdma_transfer>: **** Starting a CDMA transfer ****\n");
+
+	/*Check the CDMA Semaphore*/
+	if (mutex_lock_interruptible(&CDMA_sem))
+	{
+		printk(KERN_INFO"User interrupted while waiting for CDMA semaphore.\n");
+		return -ERESTARTSYS;
+	}
+
+	printk(KERN_INFO"	<cdma_transfer>: CDMA Resource is now locked!\n");
+
 	SA_MSB = (u32)(SA>>32);
 	SA_LSB = (u32)SA;
 
@@ -1752,6 +1806,10 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en)
 		bit_vec = 0x20 | 0x10;      // "0x30" unset both CDMA keyhole read and write	
 		cdma_config_set(bit_vec, 0);	//unsets the keyhole configuration
 	}
+
+	printk(KERN_INFO"	<pci_dma_transfer>: Unlocking the CDMA Resource\n");	
+	mutex_unlock(&CDMA_sem);
+
 	printk(KERN_INFO"	<pci_dma_transfer>: ********* CDMA TRANSFER FINISHED *************\n");	
 
 	return ack_status;

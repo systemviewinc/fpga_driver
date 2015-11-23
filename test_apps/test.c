@@ -24,7 +24,7 @@ char * devfilename_2 = devname_2;
 //unsigned int cdma_addr = 0x40001000;
 //unsigned int pcie_m_addr = 0x40010000;
 //unsigned int axi_int_addr = 0x40004000;
-unsigned int in[50];
+unsigned int in[64];
 
 /* User Peripheral AXI Addresses */
 //unsigned int bram_axi_addr = 0x80000000;
@@ -33,9 +33,9 @@ unsigned int in[50];
 //unsigned int hls_read_ctl_axi_addr = 0x80002000;
 //unsigned int hls_read_axi_addr = 0x80020000;
 
-unsigned long hls_write_ctl_axi_addr = 0x80020000;
+unsigned long hls_write_ctl_axi_addr = 0x80010000;
 unsigned long hls_write_axi_addr = 0x80000000;
-unsigned long hls_read_ctl_axi_addr = 0xC0020000;
+unsigned long hls_read_ctl_axi_addr = 0xC0010000;
 unsigned long hls_read_axi_addr = 0xC0000000;
 
 unsigned long hls_fifo_mode = AXI_STREAM_FIFO;
@@ -177,7 +177,7 @@ int main()
 	printf("set peripheral as slave with interrupt at vector:%x\n", interrupt_vector);
 /********************************* BRAM TEST  ********************************************/
 int p=0;
-while(p<256)
+while(p<63)
 {
 	in[p++] = 0xAAAAAAA0;
 	in[p++] = 0xBBBBBBB0;
@@ -245,7 +245,7 @@ while(p<256)
 	/*******Send data to the TX FIFO (front end) **********/
 //	ret_val = write(hls_write, in, sizeof(in));  
 //	sleep(5);
-	ret_val = write(hls_write, in, sizeof(in));  
+	ret_val = write(hls_write, in, sizeof(in));   
 	if (ret_val == 0)
 		printf("WRITE ERROR\n");
 
@@ -314,7 +314,7 @@ void *rxfifo_read(void *read_buf)
 			/* Read from peripheral */
 	//		return_val = read(hls_read, (void*)buff, sizeof(buff));  
 
-			return_val = read(hls_read, (void*)buff, 250);  
+			return_val = read(hls_read, (void*)buff, 500);  
 			if (return_val == 0)
 				printf("READ ERROR\n");
 			
