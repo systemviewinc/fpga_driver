@@ -679,6 +679,8 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	int ret;
 	u32 vec_serviced;
 
+	vec_serviced = 0;
+
 	printk(KERN_INFO"<pci_isr>: Entered the pci ISR");
 
 	/*Here we need to find out who triggered the interrupt*

@@ -314,7 +314,7 @@ void *rxfifo_read(void *read_buf)
 			/* Read from peripheral */
 	//		return_val = read(hls_read, (void*)buff, sizeof(buff));  
 
-			return_val = read(hls_read, (void*)buff, (sizeof(buff)-2));  
+			return_val = read(hls_read, (void*)buff, (sizeof(buff)));  
 			if (return_val == 0)
 				printf("READ ERROR\n");
 			
@@ -325,16 +325,16 @@ void *rxfifo_read(void *read_buf)
 				printf("value read: %x\n", buff[i]);
 			}
 		
-			return_val = read(hls_read, (void*)buff, (sizeof(buff)-2));  
-			if (return_val == 0)
-				printf("READ ERROR\n");
+//			return_val = read(hls_read, (void*)buff, (sizeof(buff)-2));  
+//			if (return_val == 0)
+//				printf("READ ERROR\n");
 			
-			printf("Number of bytes read:%x\n", return_val);
-
-			for(i=0;i<(return_val/4);i++)
-			{
-				printf("value read: %x\n", buff[i]);
-			}
+//			printf("Number of bytes read:%x\n", return_val);
+//
+//			for(i=0;i<(return_val/4);i++)
+//			{
+//				printf("value read: %x\n", buff[i]);
+//			}
 	}
 
 	return NULL;
