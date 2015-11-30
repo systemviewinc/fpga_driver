@@ -80,6 +80,8 @@
 static int device_id = 100;
 static int major = 241;
 static int cdma_address = 0xFFFFFFFF;
+static int cdma_address_2 = 0xFFFFFFFF;
+static bool enable_cdma_2 = 0;
 static int pcie_ctl_address = 0xFFFFFFFF;
 static int pcie_m_address = 0xFFFFFFFF;
 static int int_ctlr_address = 0xFFFFFFFF;
@@ -91,8 +93,14 @@ MODULE_PARM_DESC(device_id, "DeviceID");
 module_param(major, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(major, "MajorNumber");
 
+module_param(enable_cdma_2, bool, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(enable_cdma_2, "EnableCDMA2");
+
 module_param(cdma_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(cdma_address, "CDMAAddress");
+
+module_param(cdma_address_2, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(cdma_address_2, "CDMAAddress2");
 
 module_param(pcie_ctl_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(pcie_ctl_address, "PCIeCTLAddress");
