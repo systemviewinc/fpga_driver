@@ -37,10 +37,10 @@ unsigned int in[64];
 //unsigned int hls_read_ctl_axi_addr = 0x80002000;
 //unsigned int hls_read_axi_addr = 0x80020000;
 
-unsigned long hls_write_ctl_axi_addr = 0x80040000;
-unsigned long hls_write_axi_addr = 0x80030000;
-unsigned long hls_read_ctl_axi_addr = 0xC0010000;
-unsigned long hls_read_axi_addr = 0xC0000000;
+unsigned long hls_read_ctl_axi_addr = 0x80040000;
+unsigned long hls_read_axi_addr = 0x80030000;
+unsigned long hls_write_ctl_axi_addr = 0xC0010000;
+unsigned long hls_write_axi_addr = 0xC0000000;
 unsigned long trace_read_ctl_axi_addr = 0x80020000;
 unsigned long trace_read_axi_addr = 0x80010000;
 unsigned long trace_control_axi_addr = 0x80000000;
@@ -220,6 +220,16 @@ int main()
 	interrupt_vector = 0x10;  /*2^5 - NOTE - THIS IS POWER OF 2!!!*/
 	ioctl(trace_read, SET_INTERRUPT, &interrupt_vector); 
 	printf("set peripheral as slave with interrupt at vector:%x\n", interrupt_vector);
+
+
+	/*initialize the trace module counter*/
+	unsigned int activate = 1;
+	int ret_val;
+	ret_val = write(trace_control, &activate, sizeof(activate));   
+	if (ret_val == 0)
+		printf("WRITE ERROR\n");
+
+
 /********************************* BRAM TEST  ********************************************/
 int p=0;
 while(p<63)
@@ -236,7 +246,6 @@ while(p<63)
 //	in[p++] = 0x44444440;
 }
 
-	int ret_val;
 
 	/*use lseek to move offset in file*/
 	//lseek(bram, 0x4, 0);
@@ -289,14 +298,12 @@ while(p<63)
 
 	/*******Send data to the TX FIFO (front end) **********/
 //	ret_val = write(hls_write, in, sizeof(in));  
-//	sleep(5);
 	ret_val = write(hls_write, in, sizeof(in));   
 	if (ret_val == 0)
 		printf("WRITE ERROR\n");
 
 	printf("TX FIFO: Transmitted data\n");
 	//Should have written.... wait for RX FIFO interrupt.
-
 
 	/*wait for the RX FIFO Thread to return data*/
 	if(pthread_join(rxfifo, NULL)) 
@@ -327,10 +334,11 @@ void *rxfifo_read(void *read_buf)
 	int return_val;
 	unsigned int txregbuf;
 	struct pollfd pollfds;
-	int timeout = 10000;    //in ms
+	int timeout = 100;    //in ms
 	int result;
 	unsigned int buff2[1];
 	unsigned int buff[64];  //50 32b data words
+	unsigned long trace_buff[256];
 	int i;
 
 	/*initialize pollfds*/
@@ -369,17 +377,23 @@ void *rxfifo_read(void *read_buf)
 			{
 				printf("value read: %x\n", buff[i]);
 			}
-		
-//			return_val = read(hls_read, (void*)buff, (sizeof(buff)-2));  
-//			if (return_val == 0)
-//				printf("READ ERROR\n");
+	
+			/*Read the trace module FIFO*/
+
+			return_val = 256;
+			while (return_val == 256)
+			{
+			return_val = read(trace_read, (void*)trace_buff, (sizeof(trace_buff)));  
+			if (return_val == 0)
+				printf("READ ERROR\n");
 			
-//			printf("Number of bytes read:%x\n", return_val);
-//
-//			for(i=0;i<(return_val/4);i++)
-//			{
-//				printf("value read: %x\n", buff[i]);
-//			}
+			printf("Number of bytes read:%x\n", return_val);
+
+			for(i=0;i<(return_val/8);i++)
+			{
+				printf("trace value read: %lx\n", trace_buff[i]);
+			}
+			}
 	}
 
 	return NULL;

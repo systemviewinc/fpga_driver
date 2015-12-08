@@ -1268,6 +1268,13 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 				count = count - (count % 8);			
 				printk(KERN_INFO"<axi_stream_fifo_read> Read value changed to: 0x%x for alignment.\n", count);
 			}
+
+			if (count == 0)
+			{	
+				printk(KERN_INFO"<axi_stream_fifo_read> There is either no data to read, or less than 8 bytes.\n");
+				return 0;
+			}
+
 			//set CDMA KEYHOLE
 			keyhole_en = KEYHOLE_READ;
 
