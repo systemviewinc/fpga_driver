@@ -84,6 +84,7 @@ static int cdma_address_2 = 0xFFFFFFFF;
 //static bool enable_cdma_2 = false;
 static int pcie_ctl_address = 0xFFFFFFFF;
 static int pcie_m_address = 0xFFFFFFFF;
+static int pcie_m_address_2 = 0xFFFFFFFF;
 static int int_ctlr_address = 0xFFFFFFFF;
 static int driver_type = PCI;
 
@@ -107,6 +108,9 @@ MODULE_PARM_DESC(pcie_ctl_address, "PCIeCTLAddress");
 
 module_param(pcie_m_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(pcie_m_address, "PCIeMAddress");
+
+module_param(pcie_m_address_2, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(pcie_m_address_2, "PCIeMAddress2");
 
 module_param(int_ctlr_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(int_ctlr_address, "IntCtlrAddress");
@@ -135,29 +139,31 @@ static u64 bar_0_axi_offset = 0x40000000;
 static u64 peripheral_space_1_offset = 0xC00000000;
 
 u64 axi_cdma;
+u64 axi_cdma_2;
 u64 axi_pcie_ctl;
 u64 axi_interr_ctrl;
-u64 axi_pcie_m;
+u64 axi_pcie_m[5];
 
 //u32 axi_dev0;                 // base address of axi slave mapped to minor 0
 //u32 axi_dev1;                 // base address of axi slave mapped to minor 1
 //u32 axi_dev2;                 // base address of axi slave mapped to minor 2
-u8 cdma_set;
+u8 cdma_set[5];
 u8 pcie_ctl_set;
-static u8 zero_buf_set = 0;
-u8 pcie_m_set;
+static u8 zero_buf_set[5];
+u8 pcie_m_set[5];
 u8 int_ctrl_set;
-void * zero_copy_buf;
+void * zero_copy_buf[5];
 int cdma_status;
 static int cdma_capable = 0;
 unsigned int irq_num;
 
 /*CDMA Semaphore*/
 struct mutex CDMA_sem;
+struct mutex CDMA_sem_2;
 
 //const int pci_major = 241;             //major number not dynamic
 
-dma_addr_t dma_addr;
+dma_addr_t dma_addr[5];
 
 dma_addr_t dma_m_addr[MAX_NUM_MASTERS];
 
@@ -168,12 +174,13 @@ void * dma_master_buf[MAX_NUM_MASTERS];
 size_t dma_size;              //this is a global variable to interrupt to recognize
 static wait_queue_head_t wq;
 static wait_queue_head_t wq_periph;
-static int cdma_comp = 0;
+static int cdma_comp[5];
 int num_int;
 int interrupt_vect_dict[1 << (MAX_NUM_INT)];    //2^x
 
 /*These are register offsets of Xilinx peripherals*/
 const u32 AXIBAR2PCIEBAR_0L = 0x20c;
+const u32 AXIBAR2PCIEBAR_1L = 0x214;
 const u32 CDMA_CR           = 0x00;
 const u32 CDMA_SR           = 0x04;
 const u32 CDMA_DA           = 0x20;
@@ -262,17 +269,18 @@ static unsigned char skel_get_revision(struct pci_dev * dev);
 /************************** ISR functions **************************** */
 static irqreturn_t pci_isr(int irq, void *dev_id);
 /* ********************** other functions **************************8 */
-int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en);
-int cdma_ack(void);
-void cdma_config_set(u32 bit_vec, int set_unset);
+int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num);
+int cdma_ack(int cdma_num);
+void cdma_config_set(u32 bit_vec, int set_unset, int cdma_num);
 int direct_read(u64 axi_address, void *buf, size_t count, int transfer_type);
 int direct_write(u64 axi_address, void *buf, size_t count, int transfer_type);
 int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type);
 int vec2num(u32 vec);
+int cdma_query(void);
 u32 num2vec(int num);
-void cdma_init(u64 axi_address);
+void cdma_init(int cdma_num);
 void pcie_ctl_init(u64 axi_address);
-void pcie_m_init(u64 axi_address);
+void pcie_m_init(int cdma_num);
 void int_ctlr_init(u64 axi_address);
 /* ****************************************************************** */
 
@@ -436,14 +444,21 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 		return -ENODEV;
 
 	//set defaults
-	cdma_set = 0;
+	cdma_set[0] = 0;
+	cdma_set[1] = 0;
 	pcie_ctl_set = 0;
-	pcie_m_set = 0;
+	pcie_m_set[0] = 0;
+	pcie_m_set[1] = 0;
 	int_ctrl_set = 0;
 
 	if (cdma_address != 0xFFFFFFFF)
 	{
-		cdma_init((u64)cdma_address);
+		cdma_init(1);  //cdma_num = 1
+	}
+
+	if (cdma_address_2 != 0xFFFFFFFF)
+	{
+		cdma_init(2);  //cdma_num = 1
 	}
 
 	if (pcie_ctl_address != 0xFFFFFFFF)
@@ -453,7 +468,12 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 	if (pcie_m_address != 0xFFFFFFFF)
 	{
-		pcie_m_init((u64)pcie_m_address);
+		pcie_m_init(1);
+	}
+
+	if (pcie_m_address_2 != 0xFFFFFFFF)
+	{
+		pcie_m_init(2);
 	}
 
 	if (int_ctlr_address != 0xFFFFFFFF)
@@ -461,10 +481,10 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 		int_ctlr_init((u64)int_ctlr_address);
 	}
 
-	cdma_capable = (cdma_set == 1) & (pcie_m_set == 1) & (int_ctrl_set == 1) & (pcie_ctl_set == 1);
+	cdma_capable = (cdma_set[1] == 1) & (pcie_m_set == 1) & (int_ctrl_set == 1) & (pcie_ctl_set == 1);
 
 	/*Since we isolated the AXI bus, this is the new offest for the slave interface of the PCIe*/
-	axi_pcie_m = 0x00000;
+//	axi_pcie_m = 0x00000;
 
 	printk(KERN_INFO"<probe>***********************PROBE FINISHED SUCCESSFULLY**************************************\n");
 	return 0;
@@ -538,18 +558,30 @@ static int sv_plat_probe(struct platform_device *pdev)
 	}
 
 	//set defaults
-	cdma_set = 0;
+	cdma_set[1] = 0;
+	cdma_set[2] = 0;
 	pcie_ctl_set = 0;
-	pcie_m_set = 0; 
+	pcie_m_set[1] = 0; 
+	pcie_m_set[2] = 0; 
 
 	if (cdma_address != 0xFFFFFFFF)
 	{
-		cdma_init((u64)cdma_address);
+		cdma_init(1);
+	}
+
+	if (cdma_address_2 != 0xFFFFFFFF)
+	{
+		cdma_init(2);
 	}
 
 	if (pcie_m_address != 0xFFFFFFFF)
 	{
-		pcie_m_init((u64)pcie_m_address);
+		pcie_m_init(1);
+	}
+
+	if (pcie_m_address_2 != 0xFFFFFFFF)
+	{
+		pcie_m_init(2);
 	}
 
 	if (int_ctlr_address != 0xFFFFFFFF)
@@ -560,9 +592,11 @@ static int sv_plat_probe(struct platform_device *pdev)
 	/*ARM works a little differently for DMA than PCIe in that that translation
 	 * is not handled by the core by writing to a register. For Zynq, the axi to DDR address
 	 * mapping is 1-1 and should be written directly to the returned DMA handle */
-	axi_pcie_m = axi_pcie_m + (u64)dma_addr;
 
-	cdma_capable = (cdma_set == 1) & (pcie_m_set == 1) & (int_ctrl_set == 1);
+	axi_pcie_m[1] = axi_pcie_m[1] + (u64)dma_addr[1];   //cdma 1
+	axi_pcie_m[2] = axi_pcie_m[2] + (u64)dma_addr[2];   //cdma 2
+
+	cdma_capable = (cdma_set[1] == 1) & (pcie_m_set[1] == 1) & (int_ctrl_set == 1);
 
 	printk(KERN_INFO"<probe>***********************PROBE FINISHED SUCCESSFULLY**************************************\n");
 	return 0;
@@ -581,10 +615,16 @@ static void remove(struct pci_dev *dev)
 
 	pci_disable_msi(pci_dev_struct);
 
-	if(zero_buf_set == 1) 
+	if(zero_buf_set[1] == 1) 
 	{
 		//		pci_free_consistent(pci_dev_struct, 131072, zero_copy_buf, dma_addr);
-		dma_free_coherent(dev_struct, 131072, zero_copy_buf, dma_addr);
+		dma_free_coherent(dev_struct, 131072, zero_copy_buf[1], dma_addr[1]);
+	}
+
+	if(zero_buf_set[2] == 1) 
+	{
+		//		pci_free_consistent(pci_dev_struct, 131072, zero_copy_buf, dma_addr);
+		dma_free_coherent(dev_struct, 131072, zero_copy_buf[2], dma_addr[2]);
 	}
 
 	unregister_chrdev(major, pci_devName);
@@ -597,11 +637,16 @@ static int sv_plat_remove(struct platform_device *pdev)
 
 	free_irq(irq_num, platform_dev_struct);
 
-	if(zero_buf_set == 1) 
+	if(zero_buf_set[1] == 1) 
 	{
-		//		dma_free_coherent(&platform_dev_struct->dev, 131072, zero_copy_buf, dma_addr);
-		dma_free_coherent(dev_struct, 131072, zero_copy_buf, dma_addr);
 		//		pci_free_consistent(pci_dev_struct, 131072, zero_copy_buf, dma_addr);
+		dma_free_coherent(dev_struct, 131072, zero_copy_buf[1], dma_addr[1]);
+	}
+
+	if(zero_buf_set[2] == 1) 
+	{
+		//		pci_free_consistent(pci_dev_struct, 131072, zero_copy_buf, dma_addr);
+		dma_free_coherent(dev_struct, 131072, zero_copy_buf[2], dma_addr[2]);
 	}
 
 	unregister_chrdev(major, pci_devName);
@@ -756,9 +801,11 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 	printk(KERN_INFO"<pci_isr>: All interrupts serviced. The following Vector is acknowledged: %x\n", vec_serviced);
 
-	if (vec_serviced & 1)
+	/* The CDMA vectors (1 and 2) */
+	if ((vec_serviced & 1) | (vec_serviced & 2))
 	{	
-		cdma_comp = 1;      //condition for wake_up
+		cdma_comp[1] = (vec_serviced & 1);      //condition for wake_up
+		cdma_comp[2] = (vec_serviced & 2);      //condition for wake_up
 		wake_up_interruptible(&wq);
 	}
 
@@ -869,22 +916,22 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 
 		case SET_AXI_CDMA:
-			cdma_init(arg_loc);
+//			cdma_init(arg_loc);
 			break;
 
 
 		case SET_AXI_PCIE_CTL:
-			pcie_ctl_init(arg_loc);
+//			pcie_ctl_init(arg_loc);
 			break;
 
 		case SET_AXI_PCIE_M:
-			pcie_m_init(arg_loc);
+//			pcie_m_init(arg_loc);
 			break;
 
 			/*This is the Interrupt controller that will MUX in all interrupts from axi masters and produce
 			 *one interrupt output to the the PCIe controller.  This is because we want to use one msi vector. */
 		case SET_AXI_INT_CTRL:
-			int_ctlr_init(arg_loc);
+//			int_ctlr_init(arg_loc);
 			break;
 
 		case SET_INTERRUPT:
@@ -909,12 +956,12 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			if(arg_loc>0)    //We are ENABLING keyhole write
 			{
 				printk(KERN_INFO"<ioctl_keyhole_write_set>: Setting the CDMA Keyhole WRITE as ENABLED\n");
-				cdma_config_set(bit_vec, 1);   //value of one means we want to SET the register
+				cdma_config_set(bit_vec, 1, 1);   //value of one means we want to SET the register
 			}
 			else    //We are disabling keyhole write
 			{
 				printk(KERN_INFO"<ioctl_keyhole_write_disable>: Setting the CDMA Keyhole WRITE as DISABLED\n");
-				cdma_config_set(bit_vec, 0);   //value of 0 means we want to UNSET the register
+				cdma_config_set(bit_vec, 0, 1);   //value of 0 means we want to UNSET the register
 			}
 			break;
 
@@ -924,12 +971,12 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			if(arg_loc>0)    //We are ENABLING keyhole write
 			{
 				printk(KERN_INFO"<ioctl_keyhole_read_set>: Setting the CDMA Keyhole READ as ENABLED\n");
-				cdma_config_set(bit_vec, 1);   //value of one means we want to SET the register
+				cdma_config_set(bit_vec, 1, 1);   //value of one means we want to SET the register
 			}
 			else    //We are disabling keyhole write
 			{
 				printk(KERN_INFO"<ioctl_keyhole_read_disable>: Setting the CDMA Keyhole READ as DISABLED\n");
-				cdma_config_set(bit_vec, 0);   //value of 0 means we want to UNSET the register
+				cdma_config_set(bit_vec, 0, 1);   //value of 0 means we want to UNSET the register
 			}
 			break;
 
@@ -1070,7 +1117,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	u64 axi_dest;
 	struct mod_desc * mod_desc;
 	size_t bytes;
-	int cdma_capable;
+//	int cdma_capable;
 	int keyhole_en;
 	int transfer_type;
 	u32 kern_reg;
@@ -1083,7 +1130,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	//dev_num = filep->private_data;
 	mod_desc = filep->private_data;
 
-	cdma_capable = (cdma_set == 1) & (pcie_ctl_set == 1) & (pcie_m_set == 1);
+//	cdma_capable = (cdma_set == 1) & (pcie_ctl_set == 1) & (pcie_m_set == 1);
 
 	bytes = 0;
 
@@ -1183,7 +1230,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	u64 axi_dest;
 	struct mod_desc *mod_desc;
 	int bytes;
-	int cdma_capable;
+//	int cdma_capable;
 	int keyhole_en;
 	int transfer_type;
 	void * read_buf = NULL;
@@ -1192,7 +1239,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 	mod_desc = filep->private_data;
 
-	cdma_capable = (cdma_set == 1) & (pcie_ctl_set == 1) & (pcie_m_set == 1);
+//	cdma_capable = (cdma_set == 1) & (pcie_ctl_set == 1) & (pcie_m_set == 1);
 
 	bytes = 0;
 
@@ -1382,11 +1429,20 @@ void int_ctlr_init(u64 axi_address)
 	ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE);
 }
 
-void pcie_m_init(u64 axi_address)
+void pcie_m_init(cdma_num)
 {
 	printk(KERN_INFO"<pcie_m_init>: Setting PCIe Master Axi Address\n");
-	axi_pcie_m = axi_address;
-	pcie_m_set = 1;
+	switch(cdma_num)
+	{
+		case 1:
+			axi_pcie_m[1] = pcie_m_address;
+			break;
+		case 2:
+			axi_pcie_m[2] = pcie_m_address_2;
+			break;
+		default:printk(KERN_INFO"<pcie_m_init>:	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
+	}
+	pcie_m_set[cdma_num] = 1;
 }
 
 void pcie_ctl_init(u64 axi_address)
@@ -1400,10 +1456,10 @@ void pcie_ctl_init(u64 axi_address)
 	axi_pcie_ctl = axi_address;
 	pcie_ctl_set = 1;
 
-	if(cdma_set == 1)
+	if(cdma_set[1] == 1)
 	{
 		/*convert to u32 to send to CDMA*/
-		dma_addr_loc = (u32)dma_addr;
+		dma_addr_loc = (u32)dma_addr[1];
 
 		//update pcie_ctl_virt address with register offset
 		axi_dest = axi_pcie_ctl + AXIBAR2PCIEBAR_0L;
@@ -1421,9 +1477,31 @@ void pcie_ctl_init(u64 axi_address)
 		else
 			printk(KERN_INFO"<pci_ioctl_cdma_set>:!!!!!!!!!!! PCIe CTL register FAILURE !!!!!!!!!!!!!!!:%x\n", status);
 	}
+
+	if(cdma_set[2] == 1)
+	{
+		/*convert to u32 to send to CDMA*/
+		dma_addr_loc = (u32)dma_addr[2];
+
+		//update pcie_ctl_virt address with register offset
+		axi_dest = axi_pcie_ctl + AXIBAR2PCIEBAR_1L;
+
+		//write DMA addr to PCIe CTL for address translation
+		ret = data_transfer(axi_dest, (void *)(&dma_addr_loc), 4, NORMAL_WRITE);
+		printk(KERN_INFO"<pci_ioctl_cdma_set>: writing dma address ('%x') to pcie_ctl at AXI address:%llx\n", dma_addr_loc, axi_dest);
+
+		//check the pcie-ctl got the translation address
+		ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ);
+		printk(KERN_INFO"<pci_ioctl_cdma_set>: PCIe CTL register:%x\n", status);
+
+		if (status == dma_addr_loc)
+			printk(KERN_INFO"<pci_ioctl_cdma_set>: PCIe CTL register set SUCCESS:%x\n", status);
+		else
+			printk(KERN_INFO"<pci_ioctl_cdma_set>:!!!!!!!!!!! PCIe CTL register FAILURE !!!!!!!!!!!!!!!:%x\n", status);
+	}
 }
 
-void cdma_init(u64 axi_address)
+void cdma_init(int cdma_num)
 {
 	//	u32 axi_cdma;
 	u64 axi_dest;
@@ -1431,17 +1509,32 @@ void cdma_init(u64 axi_address)
 	u32 dma_addr_loc;
 	int * mode;
 	int ret;
-//	struct semaphore CDMA_sem;
-
-	printk(KERN_INFO"<cdma_init>: *******************Setting CDMA AXI Address:%llx ******************************************\n", axi_address);
-	axi_cdma = axi_address;
-	cdma_set = 1;
+	int index;
+	u64 axi_cdma_loc;
+	
+	switch(cdma_num)
+	{
+		case 1:
+			axi_cdma = cdma_address;
+			axi_cdma_loc = axi_cdma;
+			mutex_init(&CDMA_sem);
+			break;
+		case 2:
+			axi_cdma_2 = cdma_address_2;
+			axi_cdma_loc = axi_cdma_2;
+			mutex_init(&CDMA_sem_2);
+			break;
+		default:printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
+	}
+	
+	printk(KERN_INFO"<cdma_init>: *******************Setting CDMA AXI Address:%llx ******************************************\n", axi_cdma_loc);
+	cdma_set[cdma_num] = 1;
 
 	/*Initialize the semaphore for this CDMA*/
-	mutex_init(&CDMA_sem);
+//	mutex_init(&CDMA_sem);
 
 	/*Issue a Soft Reset*/
-	axi_dest = axi_cdma + CDMA_CR;
+	axi_dest = axi_cdma_loc + CDMA_CR;
 	cdma_status = 0x00000004;
 	printk(KERN_INFO"<cdma_init>: sending a soft reset to the CDMA\n");
 	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE);
@@ -1450,35 +1543,35 @@ void cdma_init(u64 axi_address)
 //	cdma_status = 0x00000000;
 //	data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE);
 	/*Check the current status*/
-	axi_dest = axi_cdma + CDMA_SR;
+	axi_dest = axi_cdma_loc + CDMA_SR;
 	//			direct_read(axi_dest, (void*)&cdma_status, 4, NORMAL_READ);
 	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ);
 	printk(KERN_INFO"<cdma_init>: CDMA status before configuring:%x\n", cdma_status);	
 	/*Check the current config*/
-	axi_dest = axi_cdma + CDMA_CR;
+	axi_dest = axi_cdma_loc + CDMA_CR;
 	//			direct_read(axi_dest, (void*)&cdma_status, 4, NORMAL_READ);
 	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ);
 	printk(KERN_INFO"<cdma_init>: CDMA config before configuring:%x\n", cdma_status);	
 	/*clear any pre existing interrupt*/
-	axi_dest = axi_cdma + CDMA_SR;
+	axi_dest = axi_cdma_loc + CDMA_SR;
 	cdma_status = 0x00001000;
 	printk(KERN_INFO"<cdma_init>: attempting to write:%x to cdma status reg\n", cdma_status);
 	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE);
 
 	cdma_status = 0x00001000;
-	axi_dest = axi_cdma + CDMA_CR;
+	axi_dest = axi_cdma_loc + CDMA_CR;
 	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE);
 
 	/*Check the current status*/
-	axi_dest = axi_cdma + CDMA_SR;
+	axi_dest = axi_cdma_loc + CDMA_SR;
 	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ);
 	printk(KERN_INFO"<cdma_init>: CDMA status after configuring:%x\n", cdma_status);	
 	/*Check the current config*/
-	axi_dest = axi_cdma + CDMA_CR;
+	axi_dest = axi_cdma_loc + CDMA_CR;
 	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ);
 	printk(KERN_INFO"<cdma_init>: CDMA config after configuring:%x\n", cdma_status);	
 
-	if (zero_buf_set == 0)
+	if (zero_buf_set[cdma_num] == 0)
 	{
 		/*DMA Allocation*/
 		/*This sets the DMA read and write kernel buffers and obtains the
@@ -1486,16 +1579,16 @@ void cdma_init(u64 axi_address)
 
 		//		zero_copy_buf = pci_alloc_consistent(pci_dev_struct, 131072, &dma_addr);
 		//		zero_copy_buf = dma_alloc_coherent(&platform_dev_struct->dev, 131072, &dma_addr, GFP_KERNEL);
-		zero_copy_buf = dma_alloc_coherent(dev_struct, 131072, &dma_addr, GFP_KERNEL);
-		if(NULL == zero_copy_buf)
+		zero_copy_buf[cdma_num] = dma_alloc_coherent(dev_struct, 131072, &dma_addr[cdma_num], GFP_KERNEL);
+		if(NULL == zero_copy_buf[cdma_num])
 		{
 			printk("%s:<cdma_init>DMA zero copy buff allocation ERROR\n", pci_devName);
-			zero_buf_set = 0;
+			zero_buf_set[cdma_num] = 0;
 		}
 		else
 		{
-			zero_buf_set = 1;
-			printk(KERN_INFO"<cdma_init>: dma address is:%x\n", (u32)dma_addr);
+			zero_buf_set[cdma_num] = 1;
+			printk(KERN_INFO"<cdma_init>: dma address is:%x\n", (u32)dma_addr[cdma_num]);
 		}
 
 	}
@@ -1506,9 +1599,18 @@ void cdma_init(u64 axi_address)
 	if(pcie_ctl_set == 1)
 	{
 		/*convert to u32 to send to CDMA*/
-		dma_addr_loc = (u32)dma_addr;
+		dma_addr_loc = (u32)dma_addr[cdma_num];
 		//update pcie_ctl_virt address with register offset
-		axi_dest = axi_pcie_ctl + AXIBAR2PCIEBAR_0L;
+		switch(cdma_num)
+		{
+			case 1:
+				axi_dest = axi_pcie_ctl + AXIBAR2PCIEBAR_0L;
+				break;
+			case 2:
+				axi_dest = axi_pcie_ctl + AXIBAR2PCIEBAR_1L;
+				break;
+			default:printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
+		}
 
 		//write DMA addr to PCIe CTL for address translation
 		ret = data_transfer(axi_dest, (void *)(&dma_addr_loc), 4, NORMAL_WRITE);
@@ -1522,7 +1624,8 @@ void cdma_init(u64 axi_address)
 	/*update the interr_dict with interrupt number and mode*/
 	mode = (int*)kmalloc(sizeof(int), GFP_KERNEL);
 	*mode = CDMA;
-	interr_dict[0].mode = mode;
+	index = cdma_num - 1;
+	interr_dict[index].mode = mode;
 }
 
 int vec2num(u32 vec)
@@ -1559,6 +1662,9 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type)
 	u32 test;
 	int in_range = 0;
 	int status;
+	int cdma_num = 0;
+	u64 dma_axi_address = 0;
+	void * dma_p;
 
 	//	cdma_capable = (cdma_set == 1) & (pcie_ctl_set == 1) & (pcie_m_set == 1);
 
@@ -1584,23 +1690,50 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type)
 
 	else if (cdma_capable == 1)
 	{
+		/* Find an available CDMA to use and wait if both are in use */
+		while(cdma_num == 0)
+		{
+			cdma_num = cdma_query();
+		}
+
+		/*set the dma_axi_address to be for whichever cdma has been locked*/
+		/*the dma_axi_address is the axi address where the HP port is for zynq
+		 * or for where the PCIe AXI Slave port is for x86 */ 
+		dma_axi_address = axi_pcie_m[cdma_num];
+		dma_p = zero_copy_buf[cdma_num];
+
 		if ((transfer_type == NORMAL_READ) | (transfer_type == KEYHOLE_READ))
 		{
-			status = cdma_transfer(axi_address, axi_pcie_m, (u32)count, transfer_type);
+			status = cdma_transfer(axi_address, dma_axi_address, (u32)count, transfer_type, cdma_num);
 			if (!status)   //successful CDMA transmission
-				memcpy(buf, (const void*)zero_copy_buf, count);
+				memcpy(buf, (const void*)dma_p, count);
 
 		}
 		else if ((transfer_type == NORMAL_WRITE) | (transfer_type == KEYHOLE_WRITE))
 		{
 			//Transfer data from user space to kernal space at the allocated DMA region
-			memcpy(zero_copy_buf, (const void*)buf, count);
-			status = cdma_transfer(axi_pcie_m, axi_address, (u32)count, transfer_type);
+			memcpy(dma_p, (const void*)buf, count);
+			status = cdma_transfer(dma_axi_address, axi_address, (u32)count, transfer_type, cdma_num);
 			test = 0xDEADBEEF;
-			memcpy(zero_copy_buf, (const void*)&test, 4);	
+			memcpy(dma_p, (const void*)&test, 4);	
 		}
 		else
 			printk(KERN_INFO"<data_transfer>: error no transfer type specified\n");
+
+		/*Release Mutex on CDMA*/
+		switch(cdma_num)
+		{
+			case 1:
+				mutex_unlock(&CDMA_sem);
+				break;
+
+			case 2:
+				mutex_unlock(&CDMA_sem_2);
+				break;
+			default : printk(KERN_INFO"<data_transfer>: ERROR: unknown cdma number detected.\n");
+		}
+
+
 	}
 
 	else
@@ -1708,7 +1841,41 @@ int direct_read(u64 axi_address, void *buf, size_t count, int transfer_type)
 	return 0;
 }
 
-int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en)
+int cdma_query(void)
+{
+	/*Check the CDMA Semaphore*/
+
+	if (mutex_is_locked(&CDMA_sem))
+	{
+		if (mutex_is_locked(&CDMA_sem_2) | !cdma_set[2])
+			printk(KERN_INFO "!!!!!!!!! all CDMAs in use !!!!!!!!\n");
+		else
+		{
+			if (mutex_lock_interruptible(&CDMA_sem_2))
+			{
+				printk(KERN_INFO"User interrupted while waiting for CDMA semaphore.\n");
+				return -ERESTARTSYS;
+			}
+			printk(KERN_INFO"	<cdma_transfer>: CDMA Resource 2 is now locked!\n");
+			return 2;
+		}	
+	}
+	else
+	{	
+		if (mutex_lock_interruptible(&CDMA_sem))
+		{
+			printk(KERN_INFO"User interrupted while waiting for CDMA semaphore.\n");
+			return -ERESTARTSYS;
+		}
+
+		printk(KERN_INFO"	<cdma_transfer>: CDMA Resource 1 is now locked!\n");
+		return 1;
+	}
+
+	return 0;   //no CDMA's are available
+}
+
+int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 {
 	u32 bit_vec;
 	u64 axi_dest;
@@ -1718,17 +1885,18 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en)
 	u32 DA_MSB;
 	u32 DA_LSB;
 	int ack_status; 
+	u64 axi_cdma_loc;
 
 	printk(KERN_INFO"	<cdma_transfer>: **** Starting a CDMA transfer ****\n");
 
 	/*Check the CDMA Semaphore*/
-	if (mutex_lock_interruptible(&CDMA_sem))
-	{
-		printk(KERN_INFO"User interrupted while waiting for CDMA semaphore.\n");
-		return -ERESTARTSYS;
-	}
+//	if (mutex_lock_interruptible(&CDMA_sem))
+//	{
+//		printk(KERN_INFO"User interrupted while waiting for CDMA semaphore.\n");
+//		return -ERESTARTSYS;
+//	}
 
-	printk(KERN_INFO"	<cdma_transfer>: CDMA Resource is now locked!\n");
+//	printk(KERN_INFO"	<cdma_transfer>: CDMA Resource is now locked!\n");
 
 	SA_MSB = (u32)(SA>>32);
 	SA_LSB = (u32)SA;
@@ -1741,20 +1909,31 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en)
 		case KEYHOLE_READ:
 			bit_vec = 0x00000010;   //the bit for KEYHOLE READ		
 			printk(KERN_INFO"	<keyhole_read_set>: Setting the CDMA Keyhole READ as ENABLED\n");
-			cdma_config_set(bit_vec, 1);   //value of one means we want to SET the register
+			cdma_config_set(bit_vec, 1, cdma_num);   //value of one means we want to SET the register
 			break;
 
 		case KEYHOLE_WRITE:
 			bit_vec = 0x00000020;   //the bit for KEYHOLE WRITE
 			printk(KERN_INFO"	<keyhole_write_set>: Setting the CDMA Keyhole WRITE as ENABLED\n");
-			cdma_config_set(bit_vec, 1);   //value of one means we want to SET the register
+			cdma_config_set(bit_vec, 1, cdma_num);   //value of one means we want to SET the register
 			break;
 
 		default:printk(KERN_INFO"	<keyhole_setting> no keyhole swtting will be used.\n");
 	}
 
+	switch(cdma_num)
+	{
+		case 1:
+			axi_cdma_loc = axi_cdma;
+			break;
+		case 2:
+			axi_cdma_loc = axi_cdma_2;
+			break;
+		default:printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
+	}
+
 	//read the config register
-	axi_dest = axi_cdma + CDMA_CR;
+	axi_dest = axi_cdma_loc + CDMA_CR;
 	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
 	printk(KERN_INFO"	<pci_dma_transfer>: CDMA Configuration before transmission:%x\n", status);	
 	//	if ((status & 0x4) == 0x4)
@@ -1774,11 +1953,11 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en)
 	printk(KERN_INFO"	<pci_dma_transfer>: ********* CDMA TRANSFER INITIALIZATION *************\n\n");	
 //	printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA_MSB address ('%x') to CDMA at axi address:%llx\n", SA_MSB, axi_dest);
 	//Writing SA_LSB	
-	axi_dest = axi_cdma + CDMA_SA;
+	axi_dest = axi_cdma_loc + CDMA_SA;
 	direct_write(axi_dest, (void*)&SA_LSB, 4, NORMAL_WRITE);
 	printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA_LSB address ('%x') to CDMA at axi address:%llx\n", SA_LSB, axi_dest);
 	//read the status register
-	axi_dest = axi_cdma + CDMA_SR;
+	axi_dest = axi_cdma_loc + CDMA_SR;
 	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
 	printk(KERN_INFO"<pci_dma_transfer>: CDMA Status after writing SA:%x\n", status);	
 
@@ -1787,11 +1966,11 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en)
 //	direct_write(axi_dest, (void*)&DA_MSB, 4, NORMAL_WRITE);
 //	printk(KERN_INFO"	<pci_dma_transfer>: writing DA_MSB address ('%x') to CDMA at axi address:%llx\n", DA_MSB, axi_dest);
 	//Writing DA_LSB
-	axi_dest = axi_cdma + CDMA_DA;
+	axi_dest = axi_cdma_loc + CDMA_DA;
 	direct_write(axi_dest, (void*)&DA_LSB, 4, NORMAL_WRITE);
 	printk(KERN_INFO"	<pci_dma_transfer>: writing DA_LSB address ('%x') to CDMA at axi address:%llx\n", DA_LSB, axi_dest);
 	//read the status register
-	axi_dest = axi_cdma + CDMA_SR;
+	axi_dest = axi_cdma_loc + CDMA_SR;
 	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
 	printk(KERN_INFO"<pci_dma_transfer>: CDMA Status after writing DA:%x\n", status);	
 
@@ -1805,7 +1984,7 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en)
 //	printk(KERN_INFO"<pci_dma_transfer>: CDMA DA readback:%x\n", status);	
 
 	//Writing BTT	
-	axi_dest = axi_cdma + CDMA_BTT;
+	axi_dest = axi_cdma_loc + CDMA_BTT;
 	printk(KERN_INFO"	<pci_dma_transfer>: writing bytes to transfer ('%d') to CDMA at axi address:%llx\n", BTT, axi_dest);	
 	direct_write(axi_dest, (void*)&BTT, 4, NORMAL_WRITE);
 
@@ -1819,36 +1998,48 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en)
 	//	printk(KERN_INFO"<pci_dma_transfer>: CDMA Status after writing BTT::%x\n", status);	
 
 	/*Go to sleep and wait for interrupt*/
-	wait_event_interruptible(wq, cdma_comp != 0);
-	cdma_comp = 0;
+	wait_event_interruptible(wq, cdma_comp[cdma_num] != 0);
+	cdma_comp[cdma_num] = 0;
 	printk(KERN_INFO"	<pci_dma_transfer>: returned from ISR.\n");
 	
 	// Acknowledge the CDMA and check for error status
-	ack_status = cdma_ack();
+	ack_status = cdma_ack(cdma_num);
 
 	if ((keyhole_en == KEYHOLE_READ) | (keyhole_en == KEYHOLE_WRITE))
 	{
 		bit_vec = 0x20 | 0x10;      // "0x30" unset both CDMA keyhole read and write	
-		cdma_config_set(bit_vec, 0);	//unsets the keyhole configuration
+		cdma_config_set(bit_vec, 0, cdma_num);	//unsets the keyhole configuration
 	}
 
-	printk(KERN_INFO"	<pci_dma_transfer>: Unlocking the CDMA Resource\n");	
-	mutex_unlock(&CDMA_sem);
+//	printk(KERN_INFO"	<pci_dma_transfer>: Unlocking the CDMA Resource\n");	
+//	mutex_unlock(&CDMA_sem);
 
 	printk(KERN_INFO"	<pci_dma_transfer>: ********* CDMA TRANSFER FINISHED *************\n");	
 
 	return ack_status;
 }
 
-void cdma_config_set(u32 bit_vec, int set_unset)
+void cdma_config_set(u32 bit_vec, int set_unset, int cdma_num)
 {
 	u32 current_CR;
 	u32 new_CR;
 	u32 set_vec;
 	u64 axi_dest;
 	int status;
+	u64 axi_cdma_loc;
 
-	axi_dest = axi_cdma + CDMA_CR;
+	switch(cdma_num)
+	{
+		case 1:
+			axi_cdma_loc = axi_cdma;
+			break;
+		case 2:
+			axi_cdma_loc = axi_cdma_2;
+			break;
+		default:printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
+	}
+
+	axi_dest = axi_cdma_loc + CDMA_CR;
 	status = data_transfer(axi_dest, (void *)&current_CR, 4, NORMAL_READ);
 
 	if (set_unset == 1)   //we are setting the CR
@@ -1868,16 +2059,28 @@ void cdma_config_set(u32 bit_vec, int set_unset)
 	printk(KERN_INFO"<pci_cdma_config_set>: new CDMA Config Register is:%x\n", new_CR);	
 }
 
-int cdma_ack(void)
+int cdma_ack(cdma_num)
 {
 	u32 cdma_status;
 	u32 status;
 	u64 axi_dest;
 	int ret;
+	u64 axi_cdma_loc;
+
+	switch(cdma_num)
+	{
+		case 1:
+			axi_cdma_loc = axi_cdma;
+			break;
+		case 2:
+			axi_cdma_loc = axi_cdma_2;
+			break;
+		default:printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
+	}
 
 	/*acknowledge the CDMA interrupt (to reset it)*/
 	cdma_status = 0x00001000;
-	axi_dest = axi_cdma + CDMA_SR;
+	axi_dest = axi_cdma_loc + CDMA_SR;
 	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE);
 	printk(KERN_INFO"	<cdma_ack>: writing SR config ('%x') to CDMA at AXI address:%llx\n", cdma_status, axi_dest);
 
@@ -1892,7 +2095,7 @@ int cdma_ack(void)
 //		cdma_status = 0x4;
 //		data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE);
 		
-		axi_dest = axi_cdma;
+		axi_dest = axi_cdma_loc;
 		cdma_init(axi_dest);
 		
 		return status;
