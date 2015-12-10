@@ -2,6 +2,7 @@
 #include "trace_test.h"
 #include <pthread.h>
 #include <sys/poll.h>
+#include <unistd.h>
 
 #define AXI_STREAM_FIFO 1
 
@@ -297,10 +298,14 @@ while(p<63)
 	printf("Other Thread\n");
 
 	/*******Send data to the TX FIFO (front end) **********/
-//	ret_val = write(hls_write, in, sizeof(in));  
+
+	while(1)
+	{
 	ret_val = write(hls_write, in, sizeof(in));   
 	if (ret_val == 0)
 		printf("WRITE ERROR\n");
+	usleep(1000);
+	}
 
 	printf("TX FIFO: Transmitted data\n");
 	//Should have written.... wait for RX FIFO interrupt.
@@ -313,7 +318,6 @@ while(p<63)
 
 	printf("Threads joined!\n");
 	
-//	ioctl(hls_read, SET_CDMA_KEYHOLE_READ, 0); 
 
 	/*Close files*/	
 	close(bram);
@@ -351,6 +355,8 @@ void *rxfifo_read(void *read_buf)
 	 * to this device*/
 	printf("just before poll().....\n");
 
+	while(1)
+	{
 	result = poll(&pollfds, 1, timeout);
 	switch (result) {
 		case 0: 
@@ -362,21 +368,20 @@ void *rxfifo_read(void *read_buf)
 			return 0;
 		
 		default:
-			printf("RX FIFO INTERRUPT DETECTED!\n");
+//			printf("RX FIFO INTERRUPT DETECTED!\n");
 		
 			/* Read from peripheral */
-	//		return_val = read(hls_read, (void*)buff, sizeof(buff));  
 
 			return_val = read(hls_read, (void*)buff, (sizeof(buff)));  
 			if (return_val == 0)
 				printf("READ ERROR\n");
 			
-			printf("Number of bytes read:%x\n", return_val);
+//			printf("Number of bytes read:%x\n", return_val);
 
-			for(i=0;i<(return_val/4);i++)
-			{
-				printf("value read: %x\n", buff[i]);
-			}
+//			for(i=0;i<(return_val/4);i++)
+//			{
+//				printf("value read: %x\n", buff[i]);
+//			}
 	
 			/*Read the trace module FIFO*/
 
@@ -387,7 +392,7 @@ void *rxfifo_read(void *read_buf)
 			if (return_val == 0)
 				printf("READ ERROR\n");
 			
-			printf("Number of bytes read:%x\n", return_val);
+//			printf("Number of bytes read:%x\n", return_val);
 
 			for(i=0;i<(return_val/8);i++)
 			{
@@ -395,6 +400,6 @@ void *rxfifo_read(void *read_buf)
 			}
 			}
 	}
-
+	}
 	return NULL;
 }

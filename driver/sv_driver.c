@@ -762,7 +762,8 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 		wake_up_interruptible(&wq);
 	}
 
-	if (vec_serviced & 0x10)
+//	if (vec_serviced & 0x10)
+	if (vec_serviced >= 16)
 		wake_up(&wq_periph);
 
 	return IRQ_HANDLED;
@@ -1053,8 +1054,8 @@ int pci_poll(struct file *filep, poll_table * pwait)
 	{
 		printk(KERN_INFO"<pci_poll>: wait event detected!!\n");
 		/*reset the has_data flag*/
-		//		interrupt_vect_dict[mod_desc->interrupt_vec] = 0;
-		*(mod_desc->int_count) = (*(mod_desc->int_count)) - 1;
+	//	*(mod_desc->int_count) = (*(mod_desc->int_count)) - 1;
+		*(mod_desc->int_count) = 0;
 		mask |= POLLIN;
 	}
 
