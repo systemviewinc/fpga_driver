@@ -96,21 +96,25 @@ int main()
 
 	hls_write = open(devfilename, O_RDWR);
 	if(hls_write < 0){
+		printf("ERROR doing ioctl\n");
 		return -1;
 	}
 
 	hls_read = open(devfilename_2, O_RDWR);
 	if(hls_read < 0){
+		printf("ERROR doing ioctl\n");
 		return -1;
 	}
 
 	trace_read = open(devfilename_3, O_RDWR);
 	if(trace_read < 0){
+		printf("ERROR doing ioctl\n");
 		return -1;
 	}
 
 	trace_control = open(devfilename_4, O_RDWR);
 	if(trace_control < 0){
+		printf("ERROR doing ioctl\n");
 		return -1;
 	}
 	printf("Opened files\n");
@@ -374,7 +378,7 @@ void *rxfifo_read(void *read_buf)
 
 			return_val = read(hls_read, (void*)buff, (sizeof(buff)));  
 			if (return_val == 0)
-				printf("READ ERROR\n");
+				printf("READ ERROR DATA\n");
 			
 //			printf("Number of bytes read:%x\n", return_val);
 
@@ -389,8 +393,8 @@ void *rxfifo_read(void *read_buf)
 			while (return_val == 256)
 			{
 			return_val = read(trace_read, (void*)trace_buff, (sizeof(trace_buff)));  
-			if (return_val == 0)
-				printf("READ ERROR\n");
+	//		if (return_val == 0)
+	//			printf("READ ERROR TRACE\n");
 			
 //			printf("Number of bytes read:%x\n", return_val);
 
