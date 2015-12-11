@@ -34,7 +34,9 @@
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
 #include <linux/mutex.h>
+#include <linux/atomic.h>
 
+#define printk(...)
 
 #define ERROR   -1
 #define SUCCESS 0
@@ -174,9 +176,12 @@ void * dma_master_buf[MAX_NUM_MASTERS];
 size_t dma_size;              //this is a global variable to interrupt to recognize
 static wait_queue_head_t wq;
 static wait_queue_head_t wq_periph;
+static wait_queue_head_t mutexq;
 static int cdma_comp[5];
 int num_int;
 int interrupt_vect_dict[1 << (MAX_NUM_INT)];    //2^x
+
+atomic_t mutex_free = ATOMIC_INIT(0); 
 
 /*These are register offsets of Xilinx peripherals*/
 const u32 AXIBAR2PCIEBAR_0L = 0x20c;
@@ -675,6 +680,7 @@ static int __init sv_driver_init(void)
 
 			init_waitqueue_head(&wq);
 			init_waitqueue_head(&wq_periph);
+			init_waitqueue_head(&mutexq);
 
 			ids[0].vendor =  PCI_VENDOR_ID_XILINX;
 			ids[0].device =  (u32)device_id;
@@ -689,6 +695,7 @@ static int __init sv_driver_init(void)
 
 			init_waitqueue_head(&wq);
 			init_waitqueue_head(&wq_periph);
+			init_waitqueue_head(&mutexq);
 
 			bar_0_axi_offset = 0x40000000;
 
@@ -1706,10 +1713,22 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type)
 	else if (cdma_capable == 1)
 	{
 		/* Find an available CDMA to use and wait if both are in use */
-		while(cdma_num == 0)
-		{
+	//	while(cdma_num == 0)
+	//	{
 			cdma_num = cdma_query();
-		}
+			if (cdma_num == 0)
+			{
+				/*default to CDMA 1 and wait on it*/
+				if (mutex_lock_interruptible(&CDMA_sem))
+				{
+					printk(KERN_INFO"User interrupted while waiting for CDMA semaphore.\n");
+					return -ERESTARTSYS;
+				}
+				cdma_num = 1;
+		//		atomic_set(&mutex_free, 0);  //wait variable for mutex lock
+		//		wait_event_interruptible(mutexq, atomic_read(&mutex_free) != 0);
+			}
+	//	}
 
 		/*set the dma_axi_address to be for whichever cdma has been locked*/
 		/*the dma_axi_address is the axi address where the HP port is for zynq
@@ -1749,6 +1768,8 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type)
 				  return(0);
 		}
 
+	//	atomic_set(&mutex_free, 1);  //wait variable for mutex lock
+	//	wake_up_interruptible(&mutexq);
 
 	}
 
