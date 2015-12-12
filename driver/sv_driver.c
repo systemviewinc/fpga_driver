@@ -36,8 +36,6 @@
 #include <linux/mutex.h>
 #include <linux/atomic.h>
 
-#define printk(...)
-
 #define ERROR   -1
 #define SUCCESS 0
 
@@ -431,7 +429,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	printk(KERN_INFO"<probe>device enabled\n");
 
 	//set DMA mask
-	if(0 != dma_set_mask(&dev->dev, 0xFFFF0000)){
+	if(0 != dma_set_mask(&dev->dev, 0xFFFFFFFF)){
 		printk(KERN_INFO"%s:<probe>set DMA mask error\n", pci_devName);
 		return ERROR;
 	}
@@ -463,6 +461,19 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 	if (skel_get_revision(dev) == 0x42)
 		return -ENODEV;
+
+	/*allocate the DMA buffer*/
+	dma_buffer_base = dma_alloc_coherent(dev_struct, (size_t)dma_buffer_size, &dma_addr_base, GFP_KERNEL);
+	if(NULL == dma_buffer_base)
+	{
+		printk("%s:<sv_driver_init>DMA buffer base allocation ERROR\n", pci_devName);
+		return -1;
+	}
+	else
+	{
+		printk(KERN_INFO"<sv_driver_init>: dma buffer base address is:%lx\n", (u64)dma_buffer_base);
+		dma_current_offset = 4096;   //we want to leave the first 4k for the kernel to use internally.
+	}
 
 	//set defaults
 	cdma_set[0] = 0;
@@ -507,19 +518,6 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 	/*Since we isolated the AXI bus, this is the new offest for the slave interface of the PCIe*/
 //	axi_pcie_m = 0x00000;
-
-	/*allocate the DMA buffer*/
-	dma_buffer_base = dma_alloc_coherent(dev_struct, dma_buffer_size, dma_addr_base, GFP_KERNEL);
-	if(NULL == dma_buffer_base)
-	{
-		printk("%s:<sv_driver_init>DMA buffer base allocation ERROR\n", pci_devName);
-		return -1;
-	}
-	else
-	{
-		printk(KERN_INFO"<sv_driver_init>: dma buffer base address is:%lx\n", (u64)dma_buffer_base);
-		dma_current_offset = 4096;   //we want to leave the first 4k for the kernel to use internally.
-	}
 
 	printk(KERN_INFO"<probe>***********************PROBE FINISHED SUCCESSFULLY**************************************\n");
 	return 0;
@@ -571,7 +569,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 
 	//set DMA mask
-	if(0 != dma_set_mask(&pdev->dev, 0xFFFF0000)){
+	if(0 != dma_set_mask(&pdev->dev, 0xFFFFFFFF)){
 		printk(KERN_INFO"%s:<probe>set DMA mask error\n", pci_devName);
 		return ERROR;
 	}
@@ -590,6 +588,19 @@ static int sv_plat_probe(struct platform_device *pdev)
 	if(0 > register_chrdev(major, "sv_driver", &pci_fops)){
 		printk(KERN_INFO"%s:<probe>char driver not registered\n", "sv_driver");
 		return ERROR;
+	}
+
+	/*allocate the DMA buffer*/
+	dma_buffer_base = dma_alloc_coherent(dev_struct, 1048576, dma_addr_base, GFP_KERNEL);
+	if(NULL == dma_buffer_base)
+	{
+		printk("%s:<sv_driver_init>DMA buffer base allocation ERROR\n", pci_devName);
+		return -1;
+	}
+	else
+	{
+		printk(KERN_INFO"<sv_driver_init>: dma buffer base address is:%lx\n", (u64)dma_buffer_base);
+		dma_current_offset = 4096;   //we want to leave the first 4k for the kernel to use internally.
 	}
 
 	//set defaults
@@ -628,23 +639,13 @@ static int sv_plat_probe(struct platform_device *pdev)
 	 * is not handled by the core by writing to a register. For Zynq, the axi to DDR address
 	 * mapping is 1-1 and should be written directly to the returned DMA handle */
 
-	axi_pcie_m[1] = axi_pcie_m[1] + (u64)dma_addr[1];   //cdma 1
-	axi_pcie_m[2] = axi_pcie_m[2] + (u64)dma_addr[2];   //cdma 2
+//	axi_pcie_m[1] = axi_pcie_m[1] + (u64)dma_addr[1];   //cdma 1
+//	axi_pcie_m[2] = axi_pcie_m[2] + (u64)dma_addr[2];   //cdma 2
+
+	axi_pcie_m[1] = axi_pcie_m[1] + (u64)dma_addr_base;   //cdma 1
+	axi_pcie_m[2] = axi_pcie_m[2] + (u64)dma_addr_base;   //cdma 2
 
 	cdma_capable = (cdma_set[1] == 1) & (pcie_m_set[1] == 1) & (int_ctrl_set == 1);
-
-	/*allocate the DMA buffer*/
-	dma_buffer_base = dma_alloc_coherent(dev_struct, 1048576, dma_addr_base, GFP_KERNEL);
-	if(NULL == dma_buffer_base)
-	{
-		printk("%s:<sv_driver_init>DMA buffer base allocation ERROR\n", pci_devName);
-		return -1;
-	}
-	else
-	{
-		printk(KERN_INFO"<sv_driver_init>: dma buffer base address is:%lx\n", (u64)dma_buffer_base);
-		dma_current_offset = 4096;   //we want to leave the first 4k for the kernel to use internally.
-	}
 
 	printk(KERN_INFO"<probe>***********************PROBE FINISHED SUCCESSFULLY**************************************\n");
 	return 0;
@@ -722,7 +723,7 @@ static int __init sv_driver_init(void)
 		case PCI:
 			printk(KERN_INFO"<pci_init>: Device ID: ('%d')\n", device_id);
 			printk(KERN_INFO"<pci_init>: Major Number: ('%d')\n", major);
-
+		
 			init_waitqueue_head(&wq);
 			init_waitqueue_head(&wq_periph);
 			init_waitqueue_head(&mutexq);
@@ -1686,6 +1687,8 @@ void cdma_init(int cdma_num)
 	axi_dest = axi_cdma_loc + CDMA_CR;
 	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0);
 	printk(KERN_INFO"<cdma_%x_init>: CDMA config after configuring:%x\n", cdma_num, cdma_status);	
+
+	/*allocate the DMA buffer*/
 
 	if (zero_buf_set[cdma_num] == 0)
 	{

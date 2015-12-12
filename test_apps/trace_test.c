@@ -47,6 +47,7 @@ unsigned long trace_read_axi_addr = 0x80010000;
 unsigned long trace_control_axi_addr = 0x80000000;
 
 unsigned long hls_fifo_mode = AXI_STREAM_FIFO;
+unsigned long dma_size = 4096;
 
 unsigned int SET_AXI_DEVICE = 50;
 unsigned int SET_AXI_CDMA = 51;
@@ -61,6 +62,7 @@ unsigned int SET_CDMA_KEYHOLE_READ = 59;
 unsigned int SET_MODE = 62;
 unsigned int SET_INTERRUPT = 61;
 unsigned int SET_AXI_CTL_DEVICE = 63;
+unsigned int SET_DMA_SIZE = 64;
 
 
 /*these are the register offsets of the AXI-Stream FIFO*/
@@ -195,6 +197,25 @@ int main()
 	}
 	printf("set peripheral to axi base address %x\n", trace_read_axi_addr);
 
+	/* set DMA sizes*/
+	if(ioctl(hls_read, SET_DMA_SIZE, &dma_size) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set axi fifo to dma_size: %d\n", dma_size);
+
+	if(ioctl(hls_write, SET_DMA_SIZE, &dma_size) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set axi fifo to dma_size: %d\n", dma_size);
+
+	if(ioctl(trace_read, SET_DMA_SIZE, &dma_size) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set axi fifo to dma_size: %d\n", dma_size);
+
 	/* set mode of AXI_FIFO*/
 	if(ioctl(hls_read, SET_MODE, &hls_fifo_mode) < 0) {
 		printf("ERROR doing ioctl\n");
@@ -216,6 +237,7 @@ int main()
 	}
 	printf("set axi fifo to mode: %d\n", hls_fifo_mode);
 
+return 0;
 	/****** Set the mode of hls_read to be "Slave with interrupt" ***********/
 	unsigned int interrupt_vector = 0x20;  /*2^5 - NOTE - THIS IS POWER OF 2!!!*/
 	ioctl(hls_read, SET_INTERRUPT, &interrupt_vector); 
