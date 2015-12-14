@@ -66,6 +66,7 @@
 #define SET_INTERRUPT 61
 #define SET_AXI_CTL_DEVICE 63
 #define SET_DMA_SIZE 64
+#define RESET_DMA_ALLOC 65
 
 /*Other Constants*/
 #define KEYHOLE_WRITE 2 
@@ -168,9 +169,10 @@ dma_addr_t dma_addr[5];
 
 dma_addr_t dma_addr_base;
 void * dma_buffer_base;
-u64 dma_current_offset;
+u32 dma_current_offset;
 u64 dma_buffer_size = 1048576;
-u64 current_dma_offset_internal;
+//u64 dma_buffer_size = 131072;
+u32 current_dma_offset_internal;
 
 dma_addr_t dma_m_addr[MAX_NUM_MASTERS];
 
@@ -235,15 +237,15 @@ struct mod_desc
 	int master_num;
 	int keyhole_config;
 	u32 interrupt_vec;
-	u64 dma_offset_read;
-	u64 dma_offset_write;
+	u32 dma_offset_read;
+	u32 dma_offset_write;
 	u64 dma_size;
 	void * dma_write;
 	void * dma_read;
 	u32 * kernel_reg_write;
 	u32 * kernel_reg_read;
-	u64 dma_offset_internal_read;
-	u64 dma_offset_internal_write;
+	u32 dma_offset_internal_read;
+	u32 dma_offset_internal_write;
 };
 
 /*this is the interrupt structure*/
@@ -429,7 +431,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	printk(KERN_INFO"<probe>device enabled\n");
 
 	//set DMA mask
-	if(0 != dma_set_mask(&dev->dev, 0xFFFFFFFF)){
+	if(0 != dma_set_coherent_mask(&dev->dev, 0x00000000FFFFFFFF)){
 		printk(KERN_INFO"%s:<probe>set DMA mask error\n", pci_devName);
 		return ERROR;
 	}
@@ -471,8 +473,10 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	}
 	else
 	{
-		printk(KERN_INFO"<sv_driver_init>: dma buffer base address is:%lx\n", (u64)dma_buffer_base);
+		printk(KERN_INFO"<sv_driver_init>: dma kernel buffer base address is:%lx\n", (u64)dma_buffer_base);
+		printk(KERN_INFO"<sv_driver_init>: dma system memory buffer base address is:%lx\n", (u64)dma_addr_base);
 		dma_current_offset = 4096;   //we want to leave the first 4k for the kernel to use internally.
+		current_dma_offset_internal = 0;
 	}
 
 	//set defaults
@@ -569,7 +573,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 
 	//set DMA mask
-	if(0 != dma_set_mask(&pdev->dev, 0xFFFFFFFF)){
+	if(0 != dma_set_mask(&pdev->dev, 0x00000000FFFFFFFF)){
 		printk(KERN_INFO"%s:<probe>set DMA mask error\n", pci_devName);
 		return ERROR;
 	}
@@ -591,7 +595,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 	}
 
 	/*allocate the DMA buffer*/
-	dma_buffer_base = dma_alloc_coherent(dev_struct, 1048576, dma_addr_base, GFP_KERNEL);
+	dma_buffer_base = dma_alloc_coherent(dev_struct, (size_t)dma_buffer_size, dma_addr_base, GFP_KERNEL);
 	if(NULL == dma_buffer_base)
 	{
 		printk("%s:<sv_driver_init>DMA buffer base allocation ERROR\n", pci_devName);
@@ -600,7 +604,9 @@ static int sv_plat_probe(struct platform_device *pdev)
 	else
 	{
 		printk(KERN_INFO"<sv_driver_init>: dma buffer base address is:%lx\n", (u64)dma_buffer_base);
+		printk(KERN_INFO"<sv_driver_init>: dma system memory buffer base address is:%lx\n", (u64)dma_addr_base);
 		dma_current_offset = 4096;   //we want to leave the first 4k for the kernel to use internally.
+		current_dma_offset_internal = 0;
 	}
 
 	//set defaults
@@ -676,7 +682,7 @@ static void remove(struct pci_dev *dev)
 		dma_free_coherent(dev_struct, 131072, zero_copy_buf[2], dma_addr[2]);
 	}
 
-	dma_free_coherent(dev_struct, 1048576, dma_buffer_base, dma_addr_base);
+	dma_free_coherent(dev_struct, (size_t)dma_buffer_size, dma_buffer_base, dma_addr_base);
 	
 	unregister_chrdev(major, pci_devName);
 
@@ -699,6 +705,8 @@ static int sv_plat_remove(struct platform_device *pdev)
 		//		pci_free_consistent(pci_dev_struct, 131072, zero_copy_buf, dma_addr);
 		dma_free_coherent(dev_struct, 131072, zero_copy_buf[2], dma_addr[2]);
 	}
+
+	dma_free_coherent(dev_struct, (size_t)dma_buffer_size, dma_buffer_base, dma_addr_base);
 
 	unregister_chrdev(major, pci_devName);
 
@@ -1013,7 +1021,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		case SET_DMA_SIZE:
 			printk(KERN_INFO"<ioctl>: Setting Peripheral DMA size:%llx\n", arg_loc);
 			mod_desc->dma_size = arg_loc;
-			if ((dma_current_offset + arg_loc) > (u64)(dma_buffer_base + dma_buffer_size))
+			if (((u64)dma_current_offset + arg_loc) > (u64)((char*)dma_buffer_base + dma_buffer_size))
 			{
 				printk(KERN_INFO"<ioctl>: ERROR! DMA Buffer out of memory!\n");
 				return ERROR;
@@ -1021,16 +1029,23 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			else
 			{
 				mod_desc->dma_size = arg_loc;
+				printk(KERN_INFO"<set_dma_size>: The current system memory dma offset:%x\n", dma_current_offset);
 				mod_desc->dma_offset_read = dma_current_offset;            //set the dma start address for the peripheral read
-				mod_desc->dma_offset_write = dma_current_offset + arg_loc; //set the dma start address for the peripheral write
-				mod_desc->dma_write = dma_buffer_base + mod_desc->dma_offset_write;            //actual pointer to kernel buffer
-				mod_desc->dma_read = dma_buffer_base + mod_desc->dma_offset_read;            //actual pointer to kernel buffer
+				mod_desc->dma_offset_write = dma_current_offset + (u32)arg_loc; //set the dma start address for the peripheral write
+				mod_desc->dma_write = (void*)((char*)dma_buffer_base + (u64)dma_current_offset + arg_loc);            //actual pointer to kernel buffer
+				printk(KERN_INFO"<ioctl>: DMA kernel write address set to:%lx\n", (u64)mod_desc->dma_write);
+				mod_desc->dma_read = (void*)((char*)dma_buffer_base + (u64)dma_current_offset);            //actual pointer to kernel buffer
 				
-				dma_current_offset = dma_current_offset + (2*arg_loc);            //update the current dma allocation pointer, 2 buffers (R/W)
+				dma_current_offset = dma_current_offset + (u32)(2*arg_loc);            //update the current dma allocation pointer, 2 buffers (R/W)
 				printk(KERN_INFO"<ioctl>: Success setting peripheral DMA\n");
 			}
 				break;
 
+                case RESET_DMA_ALLOC:
+			dma_current_offset = 4096;   //we want to leave the first 4k for the kernel to use internally.
+			current_dma_offset_internal = 0;
+			break;
+			
 		case SET_INTERRUPT:
 			printk(KERN_INFO"<ioctl>: Setting device as an Interrupt source with vector:%llx\n", arg_loc);
 			/*Store the Interrupt Vector*/
@@ -1123,12 +1138,12 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 					
 						/*allocate a small buffer of DMA for kernel to use*/
 						mod_desc->dma_offset_internal_read = current_dma_offset_internal;
-						mod_desc->dma_offset_internal_write = current_dma_offset_internal + 4;
-						mod_desc->kernel_reg_read = (u32*)(current_dma_offset_internal + dma_buffer_base);   //pointer to kernel read register
-						mod_desc->kernel_reg_write = (u32*)(current_dma_offset_internal + dma_buffer_base + 4); //pointer to kernel write register
-						
-						current_dma_offset_internal = current_dma_offset_internal + 8;   // update the current dma buffer status (just added two 32b buffers)
-					
+						mod_desc->dma_offset_internal_write = current_dma_offset_internal + 0x04;
+						mod_desc->kernel_reg_read = (u32*)((u64)current_dma_offset_internal + (char*)dma_buffer_base);   //pointer to kernel read register
+						mod_desc->kernel_reg_write = (u32*)((u64)(current_dma_offset_internal + 0x04) + (char*)dma_buffer_base); //pointer to kernel write register
+						printk(KERN_INFO"<ioctl_axi_stream_fifo>: current dma kernel offset:%x\n", current_dma_offset_internal);
+						printk(KERN_INFO"<ioctl_axi_stream_fifo>: kernel R/W register kernel addresses:%lx / %lx\n", (u64)mod_desc->kernel_reg_read, (u64)mod_desc->kernel_reg_write );
+						current_dma_offset_internal = current_dma_offset_internal + 0x08;   // update the current dma buffer status (just added two 32b buffers)
 						//Read CTL interface
 						axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
 				//		ret = data_transfer(axi_dest, (void *)&kern_reg, 4, NORMAL_READ);
@@ -1137,10 +1152,18 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 						//reset interrupts on CTL interface
 				//		kern_reg = 0xFFFFFFFF;
+						axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
 						*(mod_desc->kernel_reg_write) = 0xFFFFFFFF;
 						ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
+						printk(KERN_INFO"<axi_fifo_isr_reg>: Reset the interrupts on the axi fifo\n");
 
-						/*Set IER Register for interrupt on read*/
+						//Read CTL interface
+						axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
+				//		ret = data_transfer(axi_dest, (void *)&kern_reg, 4, NORMAL_READ);
+						ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, mod_desc->dma_offset_internal_read);
+						printk(KERN_INFO"<axi_fifo_isr_reg>:%x\n", *(mod_desc->kernel_reg_read));
+					
+							/*Set IER Register for interrupt on read*/
 						axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_IER;
 						*(mod_desc->kernel_reg_write) = 0x04000000;
 					//	kern_reg = 0x04000000;
@@ -1229,6 +1252,10 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	int transfer_type;
 	u32 kern_reg;
 	int ret;
+	u32 init_write;
+	u64 dma_offset_write;
+	u64 dma_offset_internal_read;
+	u64 dma_offset_internal_write;
 
 	bytes = 0;
 
@@ -1256,7 +1283,17 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	printk(KERN_INFO"\n\n");	
 	printk(KERN_INFO"<pci_write>: ************************************************************************\n");	
 	printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION BEGIN  **************************\n");	
-	printk(KERN_INFO"<pci_write>: ************************************************************************\n");	
+	printk(KERN_INFO"<pci_write>: ************************************************************************\n\n");	
+
+	init_write = *((u32*)(mod_desc->dma_write));
+	dma_offset_write = (u64)mod_desc->dma_offset_write;
+	dma_offset_internal_read = (u64)mod_desc->dma_offset_internal_read;
+	dma_offset_internal_write = (u64)mod_desc->dma_offset_internal_write;
+
+	printk(KERN_INFO"<pci_write>: writing peripheral with starting value: %x\n", init_write);
+	printk(KERN_INFO"<pci_write>: DMA offset write value: %lx\n", dma_offset_write);
+	printk(KERN_INFO"<pci_write>: DMA internal offset write value: %lx\n", dma_offset_internal_write);
+	printk(KERN_INFO"<pci_write>: DMA internal offset read value: %lx\n", dma_offset_internal_read);
 
 	if (*(mod_desc->mode) == AXI_STREAM_FIFO)
 	{
@@ -1271,18 +1308,18 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		/*read TDFD*/
 		axi_dest = mod_desc->axi_addr + AXI_STREAM_TDFD;
 //		ret = data_transfer(axi_dest, kern_buf, count, keyhole_en);
-		ret = data_transfer(axi_dest, 0, count, KEYHOLE_WRITE, mod_desc->dma_offset_write);
+		ret = data_transfer(axi_dest, 0, count, KEYHOLE_WRITE, dma_offset_write);
 		if (ret > 0)
 		{
 			printk(KERN_INFO"<pci_write>: ERROR writing to AXI Streaming FIFO\n");
-			kfree((const void*)kern_buf);
+	//		kfree((const void*)kern_buf);
 			return 0;
 		}
 
 		axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFV;
 //		ret = data_transfer(axi_dest, (void *)&kern_reg, 4, NORMAL_READ);
 //		printk(KERN_INFO"<pci_write>: Transmit Data FIFO Fill Level:%x\n", kern_reg);
-		ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, mod_desc->dma_offset_internal_read);
+		ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, dma_offset_internal_read);
 		printk(KERN_INFO"<pci_write>: Transmit Data FIFO Fill Level:%x\n", *(mod_desc->kernel_reg_read));
 	
 		/*write to ctl interface*/
@@ -1291,7 +1328,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 //		kern_reg = (u32)count;
 //		ret = data_transfer(axi_dest, (void*)&kern_reg, 4, NORMAL_WRITE);
 		*(mod_desc->kernel_reg_write) = (u32)count;
-		ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
+		ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, dma_offset_internal_write);
 		if (ret > 0)
 		{
 			printk(KERN_INFO"<pci_write>: ERROR writing to AXI Streaming FIFO Control Interface\n");
@@ -1315,7 +1352,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		printk(KERN_INFO"<pci_write>: writing peripheral using a transfer_type: %x\n", transfer_type);
 	
 	//	ret = data_transfer(axi_dest, kern_buf, count, transfer_type);
-		ret = data_transfer(axi_dest, 0, count, transfer_type, mod_desc->dma_offset_write);
+		ret = data_transfer(axi_dest, 0, count, transfer_type, dma_offset_write);
 		if (ret > 0)
 		{
 			printk(KERN_INFO"<pci_write>: ERROR writing to User Peripheral\n");
@@ -1349,6 +1386,10 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	void * read_buf = NULL;
 	int ret;
 	u32 read_bytes;
+	u64 dma_offset_write;
+	u64 dma_offset_read;
+	u64 dma_offset_internal_read;
+	u64 dma_offset_internal_write;
 
 	mod_desc = filep->private_data;
 
@@ -1363,6 +1404,11 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 //		printk(KERN_INFO"<pci_read>: ERROR Initializing kmalloc\n");
 //		return 0;
 //	}
+
+	dma_offset_write = (u64)mod_desc->dma_offset_write;
+	dma_offset_read = (u64)mod_desc->dma_offset_read;
+	dma_offset_internal_read = (u64)mod_desc->dma_offset_internal_read;
+	dma_offset_internal_write = (u64)mod_desc->dma_offset_internal_write;
 
 	switch(*(mod_desc->mode)){
 
@@ -1386,7 +1432,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	//		kern_reg = 0xFFFFFFFF;
 	//		ret = data_transfer(axi_dest, (void *)&kern_reg, 4, NORMAL_WRITE);
 			*(mod_desc->kernel_reg_write) = 0xFFFFFFFF;
-			ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
+			ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, dma_offset_internal_write);
 			if (ret > 0)
 			{
 				printk(KERN_INFO"<axi_stream_fifo_read>: ERROR writing to reset interrupts on AXI Stream FIFO\n");
@@ -1401,7 +1447,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			/*Read FIFO Fill level*/
 			axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RLR;
 		//	ret = data_transfer(axi_dest, (void *)&kern_reg, 4, NORMAL_READ);
-			ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, mod_desc->dma_offset_internal_read);
+			ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, dma_offset_internal_read);
 			if (ret > 0)
 			{
 				printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Read FIFO fill level\n");
@@ -1442,7 +1488,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			printk(KERN_INFO"<axi_stream_fifo_read> AXI Address of FIFO:%lx\n", mod_desc->axi_addr);
 		
 	//		ret = data_transfer(axi_dest, read_buf, count, keyhole_en);
-			ret = data_transfer(axi_dest, 0, count, keyhole_en, mod_desc->dma_offset_read);
+			ret = data_transfer(axi_dest, 0, count, keyhole_en, dma_offset_read);
 			if (ret > 0)
 			{
 				printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Data from Read FIFO\n");
@@ -1473,7 +1519,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			printk(KERN_INFO"<user_peripheral_read>: reading peripheral using a transfer_type: %x\n", transfer_type);
 
 	//		ret = data_transfer(axi_dest, read_buf, count, transfer_type);
-			ret = data_transfer(axi_dest, 0, count, transfer_type, mod_desc->dma_offset_read);
+			ret = data_transfer(axi_dest, 0, count, transfer_type, dma_offset_read);
 			if (ret > 0)
 			{
 				printk(KERN_INFO"<user_peripheral_read>: ERROR reading data from User Peripheral\n");
@@ -1705,7 +1751,7 @@ void cdma_init(int cdma_num)
 		else
 		{
 			zero_buf_set[cdma_num] = 1;
-			printk(KERN_INFO"<cdma_%x_init>: dma address is:%x\n", cdma_num, (u32)dma_addr[cdma_num]);
+			printk(KERN_INFO"<cdma_%x_init>: dma address is:%llx\n", cdma_num, (u64)dma_addr[cdma_num]);
 		}
 
 	}
@@ -1838,7 +1884,7 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 		if ((transfer_type == NORMAL_READ) | (transfer_type == KEYHOLE_READ))
 		{
 			status = cdma_transfer(axi_address, dma_axi_address, (u32)count, transfer_type, cdma_num);
-			if (status == 0)   //successful CDMA transmission
+			if (status != 0)   //unsuccessful CDMA transmission
 				printk(KERN_INFO"ERROR on CDMA READ!!!.\n");
 	//			memcpy(buf, (const void*)dma_p, count);
 

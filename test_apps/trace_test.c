@@ -63,6 +63,7 @@ unsigned int SET_MODE = 62;
 unsigned int SET_INTERRUPT = 61;
 unsigned int SET_AXI_CTL_DEVICE = 63;
 unsigned int SET_DMA_SIZE = 64;
+unsigned int RESET_DMA_ALLOC = 65;
 
 
 /*these are the register offsets of the AXI-Stream FIFO*/
@@ -196,7 +197,14 @@ int main()
 		return -1;
 	}
 	printf("set peripheral to axi base address %x\n", trace_read_axi_addr);
-
+	
+	/* Reset DMA allocation*/
+	if(ioctl(hls_read, RESET_DMA_ALLOC, 0) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("DMA Allocation Reset\n");
+	
 	/* set DMA sizes*/
 	if(ioctl(hls_read, SET_DMA_SIZE, &dma_size) < 0) {
 		printf("ERROR doing ioctl\n");
@@ -211,6 +219,12 @@ int main()
 	printf("set axi fifo to dma_size: %d\n", dma_size);
 
 	if(ioctl(trace_read, SET_DMA_SIZE, &dma_size) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set axi fifo to dma_size: %d\n", dma_size);
+
+	if(ioctl(trace_control, SET_DMA_SIZE, &dma_size) < 0) {
 		printf("ERROR doing ioctl\n");
 		return -1;
 	}
@@ -237,7 +251,6 @@ int main()
 	}
 	printf("set axi fifo to mode: %d\n", hls_fifo_mode);
 
-return 0;
 	/****** Set the mode of hls_read to be "Slave with interrupt" ***********/
 	unsigned int interrupt_vector = 0x20;  /*2^5 - NOTE - THIS IS POWER OF 2!!!*/
 	ioctl(hls_read, SET_INTERRUPT, &interrupt_vector); 
@@ -248,15 +261,12 @@ return 0;
 	ioctl(trace_read, SET_INTERRUPT, &interrupt_vector); 
 	printf("set peripheral as slave with interrupt at vector:%x\n", interrupt_vector);
 
-
 	/*initialize the trace module counter*/
 	unsigned int activate = 1;
 	int ret_val;
 	ret_val = write(trace_control, &activate, sizeof(activate));   
 	if (ret_val == 0)
 		printf("WRITE ERROR\n");
-
-
 /********************************* BRAM TEST  ********************************************/
 int p=0;
 while(p<63)
@@ -325,13 +335,13 @@ while(p<63)
 
 	/*******Send data to the TX FIFO (front end) **********/
 
-	while(1)
-	{
+//	while(1)
+//	{
 	ret_val = write(hls_write, in, sizeof(in));   
 	if (ret_val == 0)
 		printf("WRITE ERROR\n");
-	usleep(1000);
-	}
+//	usleep(1000);
+//	}
 
 	printf("TX FIFO: Transmitted data\n");
 	//Should have written.... wait for RX FIFO interrupt.
@@ -346,11 +356,13 @@ while(p<63)
 	
 
 	/*Close files*/	
-	close(bram);
+	//close(bram);
 
 	close(hls_write);
 
 	close(hls_read);
+	close(trace_read);
+	close(trace_control);
 
 	printf("closed files\n");
 
@@ -381,8 +393,8 @@ void *rxfifo_read(void *read_buf)
 	 * to this device*/
 	printf("just before poll().....\n");
 
-	while(1)
-	{
+//	while(1)
+//	{
 	result = poll(&pollfds, 1, timeout);
 	switch (result) {
 		case 0: 
@@ -401,31 +413,29 @@ void *rxfifo_read(void *read_buf)
 			return_val = read(hls_read, (void*)buff, (sizeof(buff)));  
 			if (return_val == 0)
 				printf("READ ERROR DATA\n");
-			
-//			printf("Number of bytes read:%x\n", return_val);
+			else
+			{		
+				printf("Number of bytes read:%x\n", return_val);
 
-//			for(i=0;i<(return_val/4);i++)
-//			{
-//				printf("value read: %x\n", buff[i]);
-//			}
-	
+				for(i=0;i<(return_val/4);i++)
+				{
+					printf("value read: %x\n", buff[i]);
+				}
+			}
 			/*Read the trace module FIFO*/
 
-			return_val = 256;
-			while (return_val == 256)
-			{
-			return_val = read(trace_read, (void*)trace_buff, (sizeof(trace_buff)));  
-	//		if (return_val == 0)
-	//			printf("READ ERROR TRACE\n");
+//			return_val = 256;
+//			while (return_val == 256)
+//			{
+//			return_val = read(trace_read, (void*)trace_buff, (sizeof(trace_buff)));  
 			
-//			printf("Number of bytes read:%x\n", return_val);
 
-			for(i=0;i<(return_val/8);i++)
-			{
-				printf("trace value read: %lx\n", trace_buff[i]);
-			}
-			}
-	}
+//			for(i=0;i<(return_val/8);i++)
+//			{
+//				printf("trace value read: %lx\n", trace_buff[i]);
+//			}
+//			}
+//	}
 	}
 	return NULL;
 }
