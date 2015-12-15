@@ -343,7 +343,7 @@ while(p<63)
 		printf("WRITE ERROR\n");
 		break;
 	}
-	usleep(1000);
+//	usleep(100);
 	}
 
 	return 0;
@@ -432,17 +432,17 @@ void *rxfifo_read(void *read_buf)
 			}
 			/*Read the trace module FIFO*/
 
-//			return_val = 256;
-//			while (return_val == 256)
-//			{
-//			return_val = read(trace_read, (void*)trace_buff, (sizeof(trace_buff)));  
+			return_val = 256;
+			while (return_val == 256)
+			{
+			return_val = read(trace_read, (void*)trace_buff, (sizeof(trace_buff)));  
 			
 
-//			for(i=0;i<(return_val/8);i++)
-//			{
-//				printf("trace value read: %lx\n", trace_buff[i]);
-//			}
-//			}
+		//	for(i=0;i<(return_val/8);i++)
+		//	{
+		//		printf("trace value read: %lx\n", trace_buff[i]);
+		//	}
+			}
 	}
 	}
 	return NULL;

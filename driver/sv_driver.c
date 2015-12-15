@@ -11,7 +11,7 @@
  *                a PCIe Device Driver or as a Platform Device
  *                Driver depending on the input parameter.
 ************************************************************/
-
+#define printk(...)
 
 
 #include <linux/kernel.h>
@@ -76,7 +76,6 @@
 
 #define PCI 1
 #define PLATFORM 2
-
 
 /***********Set default values for insmod parameters***************************/
 static int device_id = 100;
@@ -1302,6 +1301,25 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		/*This is the function to move data from user space to kernel space*/
 		//		copy_from_user(zero_copy_buf, buf, count);
 
+	
+		axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFV;
+//		ret = data_transfer(axi_dest, (void *)&kern_reg, 4, NORMAL_READ);
+//		printk(KERN_INFO"<pci_write>: Transmit Data FIFO Fill Level:%x\n", kern_reg);
+		*(mod_desc->kernel_reg_read) = 0x0;   //set to zero
+		while (*(mod_desc->kernel_reg_read) != 0x01fc)  //1fe is an empty 512 depth fifo
+		{
+			ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, dma_offset_internal_read);
+			if (ret > 0)
+			{
+				printk(KERN_INFO"<pci_write>: ERROR reading from AXI Streaming FIFO control interface\n");
+	//			kfree((const void*)kern_buf);
+				return 0;
+			}
+			printk(KERN_INFO"										<pci_write>: Transmit Data FIFO Fill Level:%x\n", *(mod_desc->kernel_reg_read));
+			if (*(mod_desc->kernel_reg_read) != 0x01fc)
+				msleep(1);
+		}
+	
 		/*Set keyhole*/
 		keyhole_en = KEYHOLE_WRITE;
 
@@ -1316,18 +1334,6 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			return 0;
 		}
 
-		axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFV;
-//		ret = data_transfer(axi_dest, (void *)&kern_reg, 4, NORMAL_READ);
-//		printk(KERN_INFO"<pci_write>: Transmit Data FIFO Fill Level:%x\n", kern_reg);
-		ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, dma_offset_internal_read);
-		if (ret > 0)
-		{
-			printk(KERN_INFO"<pci_write>: ERROR reading from AXI Streaming FIFO control interface\n");
-	//		kfree((const void*)kern_buf);
-			return 0;
-		}
-		printk(KERN_INFO"<pci_write>: Transmit Data FIFO Fill Level:%x\n", *(mod_desc->kernel_reg_read));
-	
 		/*write to ctl interface*/
 		axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TLR;
 
