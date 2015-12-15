@@ -1885,7 +1885,7 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 	//	dma_axi_address = axi_pcie_m[cdma_num];
 	//	dma_p = zero_copy_buf[cdma_num];
 
-		dma_axi_address = axi_pcie_m[0] + dma_off;  //the AXI address written to the CDMA
+		dma_axi_address = axi_pcie_m[cdma_num] + dma_off;  //the AXI address written to the CDMA
 	
 		if ((transfer_type == NORMAL_READ) | (transfer_type == KEYHOLE_READ))
 		{

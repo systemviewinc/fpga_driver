@@ -343,7 +343,7 @@ while(p<63)
 		printf("WRITE ERROR\n");
 		break;
 	}
-	usleep(5000);
+	usleep(1000);
 	}
 
 	return 0;
@@ -384,7 +384,7 @@ void *rxfifo_read(void *read_buf)
 	int timeout = 100;    //in ms
 	int result;
 	unsigned int buff2[1];
-	unsigned int buff[256];  //50 32b data words
+	unsigned int buff[512];  //50 32b data words
 	unsigned long trace_buff[256];
 	int i;
 
@@ -417,7 +417,7 @@ void *rxfifo_read(void *read_buf)
 			/* Read from peripheral */
 
 		//	sleep(1);
-			usleep(2000);
+		//	usleep(2000);
 			return_val = read(hls_read, (void*)buff, (sizeof(buff)));  
 			if (return_val == 0)
 				printf("READ ERROR DATA\n");
