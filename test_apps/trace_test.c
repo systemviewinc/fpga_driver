@@ -206,29 +206,29 @@ int main()
 	printf("DMA Allocation Reset\n");
 	
 	/* set DMA sizes*/
-	if(ioctl(hls_read, SET_DMA_SIZE, &dma_size) < 0) {
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	printf("set axi fifo to dma_size: %d\n", dma_size);
+//	if(ioctl(hls_read, SET_DMA_SIZE, &dma_size) < 0) {
+//		printf("ERROR doing ioctl\n");
+//		return -1;
+//	}
+//	printf("set axi fifo to dma_size: %d\n", dma_size);
 
-	if(ioctl(hls_write, SET_DMA_SIZE, &dma_size) < 0) {
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	printf("set axi fifo to dma_size: %d\n", dma_size);
+//	if(ioctl(hls_write, SET_DMA_SIZE, &dma_size) < 0) {
+//		printf("ERROR doing ioctl\n");
+//		return -1;
+//	}
+//	printf("set axi fifo to dma_size: %d\n", dma_size);
 
-	if(ioctl(trace_read, SET_DMA_SIZE, &dma_size) < 0) {
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	printf("set axi fifo to dma_size: %d\n", dma_size);
+//	if(ioctl(trace_read, SET_DMA_SIZE, &dma_size) < 0) {
+//		printf("ERROR doing ioctl\n");
+//		return -1;
+//	}
+//	printf("set axi fifo to dma_size: %d\n", dma_size);
 
-	if(ioctl(trace_control, SET_DMA_SIZE, &dma_size) < 0) {
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	printf("set axi fifo to dma_size: %d\n", dma_size);
+//	if(ioctl(trace_control, SET_DMA_SIZE, &dma_size) < 0) {
+//		printf("ERROR doing ioctl\n");
+//		return -1;
+//	}
+//	printf("set axi fifo to dma_size: %d\n", dma_size);
 
 	/* set mode of AXI_FIFO*/
 	if(ioctl(hls_read, SET_MODE, &hls_fifo_mode) < 0) {
@@ -338,7 +338,7 @@ while(p<63)
 	while(1)
 	{
 	ret_val = write(hls_write, in, sizeof(in));   
-	if (ret_val == 0)
+	if (ret_val == -1)
 	{
 		printf("WRITE ERROR\n");
 		break;
@@ -419,9 +419,12 @@ void *rxfifo_read(void *read_buf)
 		//	sleep(1);
 		//	usleep(2000);
 			return_val = read(hls_read, (void*)buff, (sizeof(buff)));  
-			if (return_val == 0)
+			if (return_val == -1)
+			{
 				printf("READ ERROR DATA\n");
-			else
+				break;
+			}
+			else if (return_val > 0)
 			{		
 				printf("Number of bytes read:%x\n", return_val);
 

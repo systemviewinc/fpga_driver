@@ -11,8 +11,6 @@
  *                a PCIe Device Driver or as a Platform Device
  *                Driver depending on the input parameter.
 ************************************************************/
-#define printk(...)
-
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -82,12 +80,13 @@ static int device_id = 100;
 static int major = 241;
 static int cdma_address = 0xFFFFFFFF;
 static int cdma_address_2 = 0xFFFFFFFF;
-//static bool enable_cdma_2 = false;
+static bool enable_cdma_2 = 0;
 static int pcie_ctl_address = 0xFFFFFFFF;
 static int pcie_m_address = 0xFFFFFFFF;
-static int pcie_m_address_2 = 0xFFFFFFFF;
 static int int_ctlr_address = 0xFFFFFFFF;
 static int driver_type = PCI;
+static int dma_system_size = 1048576;
+static int dma_file_size = 4096;
 
 module_param(device_id, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(device_id, "DeviceID");
@@ -95,8 +94,8 @@ MODULE_PARM_DESC(device_id, "DeviceID");
 module_param(major, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(major, "MajorNumber");
 
-//module_param(enable_cdma_2, bool, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-//MODULE_PARM_DESC(enable_cdma_2, "EnableCDMA2");
+module_param(enable_cdma_2, bool, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(enable_cdma_2, "EnableCDMA2");
 
 module_param(cdma_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(cdma_address, "CDMAAddress");
@@ -110,14 +109,20 @@ MODULE_PARM_DESC(pcie_ctl_address, "PCIeCTLAddress");
 module_param(pcie_m_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(pcie_m_address, "PCIeMAddress");
 
-module_param(pcie_m_address_2, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-MODULE_PARM_DESC(pcie_m_address_2, "PCIeMAddress2");
+//module_param(pcie_m_address_2, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+//MODULE_PARM_DESC(pcie_m_address_2, "PCIeMAddress2");
 
 module_param(int_ctlr_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(int_ctlr_address, "IntCtlrAddress");
 
 module_param(driver_type, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(driver_type, "DriverType");
+
+module_param(dma_system_size, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(dma_system_size, "DMASystemSize");
+
+module_param(dma_file_size, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(dma_file_size, "DMAFileSize");
 /*****************************************************************************/
 
 const char pci_devName[] = "pci_skel"; //name of the device
@@ -143,7 +148,7 @@ u64 axi_cdma;
 u64 axi_cdma_2;
 u64 axi_pcie_ctl;
 u64 axi_interr_ctrl;
-u64 axi_pcie_m[5];
+u64 axi_pcie_m;
 
 //u32 axi_dev0;                 // base address of axi slave mapped to minor 0
 //u32 axi_dev1;                 // base address of axi slave mapped to minor 1
@@ -151,7 +156,7 @@ u64 axi_pcie_m[5];
 u8 cdma_set[5];
 u8 pcie_ctl_set;
 static u8 zero_buf_set[5];
-u8 pcie_m_set[5];
+u8 pcie_m_set;
 u8 int_ctrl_set;
 void * zero_copy_buf[5];
 int cdma_status;
@@ -302,6 +307,7 @@ void cdma_init(int cdma_num);
 void pcie_ctl_init(u64 axi_address);
 void pcie_m_init(int cdma_num);
 void int_ctlr_init(u64 axi_address);
+void dma_file_init(struct mod_desc *mod_desc);
 /* ****************************************************************** */
 
 static struct pci_device_id ids[] = {
@@ -482,8 +488,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	cdma_set[0] = 0;
 	cdma_set[1] = 0;
 	pcie_ctl_set = 0;
-	pcie_m_set[0] = 0;
-	pcie_m_set[1] = 0;
+	pcie_m_set = 0;
 	int_ctrl_set = 0;
 
 	if (cdma_address != 0xFFFFFFFF)
@@ -491,7 +496,8 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 		cdma_init(1);  //cdma_num = 1
 	}
 
-	if (cdma_address_2 != 0xFFFFFFFF)
+//	if (cdma_address_2 != 0xFFFFFFFF)
+	if (enable_cdma_2 != 0)
 	{
 		cdma_init(2);  //cdma_num = 2
 	}
@@ -506,17 +512,17 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 		pcie_m_init(1);
 	}
 
-	if (pcie_m_address_2 != 0xFFFFFFFF)
-	{
-		pcie_m_init(2);
-	}
+//	if (pcie_m_address_2 != 0xFFFFFFFF)
+//	{
+//		pcie_m_init(2);
+//	}
 
 	if (int_ctlr_address != 0xFFFFFFFF)
 	{
 		int_ctlr_init((u64)int_ctlr_address);
 	}
 
-	cdma_capable = (cdma_set[1] == 1) & (pcie_m_set[1] == 1) & (int_ctrl_set == 1) & (pcie_ctl_set == 1);
+	cdma_capable = (cdma_set[1] == 1) & (pcie_m_set == 1) & (int_ctrl_set == 1) & (pcie_ctl_set == 1);
 	printk(KERN_INFO"<probe> cdma_capable = %x\n", cdma_capable);
 
 	/*Since we isolated the AXI bus, this is the new offest for the slave interface of the PCIe*/
@@ -612,15 +618,15 @@ static int sv_plat_probe(struct platform_device *pdev)
 	cdma_set[1] = 0;
 	cdma_set[2] = 0;
 	pcie_ctl_set = 0;
-	pcie_m_set[1] = 0; 
-	pcie_m_set[2] = 0; 
+	pcie_m_set = 0; 
 
 	if (cdma_address != 0xFFFFFFFF)
 	{
 		cdma_init(1);
 	}
 
-	if (cdma_address_2 != 0xFFFFFFFF)
+//	if (cdma_address_2 != 0xFFFFFFFF)
+	if (enable_cdma_2 != 0)
 	{
 		cdma_init(2);
 	}
@@ -630,10 +636,10 @@ static int sv_plat_probe(struct platform_device *pdev)
 		pcie_m_init(1);
 	}
 
-	if (pcie_m_address_2 != 0xFFFFFFFF)
-	{
-		pcie_m_init(2);
-	}
+//	if (pcie_m_address_2 != 0xFFFFFFFF)
+//	{
+//		pcie_m_init(2);
+//	}
 
 	if (int_ctlr_address != 0xFFFFFFFF)
 	{
@@ -647,10 +653,10 @@ static int sv_plat_probe(struct platform_device *pdev)
 //	axi_pcie_m[1] = axi_pcie_m[1] + (u64)dma_addr[1];   //cdma 1
 //	axi_pcie_m[2] = axi_pcie_m[2] + (u64)dma_addr[2];   //cdma 2
 
-	axi_pcie_m[1] = axi_pcie_m[1] + (u64)dma_addr_base;   //cdma 1
-	axi_pcie_m[2] = axi_pcie_m[2] + (u64)dma_addr_base;   //cdma 2
+	axi_pcie_m = axi_pcie_m + (u64)dma_addr_base;   //cdma 1
+//	axi_pcie_m[2] = axi_pcie_m[2] + (u64)dma_addr_base;   //cdma 2
 
-	cdma_capable = (cdma_set[1] == 1) & (pcie_m_set[1] == 1) & (int_ctrl_set == 1);
+	cdma_capable = (cdma_set[1] == 1) & (pcie_m_set == 1) & (int_ctrl_set == 1);
 
 	printk(KERN_INFO"<probe>***********************PROBE FINISHED SUCCESSFULLY**************************************\n");
 	return 0;
@@ -725,6 +731,8 @@ static struct pci_driver pci_driver = {
 
 static int __init sv_driver_init(void)
 {
+
+	dma_buffer_size = (u64)dma_system_size;
 	
 	switch(driver_type){
 		case PCI:
@@ -929,6 +937,9 @@ int pci_open(struct inode *inode, struct file *filep)
 	/*set the private data field of the file pointer for file op use*/
 	filep->private_data = s;   
 
+	/*initialize the DMA for the file*/
+	dma_file_init(s);
+	printk(KERN_INFO"<pci_open>: file open complete.\n");
 
 	return SUCCESS;
 }
@@ -1313,7 +1324,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			{
 				printk(KERN_INFO"<pci_write>: ERROR reading from AXI Streaming FIFO control interface\n");
 	//			kfree((const void*)kern_buf);
-				return 0;
+				return -1;
 			}
 			printk(KERN_INFO"										<pci_write>: Transmit Data FIFO Fill Level:%x\n", *(mod_desc->kernel_reg_read));
 			if (*(mod_desc->kernel_reg_read) != 0x01fc)
@@ -1331,7 +1342,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		{
 			printk(KERN_INFO"<pci_write>: ERROR writing to AXI Streaming FIFO\n");
 	//		kfree((const void*)kern_buf);
-			return 0;
+			return -1;
 		}
 
 		/*write to ctl interface*/
@@ -1345,7 +1356,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		{
 			printk(KERN_INFO"<pci_write>: ERROR writing to AXI Streaming FIFO Control Interface\n");
 //			kfree((const void*)kern_buf);
-			return 0;
+			return -1;
 		}
 		
 		bytes = count;
@@ -1369,7 +1380,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		{
 			printk(KERN_INFO"<pci_write>: ERROR writing to User Peripheral\n");
 //			kfree((const void*)kern_buf);
-			return 0;
+			return -1;
 		}
 
 		bytes = count;
@@ -1449,7 +1460,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			{
 				printk(KERN_INFO"<axi_stream_fifo_read>: ERROR writing to reset interrupts on AXI Stream FIFO\n");
 			//	kfree((const void*)read_buf);
-				return 0;
+				return -1;
 			}
 
 			/*ISR Read for Debug*/
@@ -1464,7 +1475,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			{
 				printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Read FIFO fill level\n");
 			//	kfree((const void*)read_buf);
-				return 0;
+				return -1;
 			}
 
 			/*we are masking off the 32nd bit because the FIFO is in cut through mode
@@ -1505,7 +1516,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			{
 				printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Data from Read FIFO\n");
 	//			kfree((const void*)read_buf);
-				return 0;
+				return -1;
 			}
 
 			//Transfer buffer from kernel space to user space at the allocated DMA region
@@ -1536,7 +1547,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			{
 				printk(KERN_INFO"<user_peripheral_read>: ERROR reading data from User Peripheral\n");
 			//	kfree((const void*)read_buf);
-				return 0;
+				return -1;
 			}
 
 			//				copy_to_user(buf, read_buf, count);
@@ -1570,6 +1581,34 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	return bytes;
 }
 /******************************** Support functions ***************************************/
+void dma_file_init(struct mod_desc *mod_desc)
+{
+
+	printk(KERN_INFO"<dma_file_init>: Setting Peripheral DMA size:%lx\n", dma_file_size);
+	//mod_desc->dma_size = arg_loc;
+	if (((u64)dma_current_offset + dma_file_size) > (u64)((char*)dma_buffer_base + dma_buffer_size))
+	{
+		printk(KERN_INFO"<dma_file_init>: ERROR! DMA Buffer out of memory!\n");
+		return ERROR;
+	}
+	else
+	{
+	//	mod_desc->dma_size = arg_loc;
+		printk(KERN_INFO"<dma_file_init>: The current system memory dma offset:%x\n", dma_current_offset);
+		mod_desc->dma_offset_read = dma_current_offset;            //set the dma start address for the peripheral read
+		mod_desc->dma_offset_write = dma_current_offset + (u32)dma_file_size; //set the dma start address for the peripheral write
+		mod_desc->dma_write = (void*)((char*)dma_buffer_base + (u64)dma_current_offset + dma_file_size);            //actual pointer to kernel buffer
+		printk(KERN_INFO"<dma_file_init>: DMA kernel write address set to:%lx\n", (u64)mod_desc->dma_write);
+		mod_desc->dma_read = (void*)((char*)dma_buffer_base + (u64)dma_current_offset);            //actual pointer to kernel buffer
+		
+		dma_current_offset = dma_current_offset + (u32)(2*dma_file_size);            //update the current dma allocation pointer, 2 buffers (R/W)
+		printk(KERN_INFO"<dma_file_init>: Success setting peripheral DMA\n");
+	}
+}
+
+
+
+
 void int_ctlr_init(u64 axi_address)
 {
 	u32 status;
@@ -1605,17 +1644,17 @@ void int_ctlr_init(u64 axi_address)
 void pcie_m_init(cdma_num)
 {
 	printk(KERN_INFO"<pcie_m_init>: Setting PCIe Master Axi Address\n");
-	switch(cdma_num)
-	{
-		case 1:
-			axi_pcie_m[1] = pcie_m_address;
-			break;
-		case 2:
-			axi_pcie_m[2] = pcie_m_address_2;
-			break;
-		default:printk(KERN_INFO"<pcie_m_init>:	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
-	}
-	pcie_m_set[cdma_num] = 1;
+//	switch(cdma_num)
+//	{
+//		case 1:
+			axi_pcie_m = pcie_m_address;
+//			break;
+//		case 2:
+//			axi_pcie_m[2] = pcie_m_address_2;
+//			break;
+//		default:printk(KERN_INFO"<pcie_m_init>:	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
+//	}
+	pcie_m_set = (u8)1;
 }
 
 void pcie_ctl_init(u64 axi_address)
@@ -1891,7 +1930,7 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 	//	dma_axi_address = axi_pcie_m[cdma_num];
 	//	dma_p = zero_copy_buf[cdma_num];
 
-		dma_axi_address = axi_pcie_m[cdma_num] + dma_off;  //the AXI address written to the CDMA
+		dma_axi_address = axi_pcie_m + dma_off;  //the AXI address written to the CDMA
 	
 		if ((transfer_type == NORMAL_READ) | (transfer_type == KEYHOLE_READ))
 		{
