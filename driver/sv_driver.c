@@ -1320,6 +1320,12 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 //		ret = data_transfer(axi_dest, (void *)&kern_reg, 4, NORMAL_READ);
 //		printk(KERN_INFO"<pci_write>: Transmit Data FIFO Fill Level:%x\n", kern_reg);
 		ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, dma_offset_internal_read);
+		if (ret > 0)
+		{
+			printk(KERN_INFO"<pci_write>: ERROR reading from AXI Streaming FIFO control interface\n");
+	//		kfree((const void*)kern_buf);
+			return 0;
+		}
 		printk(KERN_INFO"<pci_write>: Transmit Data FIFO Fill Level:%x\n", *(mod_desc->kernel_reg_read));
 	
 		/*write to ctl interface*/
@@ -1904,10 +1910,12 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 		switch(cdma_num)
 		{
 			case 1:
+				printk(KERN_INFO"												<data_transfer>: Releasing Mutex on CDMA 1\n");
 				mutex_unlock(&CDMA_sem);
 				break;
 
 			case 2:
+				printk(KERN_INFO"												<data_transfer>: Releasing Mutex on CDMA 2\n");
 				mutex_unlock(&CDMA_sem_2);
 				break;
 			default : printk(KERN_INFO"<data_transfer>: ERROR: unknown cdma number detected.\n");
@@ -2039,7 +2047,7 @@ int cdma_query(void)
 				printk(KERN_INFO"User interrupted while waiting for CDMA semaphore.\n");
 				return -ERESTARTSYS;
 			}
-			printk(KERN_INFO"	<cdma_transfer>: CDMA Resource 2 is now locked!\n");
+			printk(KERN_INFO"										<cdma_transfer>: CDMA Resource 2 is now locked!\n");
 			return 2;
 		}	
 	}
@@ -2051,7 +2059,7 @@ int cdma_query(void)
 			return -ERESTARTSYS;
 		}
 
-		printk(KERN_INFO"	<cdma_transfer>: CDMA Resource 1 is now locked!\n");
+		printk(KERN_INFO"											<cdma_transfer>: CDMA Resource 1 is now locked!\n");
 		return 1;
 	}
 
@@ -2282,7 +2290,41 @@ int cdma_ack(cdma_num)
 //		data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE);
 		
 		axi_dest = axi_cdma_loc;
-		cdma_init(axi_dest);
+	//	cdma_init(cdma_num);
+	
+	/*Issue a Soft Reset*/
+	axi_dest = axi_cdma_loc + CDMA_CR;
+	cdma_status = 0x00000004;
+	printk(KERN_INFO"<cdma_%x_init>: sending a soft reset to the CDMA\n", cdma_num);
+	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE, 0);
+	/*Check the current status*/
+	axi_dest = axi_cdma_loc + CDMA_SR;
+	//			direct_read(axi_dest, (void*)&cdma_status, 4, NORMAL_READ);
+	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0);
+	printk(KERN_INFO"<cdma_%x_init>: CDMA status before configuring:%x\n", cdma_num, cdma_status);	
+	/*Check the current config*/
+	axi_dest = axi_cdma_loc + CDMA_CR;
+	//			direct_read(axi_dest, (void*)&cdma_status, 4, NORMAL_READ);
+	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0);
+	printk(KERN_INFO"<cdma_%x_init>: CDMA config before configuring:%x\n", cdma_num, cdma_status);	
+	/*clear any pre existing interrupt*/
+	axi_dest = axi_cdma_loc + CDMA_SR;
+	cdma_status = 0x00001000;
+	printk(KERN_INFO"<cdma_%x_init>: attempting to write:%x to cdma status reg\n", cdma_num, cdma_status);
+	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE, 0);
+
+	cdma_status = 0x00001000;
+	axi_dest = axi_cdma_loc + CDMA_CR;
+	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE, 0);
+
+	/*Check the current status*/
+	axi_dest = axi_cdma_loc + CDMA_SR;
+	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0);
+	printk(KERN_INFO"<cdma_%x_init>: CDMA status after configuring:%x\n", cdma_num, cdma_status);	
+	/*Check the current config*/
+	axi_dest = axi_cdma_loc + CDMA_CR;
+	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0);
+	printk(KERN_INFO"<cdma_%x_init>: CDMA config after configuring:%x\n", cdma_num, cdma_status);	
 		
 		return status;
 	}

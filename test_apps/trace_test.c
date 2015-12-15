@@ -335,13 +335,18 @@ while(p<63)
 
 	/*******Send data to the TX FIFO (front end) **********/
 
-//	while(1)
-//	{
+	while(1)
+	{
 	ret_val = write(hls_write, in, sizeof(in));   
 	if (ret_val == 0)
+	{
 		printf("WRITE ERROR\n");
-//	usleep(1000);
-//	}
+		break;
+	}
+	usleep(5000);
+	}
+
+	return 0;
 
 	printf("TX FIFO: Transmitted data\n");
 	//Should have written.... wait for RX FIFO interrupt.
@@ -379,7 +384,7 @@ void *rxfifo_read(void *read_buf)
 	int timeout = 100;    //in ms
 	int result;
 	unsigned int buff2[1];
-	unsigned int buff[64];  //50 32b data words
+	unsigned int buff[256];  //50 32b data words
 	unsigned long trace_buff[256];
 	int i;
 
@@ -393,12 +398,13 @@ void *rxfifo_read(void *read_buf)
 	 * to this device*/
 	printf("just before poll().....\n");
 
-//	while(1)
-//	{
+	while(1)
+	{
 	result = poll(&pollfds, 1, timeout);
 	switch (result) {
 		case 0: 
 			printf ("timeout occured, no interrupt detected\n");
+			sleep(1);
 		break;
 
 		case -1:
@@ -410,6 +416,8 @@ void *rxfifo_read(void *read_buf)
 		
 			/* Read from peripheral */
 
+		//	sleep(1);
+			usleep(2000);
 			return_val = read(hls_read, (void*)buff, (sizeof(buff)));  
 			if (return_val == 0)
 				printf("READ ERROR DATA\n");
@@ -417,10 +425,10 @@ void *rxfifo_read(void *read_buf)
 			{		
 				printf("Number of bytes read:%x\n", return_val);
 
-				for(i=0;i<(return_val/4);i++)
-				{
-					printf("value read: %x\n", buff[i]);
-				}
+	//			for(i=0;i<(return_val/4);i++)
+	//			{
+	//				printf("value read: %x\n", buff[i]);
+	//			}
 			}
 			/*Read the trace module FIFO*/
 
@@ -435,7 +443,7 @@ void *rxfifo_read(void *read_buf)
 //				printf("trace value read: %lx\n", trace_buff[i]);
 //			}
 //			}
-//	}
+	}
 	}
 	return NULL;
 }
