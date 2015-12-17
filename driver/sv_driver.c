@@ -1569,27 +1569,27 @@ void pcie_ctl_init(u64 axi_address)
 			printk(KERN_INFO"<pci_ioctl_cdma_set>:!!!!!!!!!!! PCIe CTL register FAILURE !!!!!!!!!!!!!!!:%x\n", status);
 	}
 
-	if(cdma_set[2] == 1)
-	{
-		/*convert to u32 to send to CDMA*/
-		dma_addr_loc = (u32)dma_addr_base;
-
-		//update pcie_ctl_virt address with register offset
-		axi_dest = axi_pcie_ctl + AXIBAR2PCIEBAR_1L;
-
-		//write DMA addr to PCIe CTL for address translation
-		ret = data_transfer(axi_dest, (void *)(&dma_addr_loc), 4, NORMAL_WRITE, 0);
-		printk(KERN_INFO"<pci_ioctl_cdma_set>: writing dma address ('%x') to pcie_ctl at AXI address:%llx\n", dma_addr_loc, axi_dest);
-
-		//check the pcie-ctl got the translation address
-		ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
-		printk(KERN_INFO"<pci_ioctl_cdma_set>: PCIe CTL register:%x\n", status);
-
-		if (status == dma_addr_loc)
-			printk(KERN_INFO"<pci_ioctl_cdma_set>: PCIe CTL register set SUCCESS:%x\n", status);
-		else
-			printk(KERN_INFO"<pci_ioctl_cdma_set>:!!!!!!!!!!! PCIe CTL register FAILURE !!!!!!!!!!!!!!!:%x\n", status);
-	}
+//	if(cdma_set[2] == 1)
+//	{
+//		/*convert to u32 to send to CDMA*/
+//		dma_addr_loc = (u32)dma_addr_base;
+//
+//		//update pcie_ctl_virt address with register offset
+//		axi_dest = axi_pcie_ctl + AXIBAR2PCIEBAR_0L;
+//
+//		//write DMA addr to PCIe CTL for address translation
+//		ret = data_transfer(axi_dest, (void *)(&dma_addr_loc), 4, NORMAL_WRITE, 0);
+//		printk(KERN_INFO"<pci_ioctl_cdma_set>: writing dma address ('%x') to pcie_ctl at AXI address:%llx\n", dma_addr_loc, axi_dest);
+//
+//		//check the pcie-ctl got the translation address
+//		ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
+//		printk(KERN_INFO"<pci_ioctl_cdma_set>: PCIe CTL register:%x\n", status);
+//
+//		if (status == dma_addr_loc)
+//			printk(KERN_INFO"<pci_ioctl_cdma_set>: PCIe CTL register set SUCCESS:%x\n", status);
+//		else
+//			printk(KERN_INFO"<pci_ioctl_cdma_set>:!!!!!!!!!!! PCIe CTL register FAILURE !!!!!!!!!!!!!!!:%x\n", status);
+//	}
 }
 
 int cdma_init(int cdma_num)

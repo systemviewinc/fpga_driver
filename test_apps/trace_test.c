@@ -385,7 +385,7 @@ void *rxfifo_read(void *read_buf)
 	int result;
 	unsigned int buff2[1];
 	unsigned int buff[512];  //50 32b data words
-	unsigned long trace_buff[256];
+	unsigned long long trace_buff[256];  //long long is 64bit on ARM
 	int i;
 
 	/*initialize pollfds*/
@@ -440,11 +440,12 @@ void *rxfifo_read(void *read_buf)
 			{
 			return_val = read(trace_read, (void*)trace_buff, (sizeof(trace_buff)));  
 			
+			printf("number of TRACE bytes read: %x\n", return_val);
 
-		//	for(i=0;i<(return_val/8);i++)
-		//	{
-		//		printf("trace value read: %lx\n", trace_buff[i]);
-		//	}
+			for(i=0;i<(return_val/8);i++)
+			{
+				printf("trace value read: %llx\n", trace_buff[i]);
+			}
 			}
 	}
 	}

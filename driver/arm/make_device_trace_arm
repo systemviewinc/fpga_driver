@@ -1,4 +1,4 @@
-insmod sv_driver.ko cdma_address="0x40001000" cdma_2_address="0x40002000" device_id="0x7028" int_ctlr_address="0x40000000" pcie_ctl_address="0x40003000" pcie_m_address="0x00000000" enable_cdma_2="1"
+insmod sv_driver.ko cdma_address="0x40001000" cdma_2_address="0x40002000" driver_type=2 device_id="0x7028" int_ctlr_address="0x40000000" pcie_ctl_address="0x40003000" pcie_m_address="0x00000000" enable_cdma_2="1"
 
 rm -rf /dev/vsi_system_vc709_packet_p_arg_2_seq_o
 rm -rf /dev/vsi_system_vc709_packet_p_arg_1_seq_i
