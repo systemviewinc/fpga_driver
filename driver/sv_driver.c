@@ -79,7 +79,7 @@
 static int device_id = 100;
 static int major = 241;
 static int cdma_address = 0xFFFFFFFF;
-static int cdma_address_2 = 0xFFFFFFFF;
+static int cdma_2_address = 0xFFFFFFFF;
 static bool enable_cdma_2 = 0;
 static int pcie_ctl_address = 0xFFFFFFFF;
 static int pcie_m_address = 0xFFFFFFFF;
@@ -100,8 +100,8 @@ MODULE_PARM_DESC(enable_cdma_2, "EnableCDMA2");
 module_param(cdma_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(cdma_address, "CDMAAddress");
 
-module_param(cdma_address_2, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-MODULE_PARM_DESC(cdma_address_2, "CDMAAddress2");
+module_param(cdma_2_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(cdma_2_address, "CDMAAddress2");
 
 module_param(pcie_ctl_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(pcie_ctl_address, "PCIeCTLAddress");
@@ -232,7 +232,7 @@ struct mod_desc
 	int minor;
 	u64 axi_addr;
 	u64 axi_addr_ctl;
-	int * mode;
+	u32 * mode;
 	int * int_count;
 	int int_num;
 	int master_num;
@@ -252,7 +252,7 @@ struct mod_desc
 /*this is the interrupt structure*/
 struct interr_struct
 {
-	int * mode;
+	u32 * mode;
 	int * int_count; 
 };
 
@@ -780,7 +780,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	u32 status;
 	u64 axi_dest;
 	int int_num;
-	int device_mode;
+	u32 device_mode;
 	int ret;
 	u32 vec_serviced;
 
@@ -873,7 +873,7 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->minor = MINOR(inode->i_rdev);
 	s->axi_addr = 0;
 	s->axi_addr_ctl = 0;
-	s->mode = (int*)mode_address;   //defaults as slave only
+	s->mode = (u32*)mode_address;   //defaults as slave only
 	*(s->mode) = 0;
 	s->int_count = (int*)interrupt_count;
 	*(s->int_count) = 0;
@@ -1061,9 +1061,9 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 		case SET_MODE:
 			printk(KERN_INFO"<ioctl_set_mode>: Setting the mode of the peripheral\n");
-			*(mod_desc->mode) = arg_loc;
+			*(mod_desc->mode) = (u32)arg_loc;
 
-			switch(arg_loc){
+			switch((u32)arg_loc){
 
 				case SLAVE:
 					printk(KERN_INFO"<ioctl_set_mode>: Setting the mode of the peripheral to SLAVE\n");
@@ -1611,7 +1611,7 @@ int cdma_init(int cdma_num)
 			mutex_init(&CDMA_sem);
 			break;
 		case 2:
-			axi_cdma_2 = cdma_address_2;
+			axi_cdma_2 = cdma_2_address;
 			axi_cdma_loc = axi_cdma_2;
 			mutex_init(&CDMA_sem_2);
 			break;
@@ -1702,7 +1702,7 @@ int cdma_init(int cdma_num)
 	}
 
 	/*update the interr_dict with interrupt number and mode*/
-	mode = (int*)kmalloc(sizeof(int), GFP_KERNEL);
+	mode = (u32*)kmalloc(sizeof(int), GFP_KERNEL);
 	*mode = CDMA;
 	index = cdma_num - 1;
 	interr_dict[index].mode = mode;
