@@ -1,0 +1,8 @@
+to compile the driver for zynq:
+
+ - run settings.sh  in /opt/xilinx/....
+
+ - git clone the xilinx-linux repo, I have it saved at ~/Desktop/repos/xilinx-linux 
+	- if you have it saved somewhere else, you need to update the Makefile
+
+ - compile using this command: make ARCH=arm CROSS_COMPILE=arm-xilinx-linux-gnueabi-
