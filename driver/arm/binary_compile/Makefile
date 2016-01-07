@@ -1,5 +1,5 @@
-obj-m += sv_driver.o
-sv_driver-y += sv_driver_bin.o
+obj-m += vsi_driver.o
+vsi_driver-y += vsi_driver_bin.o
 
 
 KDIR := ~/Desktop/repos/linux-xlnx/
