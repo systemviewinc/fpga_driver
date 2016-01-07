@@ -54,16 +54,18 @@
 #define ERROR   -1
 #define SUCCESS 0
 
-//MODES
+/* MODE Types */
 #define SLAVE 0 
 #define AXI_STREAM_FIFO 1
 #define MASTER 2
 #define CDMA 3
 
 
-
+#define MAX_NUM_MASTERS 2
+#define MAX_NUM_SLI 4  // Max number of slaves with interrupts
 #define MAX_NUM_INT MAX_NUM_MASTERS + MAX_NUM_SLI
 
+/*These are the Driver types that are matched through insmod parameter "driver_type" */
 #define PCI 1
 #define PLATFORM 2
 
@@ -114,7 +116,7 @@ module_param(dma_file_size, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(dma_file_size, "DMAFileSize");
 /*****************************************************************************/
 
-const char pci_devName[] = "pci_skel"; //name of the device
+const char pci_devName[] = "vsi_driver"; //name of the device
 unsigned long pci_bar_hw_addr;         //hardware base address of the device
 unsigned long pci_bar_size;            //hardware bar memory size
 unsigned long pci_bar_1_addr;         //hardware base address of the device
@@ -133,8 +135,6 @@ u64 peripheral_space_offset = 0x80000000;
 u64 bar_0_axi_offset = 0x40000000;
 u64 peripheral_space_1_offset = 0xC00000000;
 
-//u64 axi_cdma;
-//u64 axi_cdma_2;
 u64 axi_pcie_ctl;
 u64 axi_interr_ctrl;
 u64 axi_pcie_m;
@@ -146,7 +146,7 @@ int cdma_status;
 int cdma_capable = 0;
 unsigned int irq_num;
 
-/*CDMA Semaphore*/
+/*CDMA Semaphores*/
 struct mutex CDMA_sem;
 struct mutex CDMA_sem_2;
 
@@ -162,13 +162,12 @@ void * dma_master_buf[MAX_NUM_MASTERS];
 
 /* *************************************************  */
 
-size_t dma_size;              //this is a global variable to interrupt to recognize
+size_t dma_size;              
 wait_queue_head_t wq;
 wait_queue_head_t wq_periph;
 wait_queue_head_t mutexq;
 int cdma_comp[5];
 int num_int;
-int interrupt_vect_dict[1 << (MAX_NUM_INT)];    //2^x
 
 atomic_t mutex_free = ATOMIC_INIT(0); 
 
@@ -192,7 +191,7 @@ ssize_t pci_read(struct file *filp, char __user *buf, size_t count, loff_t *f_po
 int pci_poll(struct file *filep, poll_table * pwait);
 
 struct file_operations pci_fops = {
-read:           pci_read,
+				read:           pci_read,
 				write:          pci_write,
 				unlocked_ioctl: pci_unlocked_ioctl,
 				open:           pci_open,
@@ -600,7 +599,7 @@ static int sv_plat_remove(struct platform_device *pdev)
 }
 
 static struct pci_driver pci_driver = {
-	.name = "pci_skel",
+	.name = "vsi_driver",
 	//	.name = pci_devName,
 	.id_table = ids,
 	.probe = probe,
@@ -835,7 +834,6 @@ int pci_release(struct inode *inode, struct file *filep)
 /*item for file_operations: unlocked ioctl*/
 long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 {
-	u64 axi_dest;
 	void __user *argp = (void __user *)arg;
 	struct mod_desc *mod_desc;
 	static int master_count = 0;
@@ -1085,7 +1083,6 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	u64 axi_dest;
 	struct mod_desc * mod_desc;
 	size_t bytes;
-	int keyhole_en;
 	int transfer_type;
 	//	u32 kern_reg;
 	int ret;
@@ -1168,11 +1165,9 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	u64 axi_dest;
 	struct mod_desc *mod_desc;
 	int bytes = 0;
-	int keyhole_en;
 	int transfer_type;
 	//	void * read_buf = NULL;
 	int ret;
-	u32 read_bytes;
 	u64 dma_offset_write;
 	u64 dma_offset_read;
 	u64 dma_offset_internal_read;

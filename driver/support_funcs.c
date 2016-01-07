@@ -82,9 +82,6 @@ int dma_file_init(struct mod_desc *mod_desc, int dma_file_size, void *dma_buffer
 	return 0;
 }
 
-
-
-
 void int_ctlr_init(u64 axi_address)
 {
 	u32 status;
@@ -274,12 +271,6 @@ u32 num2vec(int num)
 	return vec;
 }
 
-/*Data Transfer*/
-/*This function should be used to funnel all data traffic between the
- *Kernel and the FPGA. It is used to determine if the CDMA(s) should
- *be and can be used. It is also used to call the functions for direct
- *reads and writes if the CDMA is either unavailable or inefficient to
- *be used*/
 
 int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u64 dma_off)
 {

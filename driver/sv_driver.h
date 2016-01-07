@@ -1,4 +1,5 @@
 
+/*These are the CDMA R/W types */
 #ifndef KEYHOLE_WRITE
 #define KEYHOLE_WRITE 2
 #endif
@@ -19,17 +20,8 @@
 #define CDMA 3
 #endif
 
-#ifndef MAX_NUM_MASTERS
-#define MAX_NUM_MASTERS 2
-#endif
+/******************************/
 
-#ifndef MAX_NUM_SLI
-#define MAX_NUM_SLI 4
-#endif
-
-#ifndef MAX_NUM_INT
-#define MAX_NUM_INT MAX_NUM_MASTERS + MAX_NUM_SLI
-#endif
 
 /* Shared Global Variables */
 
@@ -47,16 +39,11 @@ extern struct mutex CDMA_sem;
 extern struct mutex CDMA_sem_2;
 
 extern u32 dma_current_offset;
-extern u32 current_dma_offset_internal;
 
-extern dma_addr_t dma_m_addr[MAX_NUM_MASTERS];
-
-extern void * dma_master_buf[MAX_NUM_MASTERS];
-
-extern unsigned long pci_bar_hw_addr;         //hardware base address of the device
-extern unsigned long pci_bar_size;            //hardware bar memory size
-extern unsigned long pci_bar_1_size;            //hardware bar memory size
-extern unsigned long pci_bar_2_size;            //hardware bar memory size
+/*these are used in the data_transfer function to check for out of range memory r/w */
+extern unsigned long pci_bar_size;          
+extern unsigned long pci_bar_1_size;        
+extern unsigned long pci_bar_2_size;        
 
 extern void * pci_bar_vir_addr;        //hardware base virtual address
 extern void * pci_bar_1_vir_addr;        //hardware base virtual address
@@ -69,12 +56,14 @@ extern u64 peripheral_space_1_offset;
 
 extern int pcie_m_address;
 
-
+/*These are the interrupt and mutex wait variables */
 extern wait_queue_head_t wq;
 extern wait_queue_head_t wq_periph;
 extern wait_queue_head_t mutexq;
+
+/*this is the CDMA wait condition variable*/
 extern int cdma_comp[5];
-extern int interrupt_vect_dict[1 << (MAX_NUM_INT)];    //2^x
+
 
 extern const u32 INT_CTRL_IER;
 extern const u32 INT_CTRL_MER;
