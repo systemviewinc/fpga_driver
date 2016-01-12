@@ -1,4 +1,5 @@
-obj-m += sv_driver.o
+obj-m += vsi_driver.o
+vsi_driver-y += sv_driver.o support_funcs.o
 KDIR := ~/Desktop/repos/linux-xlnx/
 PWD := $(shell pwd)
 
