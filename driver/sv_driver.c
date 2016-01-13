@@ -927,7 +927,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 		case SET_FILE_SIZE:
 			printk(KERN_INFO"<ioctl>: Setting device file size:%llx\n", arg_loc);
-			mod_desc->file_size = arg_loc;
+			mod_desc->file_size = (loff_t)arg_loc;
 			break;
 
 
@@ -1148,13 +1148,15 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			transfer_type = NORMAL_WRITE;
 
 		printk(KERN_INFO"<pci_write>: writing peripheral using a transfer_type: %x\n", transfer_type);
+	
+		printk(KERN_INFO"<user_peripheral_write>: current file offset is: %llx\n", filep->f_pos);
 		
 		/*Check to see if read will go past the boundary*/
 		if((count + filep->f_pos) > mod_desc->file_size)
 		{
-			printk(KERN_INFO"<user_peripheral_write>: End of file reached with this transfer\n");
-			count = (mod_desc->file_size - filep->f_pos);
-			
+				printk(KERN_INFO"<user_peripheral_write>: End of file overrun!\n");
+				count = (size_t)(mod_desc->file_size - filep->f_pos);
+				printk(KERN_INFO"<user_peripheral_write>: Only writing %llx bytes to end of file!\n", count);
 		}
 
 		ret = data_transfer(axi_dest, 0, count, transfer_type, dma_offset_write);
@@ -1163,16 +1165,23 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			printk(KERN_INFO"<pci_write>: ERROR writing to User Peripheral\n");
 			return -1;
 		}
+		
+		*f_pos = filep->f_pos + count;    
 
-		if (filep->f_pos == mod_desc->file_size)
+		if (*f_pos == mod_desc->file_size)
 		{
-			filep->f_pos = 0;    
+			*f_pos = 0;
 			printk(KERN_INFO"<user_peripheral_write>: Resetting file pointer back to zero...\n");
 		}
-		else
+		else if (*f_pos > mod_desc->file_size)
 		{
-			filep->f_pos = filep->f_pos + count;
+			printk(KERN_INFO"<user_peripheral_write>: ERROR! Wrote past the file size. This should not have happened...\n");
+			printk(KERN_INFO"<user_peripheral_write>: Resetting file pointer back to zero...\n");
+			*f_pos = 0;
+			return -1;
 		}
+		
+		printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llx\n", *f_pos);
 	
 		bytes = count;
 	}
@@ -1241,12 +1250,15 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 
 			printk(KERN_INFO"<user_peripheral_read>: reading peripheral using a transfer_type: %x\n", transfer_type);
+		
+			printk(KERN_INFO"<user_peripheral_write>: current file offset is: %llx\n", filep->f_pos);
 
 			/*Check to see if read will go past the boundary*/
-			if((count + filep->f_pos) > mod_desc->file_size)
+			if((loff_t)(count + filep->f_pos) > mod_desc->file_size)
 			{
-				printk(KERN_INFO"<user_peripheral_read>: End of file reached\n");
-				count = (mod_desc->file_size - filep->f_pos);
+				printk(KERN_INFO"<user_peripheral_read>: End of file overrun!\n");
+				count = (size_t)(mod_desc->file_size - filep->f_pos);
+				printk(KERN_INFO"<user_peripheral_read>: Only writing %llx bytes to end of file!\n", count);
 				
 			}
 
@@ -1257,15 +1269,23 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 				return -1;
 			}
 	
-			if (filep->f_pos == mod_desc->file_size)
+			*f_pos = (loff_t)(filep->f_pos + count);    
+	
+			if (*f_pos == mod_desc->file_size)
 			{
-				filep->f_pos = 0;    
+				*f_pos = 0;    
+				printk(KERN_INFO"<user_peripheral_read>: End of file reached.\n");
 				printk(KERN_INFO"<user_peripheral_read>: Resetting file pointer back to zero...\n");
 			}
-			else
+			else if (*f_pos > mod_desc->file_size)
 			{
-				filep->f_pos = filep->f_pos + count;
+				printk(KERN_INFO"<user_peripheral_read>: ERROR! Read past the file size. This should not have happened...\n");
+				printk(KERN_INFO"<user_peripheral_read>: Resetting file pointer back to zero...\n");
+				*f_pos = 0;    
+				return -1;
 			}
+			
+			printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llx\n", *f_pos);
 			
 			bytes = count;
 
