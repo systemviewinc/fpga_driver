@@ -50,6 +50,7 @@
 #define SET_AXI_CTL_DEVICE 63
 #define SET_DMA_SIZE 64
 #define RESET_DMA_ALLOC 65
+#define SET_FILE_SIZE 66
 
 #define ERROR   -1
 #define SUCCESS 0
@@ -783,6 +784,7 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->dma_offset_internal_write = 0;
 	s->kernel_reg_write = 0;
 	s->kernel_reg_read = 0;
+	s->file_size = 4096;   //default to 4K
 
 	printk(KERN_INFO"<pci_open>: minor number %d detected\n", s->minor);
 
@@ -922,6 +924,12 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			interr_dict[int_num].mode = mod_desc->mode;
 
 			break;
+
+		case SET_FILE_SIZE:
+			printk(KERN_INFO"<ioctl>: Setting device file size:%llx\n", arg_loc);
+			mod_desc->file_size = arg_loc;
+			break;
+
 
 		case SET_CDMA_KEYHOLE_WRITE:
 			bit_vec = 0x00000020;   //the bit for KEYHOLE WRITE
@@ -1140,6 +1148,14 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			transfer_type = NORMAL_WRITE;
 
 		printk(KERN_INFO"<pci_write>: writing peripheral using a transfer_type: %x\n", transfer_type);
+		
+		/*Check to see if read will go past the boundary*/
+		if((count + filep->f_pos) > mod_desc->file_size)
+		{
+			printk(KERN_INFO"<user_peripheral_write>: End of file reached with this transfer\n");
+			count = (mod_desc->file_size - filep->f_pos);
+			
+		}
 
 		ret = data_transfer(axi_dest, 0, count, transfer_type, dma_offset_write);
 		if (ret > 0)
@@ -1148,6 +1164,16 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			return -1;
 		}
 
+		if (filep->f_pos == mod_desc->file_size)
+		{
+			filep->f_pos = 0;    
+			printk(KERN_INFO"<user_peripheral_write>: Resetting file pointer back to zero...\n");
+		}
+		else
+		{
+			filep->f_pos = filep->f_pos + count;
+		}
+	
 		bytes = count;
 	}
 
@@ -1216,13 +1242,31 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 			printk(KERN_INFO"<user_peripheral_read>: reading peripheral using a transfer_type: %x\n", transfer_type);
 
+			/*Check to see if read will go past the boundary*/
+			if((count + filep->f_pos) > mod_desc->file_size)
+			{
+				printk(KERN_INFO"<user_peripheral_read>: End of file reached\n");
+				count = (mod_desc->file_size - filep->f_pos);
+				
+			}
+
 			ret = data_transfer(axi_dest, 0, count, transfer_type, dma_offset_read);
 			if (ret > 0)
 			{
 				printk(KERN_INFO"<user_peripheral_read>: ERROR reading data from User Peripheral\n");
 				return -1;
 			}
-
+	
+			if (filep->f_pos == mod_desc->file_size)
+			{
+				filep->f_pos = 0;    
+				printk(KERN_INFO"<user_peripheral_read>: Resetting file pointer back to zero...\n");
+			}
+			else
+			{
+				filep->f_pos = filep->f_pos + count;
+			}
+			
 			bytes = count;
 
 			break;

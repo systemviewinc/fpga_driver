@@ -1,5 +1,5 @@
-obj-m += vsi_driver.o
-vsi_driver-y += vsi_driver_bin.o
+obj-m += sv_driver.o
+sv_driver-y += vsi_driver_bin.o
 
 all: 
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules

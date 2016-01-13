@@ -92,6 +92,7 @@ struct mod_desc
 	u32 * kernel_reg_read;
 	u32 dma_offset_internal_read;
 	u32 dma_offset_internal_write;
+	int file_size;
 };
 
 /*this is the interrupt structure*/
