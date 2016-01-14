@@ -471,7 +471,7 @@ int cdma_query(void)
 
 	if (mutex_is_locked(&CDMA_sem))
 	{
-		if (mutex_is_locked(&CDMA_sem_2) | !cdma_set[2])
+		if (mutex_is_locked(&CDMA_sem_2) | (cdma_set[2] == 0))
 			printk(KERN_INFO "!!!!!!!!! all CDMAs in use !!!!!!!!\n");
 		else
 		{
@@ -481,6 +481,7 @@ int cdma_query(void)
 				return -ERESTARTSYS;
 			}
 			printk(KERN_INFO"										<cdma_transfer>: CDMA Resource 2 is now locked!\n");
+			printk(KERN_INFO"										<cdma_transfer>: cdma_set[2] = %x\n", cdma_set[2]);
 			return 2;
 		}	
 	}

@@ -52,6 +52,7 @@ unsigned int SET_CDMA_KEYHOLE_READ = 59;
 unsigned int SET_MODE = 62;
 unsigned int SET_INTERRUPT = 61;
 unsigned int SET_AXI_CTL_DEVICE = 63;
+unsigned int RESET_DMA_ALLOC = 65;
 
 
 /*these are the register offsets of the AXI-Stream FIFO*/
@@ -80,62 +81,69 @@ int main()
 {
 
 
-//	hls_write = open(devfilename, O_RDWR);
-//	if(hls_write < 0){
-//		return -1;
-//	}
+	hls_write = open(devfilename, O_RDWR);
+	if(hls_write < 0){
+		return -1;
+	}
 
-//	hls_read = open(devfilename_2, O_RDWR);
-//	if(hls_read < 0){
-//		return -1;
-//	}
-//	printf("Opened files\n");
+	hls_read = open(devfilename_2, O_RDWR);
+	if(hls_read < 0){
+		return -1;
+	}
+	printf("Opened files\n");
 
-//	if(ioctl(hls_write, SET_AXI_CTL_DEVICE, &hls_write_ctl_axi_addr) < 0) {
-//		printf("ERROR doing ioctl\n");
-//		return -1;
-//	}
-//	printf("set peripheral to axi base address %x\n", hls_write_ctl_axi_addr);
-
-
-//	if(ioctl(hls_read, SET_AXI_CTL_DEVICE, &hls_read_ctl_axi_addr) < 0) {
-//		printf("ERROR doing ioctl\n");
-//		return -1;
-//	}
-//	printf("set peripheral to axi base address %x\n", hls_read_ctl_axi_addr);
+	if(ioctl(hls_write, SET_AXI_CTL_DEVICE, &hls_write_ctl_axi_addr) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set peripheral to axi base address %x\n", hls_write_ctl_axi_addr);
 
 
-//	if(ioctl(hls_write, SET_AXI_DEVICE, &hls_write_axi_addr) < 0) {
-//		printf("ERROR doing ioctl\n");
-//		return -1;
-//	}
-//	printf("set peripheral to axi base address %x\n", hls_write_axi_addr);
+	if(ioctl(hls_read, SET_AXI_CTL_DEVICE, &hls_read_ctl_axi_addr) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set peripheral to axi base address %x\n", hls_read_ctl_axi_addr);
 
 
-//	if(ioctl(hls_read, SET_AXI_DEVICE, &hls_read_axi_addr) < 0) {
-//		printf("ERROR doing ioctl\n");
-//		return -1;
-//	}
-//	printf("set peripheral to axi base address %x\n", hls_read_axi_addr);
+	if(ioctl(hls_write, SET_AXI_DEVICE, &hls_write_axi_addr) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set peripheral to axi base address %x\n", hls_write_axi_addr);
 
-	/* set mode of AXI_FIFO*/
-//	if(ioctl(hls_read, SET_MODE, &hls_fifo_mode) < 0) {
-//		printf("ERROR doing ioctl\n");
-//		return -1;
-//	}
-//	printf("set axi fifo to mode: %d\n", hls_fifo_mode);
 
-	/* set mode of AXI_FIFO*/
-//	if(ioctl(hls_write, SET_MODE, &hls_fifo_mode) < 0) {
-//		printf("ERROR doing ioctl\n");
-//		return -1;
-//	}
-//	printf("set axi fifo to mode: %d\n", hls_fifo_mode);
+	if(ioctl(hls_read, SET_AXI_DEVICE, &hls_read_axi_addr) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set peripheral to axi base address %x\n", hls_read_axi_addr);
 
-	/****** Set the mode of hls_read to be "Slave with interrupt" ***********/
-//	unsigned int interrupt_vector = 0x10;  /*2^5 - NOTE - THIS IS POWER OF 2!!!*/
-//	ioctl(hls_read, SET_INTERRUPT, &interrupt_vector); 
-//	printf("set peripheral as slave with interrupt at vector:%x\n", interrupt_vector);
+	/* Reset DMA allocation*/   //use any file to do this....
+	if(ioctl(hls_read, RESET_DMA_ALLOC, 0) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("DMA Allocation Reset\n");
+    
+	  /* set mode of AXI_FIFO*/
+	if(ioctl(hls_read, SET_MODE, &hls_fifo_mode) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set axi fifo to mode: %d\n", hls_fifo_mode);
+
+      /* set mode of AXI_FIFO*/
+	if(ioctl(hls_write, SET_MODE, &hls_fifo_mode) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set axi fifo to mode: %d\n", hls_fifo_mode);
+
+      /****** Set the mode of hls_read to be "Slave with interrupt" ***********/
+	unsigned int interrupt_vector = 0x10;  /*2^5 - NOTE - THIS IS POWER OF 2!!!*/
+	ioctl(hls_read, SET_INTERRUPT, &interrupt_vector); 
+	printf("set peripheral as slave with interrupt at vector:%x\n", interrupt_vector);
 /********************************* BRAM TEST  ********************************************/
 
 //int p=0;
@@ -168,64 +176,18 @@ unsigned char packet_binary[] = {
 								  0x5d, 0x5d, 0x00, 0x22, 0x22, 0x00, 0x03, 0x01
 };
 
-//	int	packet_file = open("./packet_hex", O_RDONLY);
-//	
-//	if(packet_file < 0){
-//		printf("error reading packet file\n");
-//		return -1;
-//	}
-
-//	#define BUFFER_SIZE 156
-
-//	unsigned char buffer[BUFFER_SIZE];
-
-	/* Read in 256 8-bit numbers into the buffer */
-//	size_t bytes_read = 0;
-  //  bytes_read = fread((void*)buffer, sizeof(unsigned char), BUFFER_SIZE, packet_file);
-	// Note: sizeof(unsigned char) is for emphasis
 
 	int i;
 
-	for(i=0;i<(sizeof(packet_binary));i++)
-	{
-		printf("value read: %x\n", packet_binary[i]);
-	}
+//	for(i=0;i<(sizeof(packet_binary));i++)
+//	{
+//		printf("value read: %x\n", packet_binary[i]);
+//	}
 	
 	int ret_val;
 
-	return 0;
+//	return 0;
 
-	/*use lseek to move offset in file*/
-	//lseek(bram, 0x4, 0);
-
-/*	ret_val = write(bram, in, sizeof(in));
-	printf("wrote a value from address:('%p')\n", in);
-
-
-	unsigned int buff[sizeof(in)/4];
-
-	ret_val = read(bram, (void*)buff, sizeof(in));
-
-	printf("buffer address is:%p\n", buff);
-
-	int error = 0;
-	int i;
-	for(i=0;i<(sizeof(buff)/4);i++)
-	{
-		printf("value read: %x\n", buff[i]);
-		if (buff[i] != in[i])
-		{
-			error = 1;
-		}
-	}
-
-	close(bram);
-
-	if (error == 0)
-		printf("BRAM TEST PASSED\n");
-
-	else
-		printf("BRAM TEST FAILED\n"); 
 
 
 /************************* AXI STREAMING FIFO TEST ***************************************/
@@ -234,7 +196,7 @@ unsigned char packet_binary[] = {
 	//This thread will perform a blocking read until an interrupt
 	//has occured signifying the data is availble
 	//first initialize a receive buffer
-	unsigned int rxbuff[sizeof(in)];
+	unsigned int rxbuff[sizeof(packet_binary)];
 
 	pthread_t rxfifo;
 
@@ -247,7 +209,7 @@ unsigned char packet_binary[] = {
 	/*******Send data to the TX FIFO (front end) **********/
 //	ret_val = write(hls_write, in, sizeof(in));  
 //	sleep(5);
-	ret_val = write(hls_write, in, sizeof(in));   
+	ret_val = write(hls_write, packet_binary, sizeof(packet_binary));   
 	if (ret_val == 0)
 		printf("WRITE ERROR\n");
 
@@ -266,7 +228,6 @@ unsigned char packet_binary[] = {
 //	ioctl(hls_read, SET_CDMA_KEYHOLE_READ, 0); 
 
 	/*Close files*/	
-	close(bram);
 
 	close(hls_write);
 
@@ -287,7 +248,7 @@ void *rxfifo_read(void *read_buf)
 	int timeout = 10000;    //in ms
 	int result;
 	unsigned int buff2[1];
-	unsigned int buff[64];  //50 32b data words
+	unsigned int buff[100];  //50 32b data words
 	int i;
 
 	/*initialize pollfds*/

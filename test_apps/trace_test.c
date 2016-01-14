@@ -261,7 +261,14 @@ int main()
 	ioctl(trace_read, SET_INTERRUPT, &interrupt_vector); 
 	printf("set peripheral as slave with interrupt at vector:%x\n", interrupt_vector);
 
-	/*initialize the trace module counter*/
+	/*initialize and reset the trace module counter*/
+	unsigned int activate = 3;
+	int ret_val;
+	ret_val = write(trace_control, &activate, sizeof(activate));   
+	if (ret_val == 0)
+		printf("WRITE ERROR\n");
+
+//	/*initialize the trace module counter*/
 	unsigned int activate = 1;
 	int ret_val;
 	ret_val = write(trace_control, &activate, sizeof(activate));   

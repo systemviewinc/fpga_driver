@@ -75,7 +75,7 @@ int device_id = 100;
 int major = 241;
 int cdma_address = 0xFFFFFFFF;
 int cdma_2_address = 0xFFFFFFFF;
-bool enable_cdma_2 = 0;
+int enable_cdma_2 = 0;
 int pcie_ctl_address = 0xFFFFFFFF;
 int pcie_m_address = 0xFFFFFFFF;
 int int_ctlr_address = 0xFFFFFFFF;
@@ -89,7 +89,7 @@ MODULE_PARM_DESC(device_id, "DeviceID");
 module_param(major, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(major, "MajorNumber");
 
-module_param(enable_cdma_2, bool, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+module_param(enable_cdma_2, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(enable_cdma_2, "EnableCDMA2");
 
 module_param(cdma_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
@@ -393,8 +393,8 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	}
 
 	//set defaults
-	cdma_set[0] = 0;
 	cdma_set[1] = 0;
+	cdma_set[2] = 0;
 	pcie_ctl_set = 0;
 	pcie_m_set = 0;
 	int_ctrl_set = 0;
@@ -435,6 +435,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 	cdma_capable = (cdma_set[1] == 1) & (pcie_m_set == 1) & (int_ctrl_set == 1) & (pcie_ctl_set == 1);
 	printk(KERN_INFO"<probe> cdma_capable = %x\n", cdma_capable);
+	printk(KERN_INFO"<probe> cdma_set[2] = %x\n", cdma_set[2]);
 
 	printk(KERN_INFO"<probe>***********************PROBE FINISHED SUCCESSFULLY**************************************\n");
 	return 0;
@@ -909,6 +910,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		case RESET_DMA_ALLOC:
 			dma_current_offset = 4096;   //we want to leave the first 4k for the kernel to use internally.
 			current_dma_offset_internal = 0;
+			printk(KERN_INFO"<ioctl>: Reset the DMA Allocation\n");
 			break;
 
 		case SET_INTERRUPT:
