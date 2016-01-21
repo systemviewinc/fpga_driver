@@ -933,8 +933,8 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			break;
 
 		case SET_FILE_SIZE:
-			verbose_printk(KERN_INFO"<ioctl>: Setting device file size:%llx\n", arg_loc);
-			mod_desc->file_size = (loff_t)arg_loc;
+			mod_desc->file_size = ((loff_t)arg_loc & 0xffffffff);
+			verbose_printk(KERN_INFO"<ioctl>: Setting device file size:%llu\n", mod_desc->file_size);
 			break;
 
 
@@ -1308,7 +1308,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 			verbose_printk(KERN_INFO"<user_peripheral_read>: reading peripheral using a transfer_type: %x\n", transfer_type);
 
-			crit_printk(KERN_INFO"<user_peripheral_write>: current file offset is: %zu\n", filep->f_pos);
+			crit_printk(KERN_INFO"<user_peripheral_write>: current file offset is: %llu\n", filep->f_pos);
 
 			temp = count + filep->f_pos;
 		
@@ -1316,7 +1316,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			if(temp > (size_t)mod_desc->file_size)
 			{
 				crit_printk(KERN_INFO"<user_peripheral_read>: Read will overrun the file size because \n");
-				crit_printk(KERN_INFO"<user_peripheral_read>: (the current file offset + amount to read)->(%zu) > (%zu)->file_size\n", temp, mod_desc->file_size);
+				crit_printk(KERN_INFO"<user_peripheral_read>: (the current file offset + amount to read)->(%llu) > (%llu)->file_size\n", temp, mod_desc->file_size);
 				count = (size_t)(mod_desc->file_size - filep->f_pos);
 				crit_printk(KERN_INFO"<user_peripheral_read>: Adjusting to only reading %zu bytes to end of file!\n", count);
 
@@ -1333,22 +1333,22 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			{
 
 				*f_pos = (loff_t)(filep->f_pos + (loff_t)count);    
-				verbose_printk(KERN_INFO"<user_peripheral_write>: updated file offset after adding count(%zu) is: %zu\n", count, *f_pos);
+				crit_printk(KERN_INFO"<user_peripheral_write>: updated file offset after adding count(%zu) is: %llu\n", count, *f_pos);
 
 				if (*f_pos == mod_desc->file_size)
 				{
 					*f_pos = 0;    
 					crit_printk(KERN_INFO"<user_peripheral_read>: End of file reached.\n");
 					crit_printk(KERN_INFO"<user_peripheral_read>: Resetting file pointer back to zero...\n");
-					verbose_printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %zu\n", *f_pos);
+					crit_printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llu\n", *f_pos);
 				}
-				else if ((loff_t)*f_pos > (loff_t)mod_desc->file_size)
+				else if (*f_pos > mod_desc->file_size)
 				{
 					crit_printk(KERN_INFO"<user_peripheral_read>: ERROR! Read past the file size. This should not have happened...\n");
-					crit_printk(KERN_INFO"<user_peripheral_read>: the offset position is:%zu\n", *f_pos);
+					crit_printk(KERN_INFO"<user_peripheral_read>: the offset position is:%llu\n", *f_pos);
 					crit_printk(KERN_INFO"<user_peripheral_read>: Resetting file pointer back to zero...\n");
 					*f_pos = 0;    
-					verbose_printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %zu\n", *f_pos);
+					crit_printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llu\n", *f_pos);
 					//return -1;
 				}
 
