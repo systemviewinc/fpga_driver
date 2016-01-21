@@ -1332,24 +1332,26 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			if (transfer_type == NORMAL_READ)
 			{
 
-				*f_pos = (loff_t)(filep->f_pos + count);    
+				*f_pos = (loff_t)(filep->f_pos + (loff_t)count);    
+				verbose_printk(KERN_INFO"<user_peripheral_write>: updated file offset after adding count(%zu) is: %zu\n", count, *f_pos);
 
 				if (*f_pos == mod_desc->file_size)
 				{
 					*f_pos = 0;    
 					crit_printk(KERN_INFO"<user_peripheral_read>: End of file reached.\n");
 					crit_printk(KERN_INFO"<user_peripheral_read>: Resetting file pointer back to zero...\n");
+					verbose_printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %zu\n", *f_pos);
 				}
-				else if (*f_pos > mod_desc->file_size)
+				else if ((loff_t)*f_pos > (loff_t)mod_desc->file_size)
 				{
 					crit_printk(KERN_INFO"<user_peripheral_read>: ERROR! Read past the file size. This should not have happened...\n");
 					crit_printk(KERN_INFO"<user_peripheral_read>: the offset position is:%zu\n", *f_pos);
 					crit_printk(KERN_INFO"<user_peripheral_read>: Resetting file pointer back to zero...\n");
 					*f_pos = 0;    
+					verbose_printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %zu\n", *f_pos);
 					//return -1;
 				}
 
-				verbose_printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llx\n", *f_pos);
 			}
 
 			bytes = count;
