@@ -1192,7 +1192,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				{
 					crit_printk(KERN_INFO"<user_peripheral_write>: End of file overrun!\n");
 					partial_count = (size_t)(mod_desc->file_size - *f_pos);
-					crit_printk(KERN_INFO"<user_peripheral_write>: Only writing %llx bytes to end of file!\n", partial_count);
+					crit_printk(KERN_INFO"<user_peripheral_write>: Only writing %zu bytes to end of file!\n", partial_count);
 					//return bytes_written + partial_count;
 				}
 			}
@@ -1251,6 +1251,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	int transfer_type;
 	//	void * read_buf = NULL;
 	int ret;
+	size_t temp;
 	u64 dma_offset_write;
 	u64 dma_offset_read;
 	u64 dma_offset_internal_read;
@@ -1258,15 +1259,19 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 	mod_desc = filep->private_data;
 
+	temp = 0;
+
 	crit_printk(KERN_INFO"\n\n");	
 	crit_printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
 	crit_printk(KERN_INFO"<pci_read>: ******************** READ TRANSACTION BEGIN  **************************\n");	
 	crit_printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
 
+	crit_printk(KERN_INFO"<pci_read>: Attempting to read %zu bytes\n", count);	
+
 	if (count > mod_desc->dma_size)
 	{
-		crit_printk(KERN_INFO"<pci_read>: Attempting to read more than the allocated DMA size of:%x\n", mod_desc->dma_size);
-		crit_printk(KERN_INFO"<pci_read>: readjusting the read amount to:%x\n", mod_desc->dma_size);
+		crit_printk(KERN_INFO"<pci_read>: Attempting to read more than the allocated DMA size of:%zu\n", mod_desc->dma_size);
+		crit_printk(KERN_INFO"<pci_read>: readjusting the read amount to:%zu\n", mod_desc->dma_size);
 		count = (size_t)mod_desc->dma_size;
 	}	
 
@@ -1303,14 +1308,16 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 			verbose_printk(KERN_INFO"<user_peripheral_read>: reading peripheral using a transfer_type: %x\n", transfer_type);
 
-			verbose_printk(KERN_INFO"<user_peripheral_write>: current file offset is: %llx\n", filep->f_pos);
+			crit_printk(KERN_INFO"<user_peripheral_write>: current file offset is: %zu\n", filep->f_pos);
 
 			/*Check to see if read will go past the boundary*/
-			if((loff_t)(count + filep->f_pos) > mod_desc->file_size)
+			if((count + filep->f_pos) > mod_desc->file_size)
 			{
-				crit_printk(KERN_INFO"<user_peripheral_read>: End of file overrun!\n");
+				temp = count + filep->f_pos;
+				crit_printk(KERN_INFO"<user_peripheral_read>: Read will overrun the file size because \n");
+				crit_printk(KERN_INFO"<user_peripheral_read>: (the current file offset + amount to read)->(%zu) > (%zu)->file_size\n", temp, mod_desc->file_size);
 				count = (size_t)(mod_desc->file_size - filep->f_pos);
-				crit_printk(KERN_INFO"<user_peripheral_read>: Only reading %llx bytes to end of file!\n", count);
+				crit_printk(KERN_INFO"<user_peripheral_read>: Adjusting to only reading %zu bytes to end of file!\n", count);
 
 			}
 
