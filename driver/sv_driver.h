@@ -20,6 +20,14 @@
 #define CDMA 3
 #endif
 
+/********* printk statements *********/
+#ifndef verbose_printk(...)
+#define verbose_printk(...)
+#endif
+
+#ifndef crit_printk
+#define crit_printk printk
+#endif
 /******************************/
 
 
@@ -85,7 +93,7 @@ struct mod_desc
 	u32 interrupt_vec;
 	u32 dma_offset_read;
 	u32 dma_offset_write;
-	u64 dma_size;
+	size_t dma_size;
 	void * dma_write;
 	void * dma_read;
 	u32 * kernel_reg_write;
@@ -106,6 +114,7 @@ extern struct interr_struct interr_dict[8];
 
 
 
+
 // ********************** support functions **************************
 int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num);
 int cdma_ack(int cdma_num);
@@ -121,7 +130,7 @@ void pcie_ctl_init(u64 axi_address, u32 dma_addr_base);
 void pcie_m_init(int cdma_num);
 void int_ctlr_init(u64 axi_address);
 int dma_file_init(struct mod_desc *mod_desc, int dma_file_size, void *dma_buffer_base, u64 dma_buffer_size);
-int axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc);
-int axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc);
+size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc);
+size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc);
 void axi_stream_fifo_init(struct mod_desc * mod_desc);
 // ******************************************************************
