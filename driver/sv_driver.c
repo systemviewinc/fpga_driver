@@ -1310,10 +1310,11 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 			crit_printk(KERN_INFO"<user_peripheral_write>: current file offset is: %zu\n", filep->f_pos);
 
+			temp = count + filep->f_pos;
+		
 			/*Check to see if read will go past the boundary*/
-			if((count + filep->f_pos) > mod_desc->file_size)
+			if(temp > (size_t)mod_desc->file_size)
 			{
-				temp = count + filep->f_pos;
 				crit_printk(KERN_INFO"<user_peripheral_read>: Read will overrun the file size because \n");
 				crit_printk(KERN_INFO"<user_peripheral_read>: (the current file offset + amount to read)->(%zu) > (%zu)->file_size\n", temp, mod_desc->file_size);
 				count = (size_t)(mod_desc->file_size - filep->f_pos);
