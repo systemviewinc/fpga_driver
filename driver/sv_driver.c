@@ -1265,9 +1265,9 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 	if (count > mod_desc->dma_size)
 	{
-		verbose_printk(KERN_INFO"<pci_read>: Attempting to read more than the allocated DMA size of:%x\n", mod_desc->dma_size);
-		verbose_printk(KERN_INFO"<pci_read>: readjusting the read amount to:%x\n", mod_desc->dma_size);
-		count = mod_desc->dma_size;
+		crit_printk(KERN_INFO"<pci_read>: Attempting to read more than the allocated DMA size of:%x\n", mod_desc->dma_size);
+		crit_printk(KERN_INFO"<pci_read>: readjusting the read amount to:%x\n", mod_desc->dma_size);
+		count = (size_t)mod_desc->dma_size;
 	}	
 
 	switch(*(mod_desc->mode)){
@@ -1308,16 +1308,16 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			/*Check to see if read will go past the boundary*/
 			if((loff_t)(count + filep->f_pos) > mod_desc->file_size)
 			{
-				verbose_printk(KERN_INFO"<user_peripheral_read>: End of file overrun!\n");
+				crit_printk(KERN_INFO"<user_peripheral_read>: End of file overrun!\n");
 				count = (size_t)(mod_desc->file_size - filep->f_pos);
-				verbose_printk(KERN_INFO"<user_peripheral_read>: Only reading %llx bytes to end of file!\n", count);
+				crit_printk(KERN_INFO"<user_peripheral_read>: Only reading %llx bytes to end of file!\n", count);
 
 			}
 
 			ret = data_transfer(axi_dest, 0, count, transfer_type, dma_offset_read);
 			if (ret > 0)
 			{
-				verbose_printk(KERN_INFO"<user_peripheral_read>: ERROR reading data from User Peripheral\n");
+				crit_printk(KERN_INFO"<user_peripheral_read>: ERROR reading data from User Peripheral\n");
 				return -1;
 			}
 
@@ -1329,15 +1329,16 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 				if (*f_pos == mod_desc->file_size)
 				{
 					*f_pos = 0;    
-					verbose_printk(KERN_INFO"<user_peripheral_read>: End of file reached.\n");
-					verbose_printk(KERN_INFO"<user_peripheral_read>: Resetting file pointer back to zero...\n");
+					crit_printk(KERN_INFO"<user_peripheral_read>: End of file reached.\n");
+					crit_printk(KERN_INFO"<user_peripheral_read>: Resetting file pointer back to zero...\n");
 				}
 				else if (*f_pos > mod_desc->file_size)
 				{
-					verbose_printk(KERN_INFO"<user_peripheral_read>: ERROR! Read past the file size. This should not have happened...\n");
-					verbose_printk(KERN_INFO"<user_peripheral_read>: Resetting file pointer back to zero...\n");
+					crit_printk(KERN_INFO"<user_peripheral_read>: ERROR! Read past the file size. This should not have happened...\n");
+					crit_printk(KERN_INFO"<user_peripheral_read>: the offset position is:%zu\n", *f_pos);
+					crit_printk(KERN_INFO"<user_peripheral_read>: Resetting file pointer back to zero...\n");
 					*f_pos = 0;    
-					return -1;
+					//return -1;
 				}
 
 				verbose_printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llx\n", *f_pos);
