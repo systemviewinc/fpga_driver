@@ -676,7 +676,7 @@ int cdma_ack(cdma_num)
 			axi_cdma_loc = axi_cdma_2;
 			break;
 		default:
-			verbose_printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
+			crit_printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
 			return 1;	
 	}
 
@@ -691,8 +691,9 @@ int cdma_ack(cdma_num)
 	verbose_printk(KERN_INFO"	<cdma_ack>: CDMA status:%x\n", status);
 	if (status != 0x2)    //this is the expected status report  
 	{
-		verbose_printk(KERN_INFO"	<cdma_ack>: CDMA status ERROR\n");
-		verbose_printk(KERN_INFO"	<cdma_ack>: Issuing soft reset to CDMA\n");
+		crit_printk(KERN_INFO"	<cdma_ack>: CDMA %d status ERROR\n", cdma_num);
+		crit_printk(KERN_INFO"	<cdma_ack>: CDMA %d status:%x\n", cdma_num, status);
+		crit_printk(KERN_INFO"	<cdma_ack>: Issuing soft reset to CDMA %d\n", cdma_num);
 
 		axi_dest = axi_cdma_loc;
 
@@ -840,7 +841,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 	ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, dma_offset_internal_write);
 	if (ret > 0)
 	{
-		verbose_printk(KERN_INFO"<axi_stream_fifo_read>: ERROR writing to reset interrupts on AXI Stream FIFO\n");
+		crit_printk(KERN_INFO"<axi_stream_fifo_read>: ERROR writing to reset interrupts on AXI Stream FIFO\n");
 		return -1;
 	}
 
@@ -850,7 +851,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 	ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, dma_offset_internal_read);
 	if (ret > 0)
 	{
-		verbose_printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Read FIFO fill level\n");
+		crit_printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Read FIFO fill level\n");
 		return -1;
 	}
 
@@ -882,7 +883,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 
 	if (count == 0)
 	{	
-		verbose_printk(KERN_INFO"<axi_stream_fifo_read> There is either no data to read, or less than 8 bytes.\n");
+		crit_printk(KERN_INFO"<axi_stream_fifo_read> There is either no data to read, or less than 8 bytes.\n");
 		return 0;
 	}
 
@@ -896,7 +897,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 	ret = data_transfer(axi_dest, 0, count, keyhole_en, dma_offset_read);
 	if (ret > 0)
 	{
-		verbose_printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Data from Read FIFO\n");
+		crit_printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Data from Read FIFO\n");
 		return -1;
 	}
 

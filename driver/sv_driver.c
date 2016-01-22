@@ -277,7 +277,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	//map the hardware space to virtual space
 	pci_bar_vir_addr = ioremap(pci_bar_hw_addr, pci_bar_size);
 	if(0 == pci_bar_vir_addr){
-		verbose_printk(KERN_INFO"%s:<probe>ioremap error when mapping to vritaul address\n", pci_devName);
+		crit_printk(KERN_INFO"%s:<probe>ioremap error when mapping to vritaul address\n", pci_devName);
 		return ERROR;
 	}
 	verbose_printk(KERN_INFO"<probe>pci bar virtual address base is:%p\n", pci_bar_vir_addr);
@@ -463,7 +463,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 	pci_bar_vir_addr = devm_ioremap_resource(&pdev->dev, resource_1);
 
 	if(0 == pci_bar_vir_addr){
-		verbose_printk(KERN_INFO"%s:<probe>ioremap error when mapping to vritaul address\n", pci_devName);
+		crit_printk(KERN_INFO"%s:<probe>ioremap error when mapping to virtual address\n", pci_devName);
 		return ERROR;
 	}
 	verbose_printk(KERN_INFO"<probe>pci bar virtual address base is:%p\n", pci_bar_vir_addr);
@@ -490,7 +490,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 	//set DMA mask
 	if(0 != dma_set_mask(&pdev->dev, 0x00000000FFFFFFFF)){
-		verbose_printk(KERN_INFO"%s:<probe>set DMA mask error\n", pci_devName);
+		crit_printk(KERN_INFO"%s:<probe>set DMA mask error\n", pci_devName);
 		return ERROR;
 	}
 	verbose_printk(KERN_INFO"<probe>dma mask set\n");
@@ -500,13 +500,13 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 	//request IRQ
 	if(0 > request_irq(irq_num, &pci_isr, IRQF_SHARED, pci_devName, pdev)){
-		verbose_printk(KERN_INFO"%s:<probe>request IRQ error\n", pci_devName);
+		crit_printk(KERN_INFO"%s:<probe>request IRQ error\n", pci_devName);
 		return ERROR;
 	}
 
 	//register the char device
 	if(0 > register_chrdev(major, "sv_driver", &pci_fops)){
-		verbose_printk(KERN_INFO"%s:<probe>char driver not registered\n", "sv_driver");
+		crit_printk(KERN_INFO"%s:<probe>char driver not registered\n", "sv_driver");
 		return ERROR;
 	}
 
@@ -514,7 +514,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 	dma_buffer_base = dma_alloc_coherent(dev_struct, (size_t)dma_buffer_size, &dma_addr_base, GFP_KERNEL);
 	if(NULL == dma_buffer_base)
 	{
-		verbose_printk("%s:<sv_driver_init>DMA buffer base allocation ERROR\n", pci_devName);
+		crit_printk("%s:<sv_driver_init>DMA buffer base allocation ERROR\n", pci_devName);
 		return -1;
 	}
 	else
@@ -1125,6 +1125,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	crit_printk(KERN_INFO"\n\n");	
 	crit_printk(KERN_INFO"<pci_write>: ************************************************************************\n");	
 	crit_printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION BEGIN  **************************\n");	
+	crit_printk(KERN_INFO"<pci_write>:                  Attempting to transfer %zu bytes\n", count);	
 	crit_printk(KERN_INFO"<pci_write>: ************************************************************************\n\n");	
 
 	while (bytes_written < count)
@@ -1134,7 +1135,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		if (partial_count > mod_desc->dma_size)
 		{
 			remaining_size = count - bytes_written;
-			crit_printk(KERN_INFO"<pci_write>: the current DMA Buffer size of:%x is not large enough for *remaining* transfer size:%x\n", mod_desc->dma_size, remaining_size);	
+			crit_printk(KERN_INFO"<pci_write>: the current DMA Buffer size of: 0x%x is not large enough for *remaining* transfer size:%zu bytes\n", mod_desc->dma_size, remaining_size);	
 			partial_count = mod_desc->dma_size;
 		}
 
@@ -1142,9 +1143,13 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 		/*eventually this will go away once we add mmap
 		 * for now we copy to the appropriate file buffer*/
-		//	copy_from_user(mod_desc->dma_write, (buf + bytes_written), partial_count);
 		crit_printk(KERN_INFO"<pci_write>: copying data from user space...\n");
-		copy_from_user(mod_desc->dma_write, buf, partial_count);
+	
+		/*the pointer of data to be transferred is incremented by the amout of bytes
+		 * already written.  This handles the case when a chunk of data larger than
+		 * the dma buffer size is attempted to be written*/
+		copy_from_user(mod_desc->dma_write, (buf + bytes_written), partial_count);
+	//	copy_from_user(mod_desc->dma_write, buf, partial_count);
 
 
 
@@ -1226,19 +1231,20 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		}
 
 		bytes_written = bytes_written + partial_count;
-		crit_printk(KERN_INFO"<pci_write>: Wrote %zu bytes.\n", partial_count);	
+		crit_printk(KERN_INFO"<pci_write>: Wrote %zu bytes in this pass.\n", partial_count);	
 	}
 
-	bytes = bytes_written;
+	//bytes = bytes_written;
 
 	//msleep(5000);   //experiment....
 
 	crit_printk(KERN_INFO"\n");	
 	crit_printk(KERN_INFO"<pci_write>: ************************************************************************\n");	
 	crit_printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION END  **************************\n");	
+	crit_printk(KERN_INFO"<pci_write>: Wrote a total of %zu bytes in write call.\n", bytes_written);	
 	crit_printk(KERN_INFO"<pci_write>: ************************************************************************\n");	
 	crit_printk(KERN_INFO"\n");	
-	return bytes;
+	return bytes_written;
 
 }
 
@@ -1286,6 +1292,10 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 		case AXI_STREAM_FIFO:
 
 			bytes = axi_stream_fifo_read(count, mod_desc);
+			if (bytes < 0)
+			{
+				crit_printk(KERN_INFO"<user_peripheral_read>: ERROR reading data from axi stream fifo\n");
+			}
 
 			break;
 
@@ -1369,6 +1379,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	crit_printk(KERN_INFO"\n");	
 	crit_printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
 	crit_printk(KERN_INFO"<pci_read>: ******************** READ TRANSACTION END  **************************\n");	
+	crit_printk(KERN_INFO"                                    Bytes read : %d\n", bytes);	
 	crit_printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
 	crit_printk(KERN_INFO"\n");	
 
