@@ -192,7 +192,7 @@ ssize_t pci_read(struct file *filp, char __user *buf, size_t count, loff_t *f_po
 int pci_poll(struct file *filep, poll_table * pwait);
 
 struct file_operations pci_fops = {
-				read:           pci_read,
+read:           pci_read,
 				write:          pci_write,
 				unlocked_ioctl: pci_unlocked_ioctl,
 				open:           pci_open,
@@ -249,64 +249,64 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
 	int ret;
 	int pcie_m_set; 
-    int int_ctrl_set;
+	int int_ctrl_set;
 	/* Do probing type stuff here.  
 	 * 	 * Like calling request_region();
 	 * 	 	 */
 
-	printk(KERN_INFO"%s:<probe>******************************** BEGIN PROBE ROUTINE *****************************************\n", pci_devName);
+	verbose_printk(KERN_INFO"%s:<probe>******************************** BEGIN PROBE ROUTINE *****************************************\n", pci_devName);
 
 	pci_dev_struct = dev;
 	dev_struct = &dev->dev;
 
 	if(NULL == pci_dev_struct){
-		printk(KERN_INFO"%s:<probe>struct pci_dev_struct is NULL\n", pci_devName);
+		verbose_printk(KERN_INFO"%s:<probe>struct pci_dev_struct is NULL\n", pci_devName);
 		return ERROR;
 	}
 	/****************** BAR 0 Mapping *******************************************/
 	//get the base hardware address
 	pci_bar_hw_addr = pci_resource_start(pci_dev_struct, 0);
 	if (0 > pci_bar_hw_addr){
-		printk(KERN_INFO"%s<probe>base hardware address is not set\n", pci_devName);
+		verbose_printk(KERN_INFO"%s<probe>base hardware address is not set\n", pci_devName);
 		return ERROR;
 	}
 	//get the base memory size
 	pci_bar_size = pci_resource_len(pci_dev_struct, 0);
-	printk(KERN_INFO"<probe>pci bar size is:%lu\n", pci_bar_size);
+	verbose_printk(KERN_INFO"<probe>pci bar size is:%lu\n", pci_bar_size);
 
 	//map the hardware space to virtual space
 	pci_bar_vir_addr = ioremap(pci_bar_hw_addr, pci_bar_size);
 	if(0 == pci_bar_vir_addr){
-		printk(KERN_INFO"%s:<probe>ioremap error when mapping to vritaul address\n", pci_devName);
+		crit_printk(KERN_INFO"%s:<probe>ioremap error when mapping to vritaul address\n", pci_devName);
 		return ERROR;
 	}
-	printk(KERN_INFO"<probe>pci bar virtual address base is:%p\n", pci_bar_vir_addr);
+	verbose_printk(KERN_INFO"<probe>pci bar virtual address base is:%p\n", pci_bar_vir_addr);
 
 	/****************** BAR 1 Mapping *******************************************/
 	//get the base hardware address
 	pci_bar_1_addr = pci_resource_start(pci_dev_struct, 1);
 	if (0 > pci_bar_1_addr){
-		printk(KERN_INFO"%s<probe>BAR 1 base hardware address is not set\n", pci_devName);
+		verbose_printk(KERN_INFO"%s<probe>BAR 1 base hardware address is not set\n", pci_devName);
 		return ERROR;
 	}
 	//get the base memory size
 	pci_bar_1_size = pci_resource_len(pci_dev_struct, 1);
-	printk(KERN_INFO"<probe>pci bar 1 size is:%lu\n", pci_bar_1_size);
+	verbose_printk(KERN_INFO"<probe>pci bar 1 size is:%lu\n", pci_bar_1_size);
 
 	//map the hardware space to virtual space
 	if (pci_bar_1_size > 0)
 	{
 		pci_bar_1_vir_addr = ioremap(pci_bar_1_addr, pci_bar_1_size);
 		if(0 == pci_bar_1_vir_addr){
-			printk(KERN_INFO"%s:<probe>ioremap error when mapping to virtual address\n", pci_devName);
+			verbose_printk(KERN_INFO"%s:<probe>ioremap error when mapping to virtual address\n", pci_devName);
 			return ERROR;
 		}
-		printk(KERN_INFO"<probe>pci bar 1 virtual address base is:%p\n", pci_bar_1_vir_addr);
+		verbose_printk(KERN_INFO"<probe>pci bar 1 virtual address base is:%p\n", pci_bar_1_vir_addr);
 	}
 	else
 	{
 		peripheral_space_offset = 0;
-		printk(KERN_INFO"%s<probe>BAR 1 is not in use\n", pci_devName);
+		verbose_printk(KERN_INFO"%s<probe>BAR 1 is not in use\n", pci_devName);
 	}
 	/*****************************************************************************/
 
@@ -315,62 +315,62 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	//get the base hardware address
 	pci_bar_2_addr = pci_resource_start(pci_dev_struct, 2);
 	if (0 > pci_bar_2_addr){
-		printk(KERN_INFO"%s<probe>BAR 2 base hardware address is not set\n", pci_devName);
+		verbose_printk(KERN_INFO"%s<probe>BAR 2 base hardware address is not set\n", pci_devName);
 		return ERROR;
 	}
 	//get the base memory size
 	pci_bar_2_size = pci_resource_len(pci_dev_struct, 2);
-	printk(KERN_INFO"<probe>pci bar 2 size is:%lu\n", pci_bar_2_size);
+	verbose_printk(KERN_INFO"<probe>pci bar 2 size is:%lu\n", pci_bar_2_size);
 
 	if (pci_bar_2_size > 0)
 	{
 		//map the hardware space to virtual space
 		pci_bar_2_vir_addr = ioremap(pci_bar_2_addr, pci_bar_2_size);
 		if(0 == pci_bar_2_vir_addr){
-			printk(KERN_INFO"%s:<probe>ioremap error when mapping to virtual address\n", pci_devName);
+			verbose_printk(KERN_INFO"%s:<probe>ioremap error when mapping to virtual address\n", pci_devName);
 			return ERROR;
 		}
-		printk(KERN_INFO"<probe>pci bar 2 virtual address base is:%p\n", pci_bar_2_vir_addr);
+		verbose_printk(KERN_INFO"<probe>pci bar 2 virtual address base is:%p\n", pci_bar_2_vir_addr);
 	}
 	else
 	{
 		peripheral_space_1_offset = 0;
-		printk(KERN_INFO"%s<probe>BAR 2 is not in use\n", pci_devName);
+		verbose_printk(KERN_INFO"%s<probe>BAR 2 is not in use\n", pci_devName);
 	}
 	/*****************************************************************************/
 
 	//enable the device
 	pci_enable_device(dev);
-	printk(KERN_INFO"<probe>device enabled\n");
+	verbose_printk(KERN_INFO"<probe>device enabled\n");
 
 	//set DMA mask
 	if(0 != dma_set_coherent_mask(&dev->dev, 0x00000000FFFFFFFF)){
-		printk(KERN_INFO"%s:<probe>set DMA mask error\n", pci_devName);
+		verbose_printk(KERN_INFO"%s:<probe>set DMA mask error\n", pci_devName);
 		return ERROR;
 	}
-	printk(KERN_INFO"<probe>dma mask set\n");
+	verbose_printk(KERN_INFO"<probe>dma mask set\n");
 
 	//enable bus mastering
 	pci_set_master(dev);
-	printk(KERN_INFO"<probe>pci set as master\n");
+	verbose_printk(KERN_INFO"<probe>pci set as master\n");
 
 	//enable MSI interrupts
 	if(0 > pci_enable_msi(pci_dev_struct)){
-		printk(KERN_INFO"%s:<probe>MSI enable error\n", pci_devName);
+		verbose_printk(KERN_INFO"%s:<probe>MSI enable error\n", pci_devName);
 		return ERROR;
 	}
-	printk(KERN_INFO"<probe>pci enabled msi interrupt\n");
+	verbose_printk(KERN_INFO"<probe>pci enabled msi interrupt\n");
 
 	//request IRQ
 	if(0 > request_irq(pci_dev_struct->irq, &pci_isr, IRQF_SHARED, pci_devName, pci_dev_struct)){
-		printk(KERN_INFO"%s:<probe>request IRQ error\n", pci_devName);
+		verbose_printk(KERN_INFO"%s:<probe>request IRQ error\n", pci_devName);
 		return ERROR;
 	}
 
 
 	//register the char device
 	if(0 > register_chrdev(major, pci_devName, &pci_fops)){
-		printk(KERN_INFO"%s:<probe>char driver not registered\n", pci_devName);
+		verbose_printk(KERN_INFO"%s:<probe>char driver not registered\n", pci_devName);
 		return ERROR;
 	}
 
@@ -381,13 +381,13 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	dma_buffer_base = dma_alloc_coherent(dev_struct, (size_t)dma_buffer_size, &dma_addr_base, GFP_KERNEL);
 	if(NULL == dma_buffer_base)
 	{
-		printk("%s:<sv_driver_init>DMA buffer base allocation ERROR\n", pci_devName);
+		verbose_printk("%s:<sv_driver_init>DMA buffer base allocation ERROR\n", pci_devName);
 		return -1;
 	}
 	else
 	{
-		printk(KERN_INFO"<sv_driver_init>: dma kernel buffer base address is:%llx\n", (u64)dma_buffer_base);
-		printk(KERN_INFO"<sv_driver_init>: dma system memory buffer base address is:%llx\n", (u64)dma_addr_base);
+		verbose_printk(KERN_INFO"<sv_driver_init>: dma kernel buffer base address is:%llx\n", (u64)dma_buffer_base);
+		verbose_printk(KERN_INFO"<sv_driver_init>: dma system memory buffer base address is:%llx\n", (u64)dma_addr_base);
 		dma_current_offset = 4096;   //we want to leave the first 4k for the kernel to use internally.
 		current_dma_offset_internal = 0;
 	}
@@ -419,7 +419,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	if (pcie_m_address != 0xFFFFFFFF)
 	{
 		pcie_m_init(1);
-	    pcie_m_set = 1; 
+		pcie_m_set = 1; 
 	}
 
 	//	if (pcie_m_address_2 != 0xFFFFFFFF)
@@ -434,10 +434,10 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	}
 
 	cdma_capable = (cdma_set[1] == 1) & (pcie_m_set == 1) & (int_ctrl_set == 1) & (pcie_ctl_set == 1);
-	printk(KERN_INFO"<probe> cdma_capable = %x\n", cdma_capable);
-	printk(KERN_INFO"<probe> cdma_set[2] = %x\n", cdma_set[2]);
+	verbose_printk(KERN_INFO"<probe> cdma_capable = %x\n", cdma_capable);
+	verbose_printk(KERN_INFO"<probe> cdma_set[2] = %x\n", cdma_set[2]);
 
-	printk(KERN_INFO"<probe>***********************PROBE FINISHED SUCCESSFULLY**************************************\n");
+	verbose_printk(KERN_INFO"<probe>***********************PROBE FINISHED SUCCESSFULLY**************************************\n");
 	return 0;
 }
 
@@ -448,7 +448,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 	int pcie_m_set; 
 	int int_ctrl_set;
 
-	printk(KERN_INFO"%s:<probe>******************************** BEGIN PROBE ROUTINE *****************************************\n", pci_devName);
+	verbose_printk(KERN_INFO"%s:<probe>******************************** BEGIN PROBE ROUTINE *****************************************\n", pci_devName);
 
 	platform_dev_struct = pdev;
 	dev_struct = &pdev->dev;
@@ -457,31 +457,31 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 	//get the base memory size
 	pci_bar_size = resource_1->end - resource_1->start;
-	printk(KERN_INFO"<probe>pci bar size is:%lu\n", pci_bar_size);
+	verbose_printk(KERN_INFO"<probe>pci bar size is:%lu\n", pci_bar_size);
 
 	//map the hardware space to virtual space
 	pci_bar_vir_addr = devm_ioremap_resource(&pdev->dev, resource_1);
 
 	if(0 == pci_bar_vir_addr){
-		printk(KERN_INFO"%s:<probe>ioremap error when mapping to vritaul address\n", pci_devName);
+		crit_printk(KERN_INFO"%s:<probe>ioremap error when mapping to virtual address\n", pci_devName);
 		return ERROR;
 	}
-	printk(KERN_INFO"<probe>pci bar virtual address base is:%p\n", pci_bar_vir_addr);
+	verbose_printk(KERN_INFO"<probe>pci bar virtual address base is:%p\n", pci_bar_vir_addr);
 
 	/****************** BAR 1 Mapping *******************************************/
 
 	//	resource_2 = platform_get_resource(pdev, IORESOURCE_MEM, 1);
 	//get the base memory size
 	//	pci_bar_1_size = resource_2->end - resource_2->start;
-	//	printk(KERN_INFO"<probe>pci bar 1 size is:%d\n", pci_bar_1_size);
+	//	verbose_printk(KERN_INFO"<probe>pci bar 1 size is:%d\n", pci_bar_1_size);
 
 	//map the hardware space to virtual space
 	//	pci_bar_1_vir_addr = devm_ioremap_resource(&pdev->dev, resource_2);
 	//	if(0 == pci_bar_1_vir_addr){
-	//		printk(KERN_INFO"%s:<probe>ioremap error when mapping to virtual address\n", pci_devName);
+	//		verbose_printk(KERN_INFO"%s:<probe>ioremap error when mapping to virtual address\n", pci_devName);
 	//		return ERROR;
 	//	}
-	//	printk(KERN_INFO"<probe>pci bar 1 virtual address base is:%p\n", pci_bar_1_vir_addr);
+	//	verbose_printk(KERN_INFO"<probe>pci bar 1 virtual address base is:%p\n", pci_bar_1_vir_addr);
 	peripheral_space_offset = 0;
 	pci_bar_1_size = 0;
 
@@ -490,23 +490,23 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 	//set DMA mask
 	if(0 != dma_set_mask(&pdev->dev, 0x00000000FFFFFFFF)){
-		printk(KERN_INFO"%s:<probe>set DMA mask error\n", pci_devName);
+		crit_printk(KERN_INFO"%s:<probe>set DMA mask error\n", pci_devName);
 		return ERROR;
 	}
-	printk(KERN_INFO"<probe>dma mask set\n");
+	verbose_printk(KERN_INFO"<probe>dma mask set\n");
 
 	irq_num = platform_get_irq(pdev, 0);
-	printk(KERN_INFO"<probe>IRQ number is:%x\n", irq_num);
+	verbose_printk(KERN_INFO"<probe>IRQ number is:%x\n", irq_num);
 
 	//request IRQ
 	if(0 > request_irq(irq_num, &pci_isr, IRQF_SHARED, pci_devName, pdev)){
-		printk(KERN_INFO"%s:<probe>request IRQ error\n", pci_devName);
+		crit_printk(KERN_INFO"%s:<probe>request IRQ error\n", pci_devName);
 		return ERROR;
 	}
 
 	//register the char device
 	if(0 > register_chrdev(major, "sv_driver", &pci_fops)){
-		printk(KERN_INFO"%s:<probe>char driver not registered\n", "sv_driver");
+		crit_printk(KERN_INFO"%s:<probe>char driver not registered\n", "sv_driver");
 		return ERROR;
 	}
 
@@ -514,13 +514,13 @@ static int sv_plat_probe(struct platform_device *pdev)
 	dma_buffer_base = dma_alloc_coherent(dev_struct, (size_t)dma_buffer_size, &dma_addr_base, GFP_KERNEL);
 	if(NULL == dma_buffer_base)
 	{
-		printk("%s:<sv_driver_init>DMA buffer base allocation ERROR\n", pci_devName);
+		crit_printk("%s:<sv_driver_init>DMA buffer base allocation ERROR\n", pci_devName);
 		return -1;
 	}
 	else
 	{
-		printk(KERN_INFO"<sv_driver_init>: dma buffer base address is:%llx\n", (u64)dma_buffer_base);
-		printk(KERN_INFO"<sv_driver_init>: dma system memory buffer base address is:%llx\n", (u64)dma_addr_base);
+		verbose_printk(KERN_INFO"<sv_driver_init>: dma buffer base address is:%llx\n", (u64)dma_buffer_base);
+		verbose_printk(KERN_INFO"<sv_driver_init>: dma system memory buffer base address is:%llx\n", (u64)dma_addr_base);
 		dma_current_offset = 4096;   //we want to leave the first 4k for the kernel to use internally.
 		current_dma_offset_internal = 0;
 	}
@@ -545,13 +545,13 @@ static int sv_plat_probe(struct platform_device *pdev)
 	if (pcie_m_address != 0xFFFFFFFF)
 	{
 		pcie_m_init(1);
-	    pcie_m_set = 1; 
+		pcie_m_set = 1; 
 	}
 
 	if (int_ctlr_address != 0xFFFFFFFF)
 	{
 		int_ctlr_init((u64)int_ctlr_address);
-    	int_ctrl_set = 1;
+		int_ctrl_set = 1;
 	}
 
 	/*ARM works a little differently for DMA than PCIe in that that translation
@@ -562,7 +562,10 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 	cdma_capable = (cdma_set[1] == 1) & (pcie_m_set == 1) & (int_ctrl_set == 1);
 
-	printk(KERN_INFO"<probe>***********************PROBE FINISHED SUCCESSFULLY**************************************\n");
+	verbose_printk(KERN_INFO"<probe> cdma_capable = %x\n", cdma_capable);
+	verbose_printk(KERN_INFO"<probe> cdma_set[2] = %x\n", cdma_set[2]);
+
+	crit_printk(KERN_INFO"<probe>***********************PROBE FINISHED SUCCESSFULLY**************************************\n");
 	return 0;
 }
 
@@ -595,7 +598,7 @@ static int sv_plat_remove(struct platform_device *pdev)
 
 	unregister_chrdev(major, pci_devName);
 
-	printk(KERN_INFO"<remove>***********************PLATFORM DEVICE REMOVED**************************************\n");
+	crit_printk(KERN_INFO"<remove>***********************PLATFORM DEVICE REMOVED**************************************\n");
 
 	return 0;
 }
@@ -616,8 +619,8 @@ static int __init sv_driver_init(void)
 
 	switch(driver_type){
 		case PCI:
-			printk(KERN_INFO"<pci_init>: Device ID: ('%d')\n", device_id);
-			printk(KERN_INFO"<pci_init>: Major Number: ('%d')\n", major);
+			verbose_printk(KERN_INFO"<pci_init>: Device ID: ('%d')\n", device_id);
+			verbose_printk(KERN_INFO"<pci_init>: Major Number: ('%d')\n", major);
 
 			init_waitqueue_head(&wq);
 			init_waitqueue_head(&wq_periph);
@@ -631,8 +634,8 @@ static int __init sv_driver_init(void)
 
 		case PLATFORM:
 
-			printk(KERN_INFO"<platform_init>: Device ID: ('%d')\n", device_id);
-			printk(KERN_INFO"<platform_init>: Major Number: ('%d')\n", major);
+			verbose_printk(KERN_INFO"<platform_init>: Device ID: ('%d')\n", device_id);
+			verbose_printk(KERN_INFO"<platform_init>: Major Number: ('%d')\n", major);
 
 			init_waitqueue_head(&wq);
 			init_waitqueue_head(&wq_periph);
@@ -647,7 +650,7 @@ static int __init sv_driver_init(void)
 		default:;
 	}
 
-	printk(KERN_INFO"<platform_init>: !!!!ERROR!!!!! No correct driver type detected!\n");
+	crit_printk(KERN_INFO"<platform_init>: !!!!ERROR!!!!! No correct driver type detected!\n");
 	return 0;
 }
 
@@ -683,7 +686,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 	vec_serviced = 0;
 
-	printk(KERN_INFO"<pci_isr>: Entered the pci ISR");
+	verbose_printk(KERN_INFO"<pci_isr>: Entered the pci ISR");
 
 	/*Here we need to find out who triggered the interrupt*
 	 *Since we only allow one MSI vector, we need to query the
@@ -692,24 +695,24 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	/*This is the interrupt status register*/
 	axi_dest = axi_interr_ctrl + INT_CTRL_ISR;
 	ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
-	printk(KERN_INFO"<pci_isr>: interrupt status register vector is: ('%x')\n", status);
+	verbose_printk(KERN_INFO"<pci_isr>: interrupt status register vector is: ('%x')\n", status);
 
 
 	while(status > 0)
 	{
 		int_num = vec2num(status);
-		printk(KERN_INFO"<pci_isr>: interrupt number is: ('%d')\n", int_num);
+		verbose_printk(KERN_INFO"<pci_isr>: interrupt number is: ('%d')\n", int_num);
 		device_mode = *(interr_dict[int_num].mode);
 
 		if (device_mode == CDMA)
 		{
-			printk(KERN_INFO"<pci_isr>: this interrupt is from the CDMA\n");
+			verbose_printk(KERN_INFO"<pci_isr>: this interrupt is from the CDMA\n");
 			vec_serviced = vec_serviced | num2vec(int_num);
 		}
 
 		else
 		{
-			printk(KERN_INFO"<pci_isr>: this interrupt is from a user peripheral\n");
+			crit_printk(KERN_INFO"<pci_isr>: this interrupt is from a user peripheral\n");
 			*(interr_dict[int_num].int_count) = (*(interr_dict[int_num].int_count)) + 1;
 
 			vec_serviced = vec_serviced | num2vec(int_num);
@@ -722,34 +725,36 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 		/*This is the interrupt status register*/
 		axi_dest = axi_interr_ctrl + INT_CTRL_ISR;
-		printk(KERN_INFO"<pci_isr>: Checking the ISR vector for any additional vectors....\n");
+		verbose_printk(KERN_INFO"<pci_isr>: Checking the ISR vector for any additional vectors....\n");
 		ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
 
 
 	}
 
 
-	printk(KERN_INFO"<pci_isr>: All interrupts serviced. The following Vector is acknowledged: %x\n", vec_serviced);
+	verbose_printk(KERN_INFO"<pci_isr>: All interrupts serviced. The following Vector is acknowledged: %x\n", vec_serviced);
 
 	/* The CDMA vectors (1 and 2) */
 	if ((vec_serviced & 0x01) == 0x01) 
 	{	
 		cdma_comp[1] = 1;      //condition for wake_up
-		printk(KERN_INFO"<pci_isr>: Waking up CDMA 1\n");
+		verbose_printk(KERN_INFO"<pci_isr>: Waking up CDMA 1\n");
 		wake_up_interruptible(&wq);
 	}
 
 	if ((vec_serviced & 0x02) == 0x02)
 	{	
 		cdma_comp[2] = 1;      //condition for wake_up
-		printk(KERN_INFO"<pci_isr>: Waking up CDMA 2\n");
+		verbose_printk(KERN_INFO"<pci_isr>: Waking up CDMA 2\n");
 		wake_up_interruptible(&wq);
 	}
 
 	if (vec_serviced >= 0x10)
+	{
 		wake_up(&wq_periph);
-
-	printk(KERN_INFO"<pci_isr>: Exiting ISR\n");
+		crit_printk(KERN_INFO"<pci_isr>: Waking up User Peripherals\n");
+	}
+	verbose_printk(KERN_INFO"<pci_isr>: Exiting ISR\n");
 	return IRQ_HANDLED;
 }
 
@@ -787,7 +792,7 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->kernel_reg_read = 0;
 	s->file_size = 4096;   //default to 4K
 
-	printk(KERN_INFO"<pci_open>: minor number %d detected\n", s->minor);
+	verbose_printk(KERN_INFO"<pci_open>: minor number %d detected\n", s->minor);
 
 	/*set the private data field of the file pointer for file op use*/
 	filep->private_data = s;   
@@ -796,11 +801,11 @@ int pci_open(struct inode *inode, struct file *filep)
 	ret = dma_file_init(s, dma_file_size, dma_buffer_base, dma_buffer_size);
 	if (ret < 0)
 	{
-		printk(KERN_INFO"<pci_open>:!!!!file open FAILURE!!!!.\n");
+		verbose_printk(KERN_INFO"<pci_open>:!!!!file open FAILURE!!!!.\n");
 		return ERROR;
 	}
 
-	printk(KERN_INFO"<pci_open>: file open complete.\n");
+	verbose_printk(KERN_INFO"<pci_open>: file open complete.\n");
 	return SUCCESS;
 
 }
@@ -848,19 +853,19 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 	copy_from_user(&arg_loc, argp, sizeof(u64));
 
-	printk("<ioctl>Entering IOCTL with command: %d and arg %llx\n", cmd, arg_loc);
+	verbose_printk("<ioctl>Entering IOCTL with command: %d and arg %llx\n", cmd, arg_loc);
 
 	mod_desc = filep->private_data;   
 
 	switch(cmd){
 
 		case SET_AXI_DEVICE:
-			printk(KERN_INFO"<ioctl>: Setting Peripheral Axi Address:%llx\n", arg_loc);
+			verbose_printk(KERN_INFO"<ioctl>: Setting Peripheral Axi Address:%llx\n", arg_loc);
 			mod_desc->axi_addr = arg_loc;
 			break;
 
 		case SET_AXI_CTL_DEVICE:
-			printk(KERN_INFO"<ioctl>: Setting Peripheral CTL AXI Address:%llx\n", arg_loc);
+			verbose_printk(KERN_INFO"<ioctl>: Setting Peripheral CTL AXI Address:%llx\n", arg_loc);
 			mod_desc->axi_addr_ctl = arg_loc;
 			break;
 
@@ -885,42 +890,42 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			break;
 
 		case SET_DMA_SIZE:
-			printk(KERN_INFO"<ioctl>: Setting Peripheral DMA size:%llx\n", arg_loc);
-			mod_desc->dma_size = arg_loc;
+			verbose_printk(KERN_INFO"<ioctl>: Setting Peripheral DMA size:%llx\n", arg_loc);
+			mod_desc->dma_size = (size_t)arg_loc;
 			if (((u64)dma_current_offset + arg_loc) > (u64)((char*)dma_buffer_base + dma_buffer_size))
 			{
-				printk(KERN_INFO"<ioctl>: ERROR! DMA Buffer out of memory!\n");
+				verbose_printk(KERN_INFO"<ioctl>: ERROR! DMA Buffer out of memory!\n");
 				return ERROR;
 			}
 			else
 			{
-				mod_desc->dma_size = arg_loc;
-				printk(KERN_INFO"<set_dma_size>: The current system memory dma offset:%x\n", dma_current_offset);
+				mod_desc->dma_size = (size_t)arg_loc;
+				verbose_printk(KERN_INFO"<set_dma_size>: The current system memory dma offset:%x\n", dma_current_offset);
 				mod_desc->dma_offset_read = dma_current_offset;            //set the dma start address for the peripheral read
 				mod_desc->dma_offset_write = dma_current_offset + (u32)arg_loc; //set the dma start address for the peripheral write
 				mod_desc->dma_write = (void*)((char*)dma_buffer_base + (u64)dma_current_offset + arg_loc);            //actual pointer to kernel buffer
-				printk(KERN_INFO"<ioctl>: DMA kernel write address set to:%llx\n", (u64)mod_desc->dma_write);
+				verbose_printk(KERN_INFO"<ioctl>: DMA kernel write address set to:%llx\n", (u64)mod_desc->dma_write);
 				mod_desc->dma_read = (void*)((char*)dma_buffer_base + (u64)dma_current_offset);            //actual pointer to kernel buffer
 
 				dma_current_offset = dma_current_offset + (u32)(2*arg_loc);            //update the current dma allocation pointer, 2 buffers (R/W)
-				printk(KERN_INFO"<ioctl>: Success setting peripheral DMA\n");
+				verbose_printk(KERN_INFO"<ioctl>: Success setting peripheral DMA\n");
 			}
 			break;
 
 		case RESET_DMA_ALLOC:
 			dma_current_offset = 4096;   //we want to leave the first 4k for the kernel to use internally.
 			current_dma_offset_internal = 0;
-			printk(KERN_INFO"<ioctl>: Reset the DMA Allocation\n");
+			verbose_printk(KERN_INFO"<ioctl>: Reset the DMA Allocation\n");
 			break;
 
 		case SET_INTERRUPT:
-			printk(KERN_INFO"<ioctl>: Setting device as an Interrupt source with vector:%llx\n", arg_loc);
+			verbose_printk(KERN_INFO"<ioctl>: Setting device as an Interrupt source with vector:%llx\n", arg_loc);
 			/*Store the Interrupt Vector*/
 			mod_desc->interrupt_vec = (u32)arg_loc;
 
 			int_num = vec2num((u32)arg_loc);
 			mod_desc->int_num = int_num;
-			printk(KERN_INFO"<ioctl>: Interrupt Number:%d\n", int_num);
+			verbose_printk(KERN_INFO"<ioctl>: Interrupt Number:%d\n", int_num);
 
 			interr_dict[int_num].int_count = mod_desc->int_count;	
 			interr_dict[int_num].mode = mod_desc->mode;
@@ -928,8 +933,8 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			break;
 
 		case SET_FILE_SIZE:
-			printk(KERN_INFO"<ioctl>: Setting device file size:%llx\n", arg_loc);
-			mod_desc->file_size = (loff_t)arg_loc;
+			mod_desc->file_size = ((loff_t)arg_loc & 0xffffffff);
+			verbose_printk(KERN_INFO"<ioctl>: Setting device file size:%llu\n", mod_desc->file_size);
 			break;
 
 
@@ -938,12 +943,12 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 			if(arg_loc>0)    //We are ENABLING keyhole write
 			{
-				printk(KERN_INFO"<ioctl_keyhole_write_set>: Setting the CDMA Keyhole WRITE as ENABLED\n");
+				verbose_printk(KERN_INFO"<ioctl_keyhole_write_set>: Setting the CDMA Keyhole WRITE as ENABLED\n");
 				ret = cdma_config_set(bit_vec, 1, 1);   //value of one means we want to SET the register
 			}
 			else    //We are disabling keyhole write
 			{
-				printk(KERN_INFO"<ioctl_keyhole_write_disable>: Setting the CDMA Keyhole WRITE as DISABLED\n");
+				verbose_printk(KERN_INFO"<ioctl_keyhole_write_disable>: Setting the CDMA Keyhole WRITE as DISABLED\n");
 				ret = cdma_config_set(bit_vec, 0, 1);   //value of 0 means we want to UNSET the register
 			}
 			break;
@@ -953,28 +958,28 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 			if(arg_loc>0)    //We are ENABLING keyhole write
 			{
-				printk(KERN_INFO"<ioctl_keyhole_read_set>: Setting the CDMA Keyhole READ as ENABLED\n");
+				verbose_printk(KERN_INFO"<ioctl_keyhole_read_set>: Setting the CDMA Keyhole READ as ENABLED\n");
 				ret = cdma_config_set(bit_vec, 1, 1);   //value of one means we want to SET the register
 			}
 			else    //We are disabling keyhole write
 			{
-				printk(KERN_INFO"<ioctl_keyhole_read_disable>: Setting the CDMA Keyhole READ as DISABLED\n");
+				verbose_printk(KERN_INFO"<ioctl_keyhole_read_disable>: Setting the CDMA Keyhole READ as DISABLED\n");
 				ret = cdma_config_set(bit_vec, 0, 1);   //value of 0 means we want to UNSET the register
 			}
 			break;
 
 		case SET_MODE:
-			printk(KERN_INFO"<ioctl_set_mode>: Setting the mode of the peripheral\n");
+			verbose_printk(KERN_INFO"<ioctl_set_mode>: Setting the mode of the peripheral\n");
 			*(mod_desc->mode) = (u32)arg_loc;
 
 			switch((u32)arg_loc){
 
 				case SLAVE:
-					printk(KERN_INFO"<ioctl_set_mode>: Setting the mode of the peripheral to SLAVE\n");
+					verbose_printk(KERN_INFO"<ioctl_set_mode>: Setting the mode of the peripheral to SLAVE\n");
 					break;
 
 				case MASTER:
-					printk(KERN_INFO"<ioctl_set_mode>: Setting the mode of the peripheral to MASTER\n");
+					verbose_printk(KERN_INFO"<ioctl_set_mode>: Setting the mode of the peripheral to MASTER\n");
 
 					/*DMA Allocation*/
 					/*This sets the DMA read and write kernel buffers and obtains the
@@ -982,7 +987,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 					dma_master_buf[master_count] = pci_alloc_consistent(pci_dev_struct, 4096, &dma_m_addr[master_count]);
 					if(NULL == dma_master_buf[master_count])
 					{
-						printk("%s:<probe>DMA AXI Master allocation ERROR\n", pci_devName);
+						verbose_printk("%s:<probe>DMA AXI Master allocation ERROR\n", pci_devName);
 						return ERROR;
 					}
 
@@ -993,28 +998,28 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 					break;
 
 				case AXI_STREAM_FIFO:
-					printk(KERN_INFO"<ioctl_set_mode>: Setting the mode of the peripheral to AXI_STREAM_FIFO\n");
+					verbose_printk(KERN_INFO"<ioctl_set_mode>: Setting the mode of the peripheral to AXI_STREAM_FIFO\n");
 
 					/*Initialize the AXI_STREAM_FIFO*/
 					/*for now we will initialize all as interrupting for read*/
 					//					/*check to see if the AXI addresses have been set*/
 					if ((mod_desc->axi_addr == 0) | (mod_desc->axi_addr_ctl == 0))
 					{
-						printk(KERN_INFO"<ioctl_axi_stream_fifo>: ERROR: axi addresses of AXI STREAM FIFO not set\n");
-						printk(KERN_INFO"<ioctl_axi_stream_fifo>:        set the AXI addresses then set mode again\n");
+						verbose_printk(KERN_INFO"<ioctl_axi_stream_fifo>: ERROR: axi addresses of AXI STREAM FIFO not set\n");
+						verbose_printk(KERN_INFO"<ioctl_axi_stream_fifo>:        set the AXI addresses then set mode again\n");
 						return ERROR;
 					}
 					else
 					{
-						printk(KERN_INFO"<ioctl_axi_stream_fifo>: Initializing the FIFO and setting registers\n");
+						verbose_printk(KERN_INFO"<ioctl_axi_stream_fifo>: Initializing the FIFO and setting registers\n");
 
 						/*allocate a small buffer of DMA for kernel to use*/
 						mod_desc->dma_offset_internal_read = current_dma_offset_internal;
 						mod_desc->dma_offset_internal_write = current_dma_offset_internal + 0x04;
 						mod_desc->kernel_reg_read = (u32*)((u64)current_dma_offset_internal + (char*)dma_buffer_base);   //pointer to kernel read register
 						mod_desc->kernel_reg_write = (u32*)((u64)(current_dma_offset_internal + 0x04) + (char*)dma_buffer_base); //pointer to kernel write register
-						printk(KERN_INFO"<ioctl_axi_stream_fifo>: current dma kernel offset:%x\n", current_dma_offset_internal);
-						printk(KERN_INFO"<ioctl_axi_stream_fifo>: kernel R/W register kernel addresses:%llx / %llx\n", (u64)mod_desc->kernel_reg_read, (u64)mod_desc->kernel_reg_write );
+						verbose_printk(KERN_INFO"<ioctl_axi_stream_fifo>: current dma kernel offset:%x\n", current_dma_offset_internal);
+						verbose_printk(KERN_INFO"<ioctl_axi_stream_fifo>: kernel R/W register kernel addresses:%llx / %llx\n", (u64)mod_desc->kernel_reg_read, (u64)mod_desc->kernel_reg_write );
 						current_dma_offset_internal = current_dma_offset_internal + 0x08;   // update the current dma buffer status (just added two 32b buffers)
 
 						axi_stream_fifo_init(mod_desc);
@@ -1023,10 +1028,10 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 					break;
 
-				default:printk(KERN_INFO"<ioctl_set_mode> ERROR, improper mode type!\n");
+				default:verbose_printk(KERN_INFO"<ioctl_set_mode> ERROR, improper mode type!\n");
 			}
 			break;
-		default:printk(KERN_INFO"<pci_ioctl> ERROR, no command found.\n");
+		default:verbose_printk(KERN_INFO"<pci_ioctl> ERROR, no command found.\n");
 	}
 	return 0;
 }
@@ -1051,7 +1056,7 @@ loff_t pci_llseek( struct file *filp, loff_t off, int whence)
 		default: /* cant happen */
 			return -EINVAL;
 	}
-	printk(KERN_INFO"<pci_read>: attempted seek\n");
+	verbose_printk(KERN_INFO"<pci_read>: attempted seek\n");
 	if (newpos < 0) return -EINVAL;
 	filp->f_pos = newpos;
 	return newpos;
@@ -1064,20 +1069,22 @@ int pci_poll(struct file *filep, poll_table * pwait)
 	unsigned int mask = 0;
 
 	has_data = 0;
-	printk(KERN_INFO"<pci_poll>: Entered Poll()\n");
+	crit_printk(KERN_INFO"<pci_poll>:User Space has entered Poll()\n");
 	mod_desc = filep->private_data;   
 
 	/*Register the poll table with the peripheral wait queue
 	 *so that every wake_up on the wait queue will see if the 
 	 *peripheral has data*/
 	poll_wait(filep, &wq_periph, pwait);
+	crit_printk(KERN_INFO"<pci_poll>: Peripheral Interrupt Detected!!\n");
 
 	/*see if the module has triggered an interrupt*/
 	has_data = *(mod_desc->int_count);
+	crit_printk(KERN_INFO"<pci_poll>: Interrupt count of polling peripheral:%x\n", has_data);
 
 	if (has_data > 0)
 	{
-		printk(KERN_INFO"<pci_poll>: wait event detected!!\n");
+		verbose_printk(KERN_INFO"<pci_poll>: Interrupting Peripheral Matched!\n");
 		/*reset the has_data flag*/
 		*(mod_desc->int_count) = 0;
 		mask |= POLLIN;
@@ -1094,6 +1101,9 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	u64 axi_dest;
 	struct mod_desc * mod_desc;
 	size_t bytes;
+	size_t partial_count;
+	size_t bytes_written;
+	size_t remaining_size;
 	int transfer_type;
 	//	u32 kern_reg;
 	int ret;
@@ -1110,90 +1120,131 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 
 	bytes = 0;
+	bytes_written = 0;
 
-	/*eventually this will go away once we add mmap
-	 * for now we copy to the appropriate file buffer*/
-	copy_from_user(mod_desc->dma_write, buf, count);
+	crit_printk(KERN_INFO"\n\n");	
+	crit_printk(KERN_INFO"<pci_write>: ************************************************************************\n");	
+	crit_printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION BEGIN  **************************\n");	
+	crit_printk(KERN_INFO"<pci_write>:                  Attempting to transfer %zu bytes\n", count);	
+	crit_printk(KERN_INFO"<pci_write>: ************************************************************************\n\n");	
 
-	printk(KERN_INFO"\n\n");	
-	printk(KERN_INFO"<pci_write>: ************************************************************************\n");	
-	printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION BEGIN  **************************\n");	
-	printk(KERN_INFO"<pci_write>: ************************************************************************\n\n");	
-
-
-	if (*(mod_desc->mode) == AXI_STREAM_FIFO)
+	while (bytes_written < count)
 	{
+		partial_count = count - bytes_written;
 
-		bytes = axi_stream_fifo_write(count, mod_desc);
+		if (partial_count > mod_desc->dma_size)
+		{
+			remaining_size = count - bytes_written;
+			crit_printk(KERN_INFO"<pci_write>: the current DMA Buffer size of: 0x%x is not large enough for *remaining* transfer size:%zu bytes\n", mod_desc->dma_size, remaining_size);	
+			partial_count = mod_desc->dma_size;
+		}
 
-	}
+		crit_printk(KERN_INFO"<pci_write>: the amount of bytes being copied to kernel: %zu\n", partial_count);
 
-	else
-	{
-		/* Here we will decide whether to do a zero copy DMA, or to write */
-		/* directly to the peripheral */
-		init_write = *((u32*)(mod_desc->dma_write));
-		dma_offset_write = (u64)mod_desc->dma_offset_write;
-		dma_offset_internal_read = (u64)mod_desc->dma_offset_internal_read;
-		dma_offset_internal_write = (u64)mod_desc->dma_offset_internal_write;
+		/*eventually this will go away once we add mmap
+		 * for now we copy to the appropriate file buffer*/
+		crit_printk(KERN_INFO"<pci_write>: copying data from user space...\n");
+	
+		/*the pointer of data to be transferred is incremented by the amout of bytes
+		 * already written.  This handles the case when a chunk of data larger than
+		 * the dma buffer size is attempted to be written*/
+		copy_from_user(mod_desc->dma_write, (buf + bytes_written), partial_count);
+	//	copy_from_user(mod_desc->dma_write, buf, partial_count);
 
-		printk(KERN_INFO"<pci_write>: writing peripheral with starting value: %x\n", init_write);
-		printk(KERN_INFO"<pci_write>: DMA offset write value: %llx\n", dma_offset_write);
-		printk(KERN_INFO"<pci_write>: DMA internal offset write value: %llx\n", dma_offset_internal_write);
-		printk(KERN_INFO"<pci_write>: DMA internal offset read value: %llx\n", dma_offset_internal_read);
 
-		axi_dest = mod_desc->axi_addr + filep->f_pos;
 
-		if (mod_desc->keyhole_config & 0x1)
-			transfer_type = KEYHOLE_WRITE;
+		if (*(mod_desc->mode) == AXI_STREAM_FIFO)
+		{
+
+			bytes = axi_stream_fifo_write(partial_count, mod_desc);
+			if (bytes < 0)
+			{
+				crit_printk(KERN_INFO"<pci_write>: Write Error, exiting write routine...\n\n\n");
+				return -1;
+			}
+
+		}
+
 		else
-			transfer_type = NORMAL_WRITE;
+		{
+			/* Here we will decide whether to do a zero copy DMA, or to write */
+			/* directly to the peripheral */
+			init_write = *((u32*)(mod_desc->dma_write));
+			dma_offset_write = (u64)mod_desc->dma_offset_write;
+			dma_offset_internal_read = (u64)mod_desc->dma_offset_internal_read;
+			dma_offset_internal_write = (u64)mod_desc->dma_offset_internal_write;
 
-		printk(KERN_INFO"<pci_write>: writing peripheral using a transfer_type: %x\n", transfer_type);
-	
-		printk(KERN_INFO"<user_peripheral_write>: current file offset is: %llx\n", filep->f_pos);
-		
-		/*Check to see if read will go past the boundary*/
-		if((count + filep->f_pos) > mod_desc->file_size)
-		{
-				printk(KERN_INFO"<user_peripheral_write>: End of file overrun!\n");
-				count = (size_t)(mod_desc->file_size - filep->f_pos);
-				printk(KERN_INFO"<user_peripheral_write>: Only writing %llx bytes to end of file!\n", count);
+			verbose_printk(KERN_INFO"<pci_write>: writing peripheral with starting value: %x\n", init_write);
+			verbose_printk(KERN_INFO"<pci_write>: DMA offset write value: %llx\n", dma_offset_write);
+			verbose_printk(KERN_INFO"<pci_write>: DMA internal offset write value: %llx\n", dma_offset_internal_write);
+			verbose_printk(KERN_INFO"<pci_write>: DMA internal offset read value: %llx\n", dma_offset_internal_read);
+
+			axi_dest = mod_desc->axi_addr + *f_pos;
+
+			if (mod_desc->keyhole_config & 0x1)
+				transfer_type = KEYHOLE_WRITE;
+			else
+				transfer_type = NORMAL_WRITE;
+
+			verbose_printk(KERN_INFO"<pci_write>: writing peripheral using a transfer_type: %x\n", transfer_type);
+
+			verbose_printk(KERN_INFO"<user_peripheral_write>: current file offset is: %llx\n", *f_pos);
+
+			if (transfer_type == NORMAL_WRITE)
+			{
+				/*Check to see if write will go past the boundary*/
+				if((partial_count + *f_pos) > mod_desc->file_size)
+				{
+					crit_printk(KERN_INFO"<user_peripheral_write>: End of file overrun!\n");
+					partial_count = (size_t)(mod_desc->file_size - *f_pos);
+					crit_printk(KERN_INFO"<user_peripheral_write>: Only writing %zu bytes to end of file!\n", partial_count);
+					//return bytes_written + partial_count;
+				}
+			}
+
+			ret = data_transfer(axi_dest, 0, partial_count, transfer_type, dma_offset_write);
+			if (ret > 0)
+			{
+				crit_printk(KERN_INFO"<pci_write>: ERROR writing to User Peripheral\n");
+				return -1;
+			}
+
+			if (transfer_type == NORMAL_WRITE)
+			{
+				*f_pos = *f_pos + partial_count;    
+
+				if (*f_pos == mod_desc->file_size)
+				{
+					*f_pos = 0;
+					verbose_printk(KERN_INFO"<user_peripheral_write>: Resetting file pointer back to zero...\n");
+				}
+				else if (*f_pos > mod_desc->file_size)
+				{
+					crit_printk(KERN_INFO"<user_peripheral_write>: ERROR! Wrote past the file size. This should not have happened...\n");
+					crit_printk(KERN_INFO"<user_peripheral_write>: Resetting file pointer back to zero...\n");
+					*f_pos = 0;
+					return -1;
+				}
+				verbose_printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llx\n", *f_pos);
+			}
+
 		}
 
-		ret = data_transfer(axi_dest, 0, count, transfer_type, dma_offset_write);
-		if (ret > 0)
-		{
-			printk(KERN_INFO"<pci_write>: ERROR writing to User Peripheral\n");
-			return -1;
-		}
-		
-		*f_pos = filep->f_pos + count;    
-
-		if (*f_pos == mod_desc->file_size)
-		{
-			*f_pos = 0;
-			printk(KERN_INFO"<user_peripheral_write>: Resetting file pointer back to zero...\n");
-		}
-		else if (*f_pos > mod_desc->file_size)
-		{
-			printk(KERN_INFO"<user_peripheral_write>: ERROR! Wrote past the file size. This should not have happened...\n");
-			printk(KERN_INFO"<user_peripheral_write>: Resetting file pointer back to zero...\n");
-			*f_pos = 0;
-			return -1;
-		}
-		
-		printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llx\n", *f_pos);
-	
-		bytes = count;
+		bytes_written = bytes_written + partial_count;
+		crit_printk(KERN_INFO"<pci_write>: Wrote %zu bytes in this pass.\n", partial_count);	
 	}
 
-	printk(KERN_INFO"\n");	
-	printk(KERN_INFO"<pci_write>: ************************************************************************\n");	
-	printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION END  **************************\n");	
-	printk(KERN_INFO"<pci_write>: ************************************************************************\n");	
-	printk(KERN_INFO"\n");	
-	return bytes;
+	//bytes = bytes_written;
+
+	//msleep(5000);   //experiment....
+
+	crit_printk(KERN_INFO"\n");	
+	crit_printk(KERN_INFO"<pci_write>: ************************************************************************\n");	
+	crit_printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION END  **************************\n");	
+	crit_printk(KERN_INFO"<pci_write>: Wrote a total of %zu bytes in write call.\n", bytes_written);	
+	crit_printk(KERN_INFO"<pci_write>: ************************************************************************\n");	
+	crit_printk(KERN_INFO"\n");	
+	return bytes_written;
 
 }
 
@@ -1206,6 +1257,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	int transfer_type;
 	//	void * read_buf = NULL;
 	int ret;
+	size_t temp;
 	u64 dma_offset_write;
 	u64 dma_offset_read;
 	u64 dma_offset_internal_read;
@@ -1213,24 +1265,37 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 	mod_desc = filep->private_data;
 
-	printk(KERN_INFO"\n\n");	
-	printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
-	printk(KERN_INFO"<pci_read>: ******************** READ TRANSACTION BEGIN  **************************\n");	
-	printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
+	temp = 0;
 
+	crit_printk(KERN_INFO"\n\n");	
+	crit_printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
+	crit_printk(KERN_INFO"<pci_read>: ******************** READ TRANSACTION BEGIN  **************************\n");	
+	crit_printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
 
+	crit_printk(KERN_INFO"<pci_read>: Attempting to read %zu bytes\n", count);	
+
+	if (count > mod_desc->dma_size)
+	{
+		crit_printk(KERN_INFO"<pci_read>: Attempting to read more than the allocated DMA size of:%zu\n", mod_desc->dma_size);
+		crit_printk(KERN_INFO"<pci_read>: readjusting the read amount to:%zu\n", mod_desc->dma_size);
+		count = (size_t)mod_desc->dma_size;
+	}	
 
 	switch(*(mod_desc->mode)){
 
 		case MASTER:
 			//Transfer buffer from kernel space to user space at the allocated DMA region
-			printk(KERN_INFO"<pci_read>: Transferred a Master write from kernel space to user space\n");
+			verbose_printk(KERN_INFO"<pci_read>: Transferred a Master write from kernel space to user space\n");
 			copy_to_user(buf, dma_master_buf[mod_desc->master_num], count);
 			break;
 
 		case AXI_STREAM_FIFO:
 
 			bytes = axi_stream_fifo_read(count, mod_desc);
+			if (bytes < 0)
+			{
+				crit_printk(KERN_INFO"<user_peripheral_read>: ERROR reading data from axi stream fifo\n");
+			}
 
 			break;
 
@@ -1251,49 +1316,59 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 				transfer_type = NORMAL_READ;
 
 
-			printk(KERN_INFO"<user_peripheral_read>: reading peripheral using a transfer_type: %x\n", transfer_type);
-		
-			printk(KERN_INFO"<user_peripheral_write>: current file offset is: %llx\n", filep->f_pos);
+			verbose_printk(KERN_INFO"<user_peripheral_read>: reading peripheral using a transfer_type: %x\n", transfer_type);
 
+			crit_printk(KERN_INFO"<user_peripheral_write>: current file offset is: %llu\n", filep->f_pos);
+
+			temp = count + filep->f_pos;
+		
 			/*Check to see if read will go past the boundary*/
-			if((loff_t)(count + filep->f_pos) > mod_desc->file_size)
+			if(temp > (size_t)mod_desc->file_size)
 			{
-				printk(KERN_INFO"<user_peripheral_read>: End of file overrun!\n");
+				crit_printk(KERN_INFO"<user_peripheral_read>: Read will overrun the file size because \n");
+				crit_printk(KERN_INFO"<user_peripheral_read>: (the current file offset + amount to read)->(%llu) > (%llu)->file_size\n", temp, mod_desc->file_size);
 				count = (size_t)(mod_desc->file_size - filep->f_pos);
-				printk(KERN_INFO"<user_peripheral_read>: Only writing %llx bytes to end of file!\n", count);
-				
+				crit_printk(KERN_INFO"<user_peripheral_read>: Adjusting to only reading %zu bytes to end of file!\n", count);
+
 			}
 
 			ret = data_transfer(axi_dest, 0, count, transfer_type, dma_offset_read);
 			if (ret > 0)
 			{
-				printk(KERN_INFO"<user_peripheral_read>: ERROR reading data from User Peripheral\n");
+				crit_printk(KERN_INFO"<user_peripheral_read>: ERROR reading data from User Peripheral\n");
 				return -1;
 			}
-	
-			*f_pos = (loff_t)(filep->f_pos + count);    
-	
-			if (*f_pos == mod_desc->file_size)
+
+			if (transfer_type == NORMAL_READ)
 			{
-				*f_pos = 0;    
-				printk(KERN_INFO"<user_peripheral_read>: End of file reached.\n");
-				printk(KERN_INFO"<user_peripheral_read>: Resetting file pointer back to zero...\n");
+
+				*f_pos = (loff_t)(filep->f_pos + (loff_t)count);    
+				crit_printk(KERN_INFO"<user_peripheral_write>: updated file offset after adding count(%zu) is: %llu\n", count, *f_pos);
+
+				if (*f_pos == mod_desc->file_size)
+				{
+					*f_pos = 0;    
+					crit_printk(KERN_INFO"<user_peripheral_read>: End of file reached.\n");
+					crit_printk(KERN_INFO"<user_peripheral_read>: Resetting file pointer back to zero...\n");
+					crit_printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llu\n", *f_pos);
+				}
+				else if (*f_pos > mod_desc->file_size)
+				{
+					crit_printk(KERN_INFO"<user_peripheral_read>: ERROR! Read past the file size. This should not have happened...\n");
+					crit_printk(KERN_INFO"<user_peripheral_read>: the offset position is:%llu\n", *f_pos);
+					crit_printk(KERN_INFO"<user_peripheral_read>: Resetting file pointer back to zero...\n");
+					*f_pos = 0;    
+					crit_printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llu\n", *f_pos);
+					//return -1;
+				}
+
 			}
-			else if (*f_pos > mod_desc->file_size)
-			{
-				printk(KERN_INFO"<user_peripheral_read>: ERROR! Read past the file size. This should not have happened...\n");
-				printk(KERN_INFO"<user_peripheral_read>: Resetting file pointer back to zero...\n");
-				*f_pos = 0;    
-				return -1;
-			}
-			
-			printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llx\n", *f_pos);
-			
+
 			bytes = count;
 
 			break;
 
-		default:printk(KERN_INFO"<pci_read>: mode not detected on read\n");
+		default:crit_printk(KERN_INFO"<pci_read>: mode not detected on read\n");
 	}
 
 
@@ -1301,15 +1376,15 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	 * for now we copy to the appropriate file buffer*/
 	copy_to_user(buf, mod_desc->dma_read, count);
 
-	printk(KERN_INFO"\n");	
-	printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
-	printk(KERN_INFO"<pci_read>: ******************** READ TRANSACTION END  **************************\n");	
-	printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
-	printk(KERN_INFO"\n");	
+	crit_printk(KERN_INFO"\n");	
+	crit_printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
+	crit_printk(KERN_INFO"<pci_read>: ******************** READ TRANSACTION END  **************************\n");	
+	crit_printk(KERN_INFO"                                    Bytes read : %d\n", bytes);	
+	crit_printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
+	crit_printk(KERN_INFO"\n");	
 
 	return bytes;
 }
-/******************************** Support functions ***************************************/
 
 
 
