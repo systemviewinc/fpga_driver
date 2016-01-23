@@ -683,8 +683,10 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	u32 device_mode;
 	int ret;
 	u32 vec_serviced;
+	int i;
 
 	vec_serviced = 0;
+	i = 0;
 
 	verbose_printk(KERN_INFO"<pci_isr>: Entered the pci ISR");
 
@@ -752,6 +754,15 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	if (vec_serviced >= 0x10)
 	{
 		wake_up(&wq_periph);
+	
+		for(i = 0; i<=8; i++)
+		{
+			if (interr_dict[i].int_count > 0)
+			{
+		    	crit_printk(KERN_INFO"<pci_isr>: Waking up User Peripheral:%x\n", i);
+	//			wake_up(interr_dict[i].iwq);
+			}
+		}
 		crit_printk(KERN_INFO"<pci_isr>: Waking up User Peripherals\n");
 	}
 	verbose_printk(KERN_INFO"<pci_isr>: Exiting ISR\n");
@@ -767,6 +778,8 @@ int pci_open(struct inode *inode, struct file *filep)
 	//	void * kern_reg_write;
 	//	void * kern_reg_read;
 	struct mod_desc * s;
+
+//	wait_queue_head_t iwq;    //the interrupt wait queue for device
 
 	mode_address = kmalloc(sizeof(int), GFP_KERNEL);
 	interrupt_count = kmalloc(sizeof(int), GFP_KERNEL);
@@ -791,6 +804,7 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->kernel_reg_write = 0;
 	s->kernel_reg_read = 0;
 	s->file_size = 4096;   //default to 4K
+//	s->iwq = &iwq;
 
 	verbose_printk(KERN_INFO"<pci_open>: minor number %d detected\n", s->minor);
 
@@ -920,6 +934,9 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 		case SET_INTERRUPT:
 			verbose_printk(KERN_INFO"<ioctl>: Setting device as an Interrupt source with vector:%llx\n", arg_loc);
+		
+		//	init_waitqueue_head(mod_desc->iwq);
+		
 			/*Store the Interrupt Vector*/
 			mod_desc->interrupt_vec = (u32)arg_loc;
 
@@ -929,6 +946,8 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 			interr_dict[int_num].int_count = mod_desc->int_count;	
 			interr_dict[int_num].mode = mod_desc->mode;
+		
+			interr_dict[int_num].iwq = mod_desc->iwq;
 
 			break;
 
@@ -1075,7 +1094,10 @@ int pci_poll(struct file *filep, poll_table * pwait)
 	/*Register the poll table with the peripheral wait queue
 	 *so that every wake_up on the wait queue will see if the 
 	 *peripheral has data*/
+
 	poll_wait(filep, &wq_periph, pwait);
+//	poll_wait(filep, mod_desc->iwq, pwait);
+
 	crit_printk(KERN_INFO"<pci_poll>: Peripheral Interrupt Detected!!\n");
 
 	/*see if the module has triggered an interrupt*/

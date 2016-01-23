@@ -344,12 +344,12 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 		switch(cdma_num)
 		{
 			case 1:
-				verbose_printk(KERN_INFO"												<data_transfer>: Releasing Mutex on CDMA 1\n");
+				crit_printk(KERN_INFO"												<data_transfer>: Releasing Mutex on CDMA 1\n");
 				mutex_unlock(&CDMA_sem);
 				break;
 
 			case 2:
-				verbose_printk(KERN_INFO"												<data_transfer>: Releasing Mutex on CDMA 2\n");
+				crit_printk(KERN_INFO"												<data_transfer>: Releasing Mutex on CDMA 2\n");
 				mutex_unlock(&CDMA_sem_2);
 				break;
 			default : verbose_printk(KERN_INFO"<data_transfer>: ERROR: unknown cdma number detected.\n");
@@ -481,7 +481,7 @@ int cdma_query(void)
 				verbose_printk(KERN_INFO"User interrupted while waiting for CDMA semaphore.\n");
 				return -ERESTARTSYS;
 			}
-			verbose_printk(KERN_INFO"										<cdma_transfer>: CDMA Resource 2 is now locked!\n");
+			crit_printk(KERN_INFO"										<cdma_transfer>: CDMA Resource 2 is now locked!\n");
 			verbose_printk(KERN_INFO"										<cdma_transfer>: cdma_set[2] = %x\n", cdma_set[2]);
 			return 2;
 		}	
@@ -494,7 +494,7 @@ int cdma_query(void)
 			return -ERESTARTSYS;
 		}
 
-		verbose_printk(KERN_INFO"											<cdma_transfer>: CDMA Resource 1 is now locked!\n");
+		crit_printk(KERN_INFO"											<cdma_transfer>: CDMA Resource 1 is now locked!\n");
 		return 1;
 	}
 
@@ -898,6 +898,16 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 	if (ret > 0)
 	{
 		crit_printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Data from Read FIFO\n");
+		return -1;
+	}
+
+	/*Set IER Register for interrupt on read*/
+	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_IER;
+	*(mod_desc->kernel_reg_write) = 0x04000000;
+	ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
+	if (ret > 0)
+	{
+		crit_printk(KERN_INFO"<axi_stream_fifo_read>: ERROR resetting the interrupt IER\n");
 		return -1;
 	}
 

@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "trace_test.h"
+#include "echo_test.h"
 #include <pthread.h>
 #include <sys/poll.h>
 #include <unistd.h>
@@ -7,21 +7,26 @@
 #define AXI_STREAM_FIFO 1
 
 void *rxfifo_read(void *read_buf);
+void *rxfifo_read2(void *read_buf);
+void *rxfifo_read3(void * read_buf);
+void *rxfifo_read4(void * read_buf);
 
 char devname[] = DEV_NAME;
 char devname_2[] = DEV_NAME_2;
-//char devname_3[] = DEV_NAME_3;
-//char devname_4[] = DEV_NAME_4;
+char devname_3[] = DEV_NAME_3;
+char devname_4[] = DEV_NAME_4;
 
 int hls_write = -1;
 int hls_read = -1;
+int hls_write_2 = -1;
+int hls_read_2 = -1;
 //int trace_read = -1;
 //int trace_control = -1;
 
 char * devfilename = devname;
 char * devfilename_2 = devname_2;
-//char * devfilename_3 = devname_3;
-//char * devfilename_4 = devname_4;
+char * devfilename_3 = devname_3;
+char * devfilename_4 = devname_4;
 
 /* System View Core AXI Addresses */
 //unsigned int pcie_ctl_addr = 0x40002000;
@@ -41,6 +46,10 @@ unsigned long hls_read_ctl_axi_addr = 0xC0010000;
 unsigned long hls_read_axi_addr = 0xC0000000;
 unsigned long hls_write_ctl_axi_addr = 0x80010000;
 unsigned long hls_write_axi_addr = 0x80000000;
+unsigned long hls_read_2_ctl_axi_addr = 0xC0030000;
+unsigned long hls_read_2_axi_addr = 0xC0020000;
+unsigned long hls_write_2_ctl_axi_addr = 0x80030000;
+unsigned long hls_write_2_axi_addr = 0x80020000;
 //unsigned long trace_read_ctl_axi_addr = 0x80020000;
 //unsigned long trace_read_axi_addr = 0x80010000;
 //unsigned long trace_control_axi_addr = 0x80000000;
@@ -108,6 +117,18 @@ int main()
 		return -1;
 	}
 
+	hls_write_2 = open(devfilename_3, O_RDWR);
+	if(hls_write < 0){
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+
+	hls_read_2 = open(devfilename_4, O_RDWR);
+	if(hls_read < 0){
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	
 	//	trace_read = open(devfilename_3, O_RDWR);
 	//	if(trace_read < 0){
 	//		printf("ERROR doing ioctl\n");
@@ -136,6 +157,19 @@ int main()
 	}
 	printf("set peripheral to axi base address %x\n", hls_read_ctl_axi_addr);
 
+	if(ioctl(hls_write_2, SET_AXI_CTL_DEVICE, &hls_write_2_ctl_axi_addr) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set peripheral to axi base address %x\n", hls_write_2_ctl_axi_addr);
+
+
+	if(ioctl(hls_read_2, SET_AXI_CTL_DEVICE, &hls_read_2_ctl_axi_addr) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set peripheral to axi base address %x\n", hls_read_2_ctl_axi_addr);
+
 	//	if(ioctl(trace_read, SET_AXI_CTL_DEVICE, &trace_read_ctl_axi_addr) < 0) {
 	//		printf("ERROR doing ioctl\n");
 	//		return -1;
@@ -148,6 +182,12 @@ int main()
 	}
 	printf("set peripheral to axi base address %x\n", hls_write_axi_addr);
 
+	if(ioctl(hls_write_2, SET_AXI_DEVICE, &hls_write_2_axi_addr) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set peripheral to axi base address %x\n", hls_write_2_axi_addr);
+
 	//	if(ioctl(trace_control, SET_AXI_DEVICE, &trace_control_axi_addr) < 0) {
 	//		printf("ERROR doing ioctl\n");
 	//		return -1;
@@ -159,6 +199,12 @@ int main()
 		return -1;
 	}
 	printf("set peripheral to axi base address %x\n", hls_read_axi_addr);
+
+	if(ioctl(hls_read_2, SET_AXI_DEVICE, &hls_read_2_axi_addr) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set peripheral to axi base address %x\n", hls_read_2_axi_addr);
 
 	//	if(ioctl(trace_read, SET_AXI_DEVICE, &trace_read_axi_addr) < 0) {
 	//		printf("ERROR doing ioctl\n");
@@ -188,6 +234,19 @@ int main()
 	}
 	printf("set axi fifo to mode: %d\n", hls_fifo_mode);
 
+	if(ioctl(hls_read_2, SET_MODE, &hls_fifo_mode) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set axi fifo to mode: %d\n", hls_fifo_mode);
+
+	/* set mode of AXI_FIFO*/
+	if(ioctl(hls_write_2, SET_MODE, &hls_fifo_mode) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set axi fifo to mode: %d\n", hls_fifo_mode);
+
 	/* set mode of AXI_FIFO*/
 	//	if(ioctl(trace_read, SET_MODE, &hls_fifo_mode) < 0) {
 	//		printf("ERROR doing ioctl\n");
@@ -198,6 +257,10 @@ int main()
 	/****** Set the mode of hls_read to be "Slave with interrupt" ***********/
 	unsigned int interrupt_vector = 0x10;  /*2^5 - NOTE - THIS IS POWER OF 2!!!*/
 	ioctl(hls_read, SET_INTERRUPT, &interrupt_vector); 
+	printf("set peripheral as slave with interrupt at vector:%x\n", interrupt_vector);
+
+	interrupt_vector = 0x20;  /*2^5 - NOTE - THIS IS POWER OF 2!!!*/
+	ioctl(hls_read_2, SET_INTERRUPT, &interrupt_vector); 
 	printf("set peripheral as slave with interrupt at vector:%x\n", interrupt_vector);
 
 	/****** Set the mode of trace_read to be "Slave with interrupt" ***********/
@@ -242,8 +305,15 @@ int main()
 	//has occured signifying the data is availble
 	//first initialize a receive buffer
 	unsigned int rxbuff[sizeof(in)];
+	unsigned int rxbuff2[sizeof(in)];
 
-	pthread_t rxfifo;
+	pthread_t rxfifo, rxfifo2, rxfifo3, rxfifo4;
+
+	if(pthread_create(&rxfifo2, NULL, rxfifo_read2, rxbuff2))
+	{
+		printf("Error creating thread\n");
+	}
+	printf("Other Thread 2\n");
 
 	if(pthread_create(&rxfifo, NULL, rxfifo_read, rxbuff))
 	{
@@ -251,17 +321,31 @@ int main()
 	}
 	printf("Other Thread\n");
 
+
+	/*the first write thread*/
+	if(pthread_create(&rxfifo3, NULL, rxfifo_read3, in))
+	{
+		printf("Error creating thread\n");
+	}
+	printf("Other Thread 3\n");
+
+	/*the second write thread*/
+	if(pthread_create(&rxfifo4, NULL, rxfifo_read4, in))
+	{
+		printf("Error creating thread\n");
+	}
+	printf("Other Thread 4\n");
+
 	/*******Send data to the TX FIFO (front end) **********/
 
 	while(1)
 	{
-		ret_val = write(hls_write, in, sizeof(in));   
-		if (ret_val == -1)
-		{
-			printf("WRITE ERROR\n");
-			break;
-		}
-		//	usleep(100);
+	//	ret_val = write(hls_write, in, sizeof(in));   
+	//	if (ret_val == -1)
+	//	{
+	//		printf("WRITE ERROR\n");
+	//		break;
+	//	}
 	}
 
 	return 0;
@@ -292,6 +376,70 @@ int main()
 	return 0;
 }
 
+/*TX Thread*/
+void *rxfifo_read3(void * tx_buf)
+{	
+	int ret_val;
+	unsigned int txregbuf;
+	struct pollfd pollfds;
+	int timeout = 100;    //in ms
+	int result;
+	unsigned int buff2[1];
+	unsigned int buff[1024];  //50 32b data words
+	unsigned long long trace_buff[256];  //long long is 64bit on ARM
+	int i;
+
+
+	printf("entered tx fifo thread\n");
+
+	unsigned int tx[2048];
+
+
+	while(1)
+	{
+		ret_val = write(hls_write, tx_buf, sizeof(tx));   
+		if (ret_val == -1)
+		{
+			printf("WRITE ERROR\n");
+			break;
+		}
+	
+		printf("file 1 write!\n");
+	}
+	return NULL;
+}
+
+/*TX Thread*/
+void *rxfifo_read4(void * tx_buf)
+{	
+	int ret_val;
+	unsigned int txregbuf;
+	struct pollfd pollfds;
+	int timeout = 100;    //in ms
+	int result;
+	unsigned int buff2[1];
+	unsigned int buff[1024];  //50 32b data words
+	unsigned long long trace_buff[256];  //long long is 64bit on ARM
+	int i;
+
+
+	printf("entered tx fifo thread\n");
+
+	unsigned int tx[2048];
+
+
+	while(1)
+	{
+		ret_val = write(hls_write_2, tx_buf, sizeof(tx));   
+		if (ret_val == -1)
+		{
+			printf("WRITE ERROR\n");
+			break;
+		}
+	}
+	return NULL;
+}
+
 /**************RX FIFO Thread**********/
 
 void *rxfifo_read(void *read_buf)
@@ -310,11 +458,11 @@ void *rxfifo_read(void *read_buf)
 	pollfds.fd = hls_read;
 	pollfds.events = POLLIN;  //wait for data
 
-	printf("entered rx fifo thread\n");
+	printf("entered rx fifo 1 thread\n");
 
 	/*This should perform a blocking poll until an interrupt is detected
 	 * to this device*/
-	printf("just before poll().....\n");
+	printf("just before poll() 1.....\n");
 
 	while(1)
 	{
@@ -322,8 +470,8 @@ void *rxfifo_read(void *read_buf)
 		result = poll(&pollfds, 1, timeout);
 		switch (result) {
 			case 0: 
-				printf ("timeout occured, no interrupt detected\n");
-				sleep(1);
+			//	printf ("timeout occured, no interrupt detected\n");
+			//	sleep(1);
 				break;
 
 			case -1:
@@ -348,7 +496,74 @@ void *rxfifo_read(void *read_buf)
 					}
 					else if (return_val > 0)
 					{		
-						printf("Number of bytes read:%d\n", return_val);
+						printf("Number of bytes read from file 1:%d\n", return_val);
+
+					}
+				}
+
+		}
+		//	sleep(10);
+	}
+	return NULL;
+}
+
+/**************RX FIFO Thread**********/
+
+void *rxfifo_read2(void *read_buf)
+{	
+	int return_val;
+	unsigned int txregbuf;
+	struct pollfd pollfds;
+	int timeout = 100;    //in ms
+	int result;
+	unsigned int buff2[1];
+	unsigned int buff[1024];  //50 32b data words
+	unsigned long long trace_buff[256];  //long long is 64bit on ARM
+	int i;
+
+	/*initialize pollfds*/
+	pollfds.fd = hls_read_2;
+	pollfds.events = POLLIN;  //wait for data
+
+	printf("entered rx fifo 2 thread\n");
+
+	/*This should perform a blocking poll until an interrupt is detected
+	 * to this device*/
+	printf("just before poll() 2.....\n");
+
+	while(1)
+	{
+		return_val = 1;
+		result = poll(&pollfds, 1, timeout);
+		switch (result) {
+			case 0: 
+			//	printf ("timeout occured, no interrupt detected\n");
+			//	sleep(1);
+				break;
+
+			case -1:
+				printf("error occured in poll\n");
+				return 0;
+
+			default:
+				//			printf("RX FIFO INTERRUPT DETECTED!\n");
+
+				/* Read from peripheral */
+
+				//	sleep(1);
+				//	usleep(2000);
+				while (return_val != 0)
+			//	while (1)
+				{
+					return_val = read(hls_read_2, (void*)buff, (sizeof(buff)));  
+					if (return_val == -1)
+					{
+						printf("READ ERROR DATA\n");
+						break;
+					}
+					else if (return_val > 0)
+					{		
+						printf("Number of bytes read from file 2:%d\n", return_val);
 
 					}
 				}
@@ -367,6 +582,7 @@ void *rxfifo_read(void *read_buf)
 				//			}
 				//			}
 		}
+	//	sleep(5);
 	}
 	return NULL;
 }
