@@ -911,7 +911,9 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 		return -1;
 	}
 
-	verbose_printk(KERN_INFO"<axi_stream_fifo_read>: Leaving the READ AXI Stream FIFO routine\n");
+	axi_stream_fifo_init(mod_desc);
+
+	crit_printk(KERN_INFO"<axi_stream_fifo_read>: Leaving the READ AXI Stream FIFO routine\n");
 	return count;
 }
 
@@ -923,18 +925,18 @@ void axi_stream_fifo_init(struct mod_desc * mod_desc)
 	//Read CTL interface
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
 	ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, mod_desc->dma_offset_internal_read);
-	verbose_printk(KERN_INFO"<axi_fifo_isr_reg>:%x\n", *(mod_desc->kernel_reg_read));
+	crit_printk(KERN_INFO"<axi_fifo_isr_reg>:%x\n", *(mod_desc->kernel_reg_read));
 
 	//reset interrupts on CTL interface
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
 	*(mod_desc->kernel_reg_write) = 0xFFFFFFFF;
 	ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
-	verbose_printk(KERN_INFO"<axi_fifo_isr_reg>: Reset the interrupts on the axi fifo\n");
+	crit_printk(KERN_INFO"<axi_fifo_isr_reg>: Reset the interrupts on the axi fifo\n");
 
 	//Read CTL interface
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
 	ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, mod_desc->dma_offset_internal_read);
-	verbose_printk(KERN_INFO"<axi_fifo_isr_reg>:%x\n", *(mod_desc->kernel_reg_read));
+	crit_printk(KERN_INFO"<axi_fifo_isr_reg>:%x\n", *(mod_desc->kernel_reg_read));
 
 	/*Set IER Register for interrupt on read*/
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_IER;
