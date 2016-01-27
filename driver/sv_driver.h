@@ -25,8 +25,16 @@
 #define verbose_printk(...)
 #endif
 
-#ifndef crit_printk
-#define crit_printk printk
+#ifndef crit_printk(...)
+#define crit_printk(...)
+#endif
+
+#ifndef critical_printk(...)
+#define critical_printk(...) 
+#endif
+
+#ifndef criti_printk
+#define criti_printk printk
 #endif
 /******************************/
 
@@ -102,6 +110,7 @@ struct mod_desc
 	u32 dma_offset_internal_write;
 	loff_t file_size;
 	wait_queue_head_t * iwq;
+	struct mutex * int_count_sem;
 };
 
 /*this is the interrupt structure*/
@@ -110,6 +119,7 @@ struct interr_struct
 	u32 * mode;
 	int * int_count;
 	wait_queue_head_t * iwq;
+	struct mutex * int_count_sem;
     	
 };
 

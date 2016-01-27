@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <sys/poll.h>
 #include <unistd.h>
+#include <sched.h>
 
 #define AXI_STREAM_FIFO 1
 
@@ -128,7 +129,7 @@ int main()
 		printf("ERROR doing ioctl\n");
 		return -1;
 	}
-	
+
 	//	trace_read = open(devfilename_3, O_RDWR);
 	//	if(trace_read < 0){
 	//		printf("ERROR doing ioctl\n");
@@ -338,36 +339,47 @@ int main()
 
 	/*******Send data to the TX FIFO (front end) **********/
 
-	while(1)
-	{
-	//	ret_val = write(hls_write, in, sizeof(in));   
-	//	if (ret_val == -1)
-	//	{
-	//		printf("WRITE ERROR\n");
-	//		break;
-	//	}
-	}
-
-	return 0;
-
-	printf("TX FIFO: Transmitted data\n");
+	printf("waiting for threads to finish....\n");
 	//Should have written.... wait for RX FIFO interrupt.
+
+	//sleep(10);
+
+	if(pthread_join(rxfifo3, NULL)) 
+	{
+		printf("Error joining threads\n");
+	}
+	printf("thread done\n");
+
+	if(pthread_join(rxfifo4, NULL)) 
+	{
+		printf("Error joining threads\n");
+	}
+	printf("thread done\n");
 
 	/*wait for the RX FIFO Thread to return data*/
 	if(pthread_join(rxfifo, NULL)) 
 	{
 		printf("Error joining threads\n");
 	}
+	printf("thread done\n");
+
+	if(pthread_join(rxfifo2, NULL)) 
+	{
+		printf("Error joining threads\n");
+	}
+	printf("thread done\n");
 
 	printf("Threads joined!\n");
-
-
 	/*Close files*/	
 	//close(bram);
 
 	close(hls_write);
 
 	close(hls_read);
+
+	close(hls_write_2);
+
+	close(hls_read_2);
 	//	close(trace_read);
 	//	close(trace_control);
 
@@ -393,9 +405,9 @@ void *rxfifo_read3(void * tx_buf)
 	printf("entered tx fifo thread\n");
 
 	unsigned int tx[2048];
+	int counter = 0;
 
-
-	while(1)
+	while(counter < 200)
 	{
 		ret_val = write(hls_write, tx_buf, sizeof(tx));   
 		if (ret_val == -1)
@@ -403,9 +415,12 @@ void *rxfifo_read3(void * tx_buf)
 			printf("WRITE ERROR\n");
 			break;
 		}
-	
+
 		printf("file 1 write!\n");
+		counter++;
 	}
+
+	printf("Finished file 1 writing!!!!!\n");
 	return NULL;
 }
 
@@ -421,14 +436,14 @@ void *rxfifo_read4(void * tx_buf)
 	unsigned int buff[1024];  //50 32b data words
 	unsigned long long trace_buff[256];  //long long is 64bit on ARM
 	int i;
+	int counter = 0;
 
 
 	printf("entered tx fifo thread\n");
 
 	unsigned int tx[2048];
 
-
-	while(1)
+	while(counter < 200)
 	{
 		ret_val = write(hls_write_2, tx_buf, sizeof(tx));   
 		if (ret_val == -1)
@@ -436,7 +451,11 @@ void *rxfifo_read4(void * tx_buf)
 			printf("WRITE ERROR\n");
 			break;
 		}
+
+		printf("file 2 write!\n");
+		counter++;
 	}
+	printf("Finished file 2 writing!!!!!\n");
 	return NULL;
 }
 
@@ -460,6 +479,16 @@ void *rxfifo_read(void *read_buf)
 
 	printf("entered rx fifo 1 thread\n");
 
+	int policy, s;
+	struct sched_param param;
+
+	//policy = SCHED_BATCH;
+	//pthread_setschedparam(pthread_self(), 2, &param); //1 = FIFO
+
+	s = pthread_getschedparam(pthread_self(), &policy, &param);
+	printf("Thread Priority for read 1: %x\n", param.sched_priority);		   
+	printf("Thread Policy for read 1: %d\n", policy);		   
+
 	/*This should perform a blocking poll until an interrupt is detected
 	 * to this device*/
 	printf("just before poll() 1.....\n");
@@ -470,13 +499,11 @@ void *rxfifo_read(void *read_buf)
 		result = poll(&pollfds, 1, timeout);
 		switch (result) {
 			case 0: 
-			//	printf ("timeout occured, no interrupt detected\n");
-			//	sleep(1);
-				break;
-
+				printf ("timeout occured, no interrupt detected\n");
+				return NULL;
 			case -1:
 				printf("error occured in poll\n");
-				return 0;
+				while(1);
 
 			default:
 				//			printf("RX FIFO INTERRUPT DETECTED!\n");
@@ -486,7 +513,7 @@ void *rxfifo_read(void *read_buf)
 				//	sleep(1);
 				//	usleep(2000);
 				while (return_val != 0)
-			//	while (1)
+					//	while (1)
 				{
 					return_val = read(hls_read, (void*)buff, (sizeof(buff)));  
 					if (return_val == -1)
@@ -502,8 +529,10 @@ void *rxfifo_read(void *read_buf)
 				}
 
 		}
+		//sched_yield();
 		//	sleep(10);
 	}
+	printf ("File 1 read thread closing!\n");
 	return NULL;
 }
 
@@ -521,6 +550,15 @@ void *rxfifo_read2(void *read_buf)
 	unsigned long long trace_buff[256];  //long long is 64bit on ARM
 	int i;
 
+	int policy, s;
+	struct sched_param param;
+
+	//pthread_setschedparam(pthread_self(), 2, &param);
+
+	s = pthread_getschedparam(pthread_self(), &policy, &param);
+	printf("Thread Priority for read 2: %x\n", param.sched_priority);		   
+	printf("Thread Policy for read 2: %d\n", policy);		   
+
 	/*initialize pollfds*/
 	pollfds.fd = hls_read_2;
 	pollfds.events = POLLIN;  //wait for data
@@ -537,13 +575,13 @@ void *rxfifo_read2(void *read_buf)
 		result = poll(&pollfds, 1, timeout);
 		switch (result) {
 			case 0: 
-			//	printf ("timeout occured, no interrupt detected\n");
-			//	sleep(1);
-				break;
+				printf ("timeout occured, no interrupt detected\n");
+				//	sleep(1);
+				return NULL;
 
 			case -1:
 				printf("error occured in poll\n");
-				return 0;
+				while(1);
 
 			default:
 				//			printf("RX FIFO INTERRUPT DETECTED!\n");
@@ -553,7 +591,7 @@ void *rxfifo_read2(void *read_buf)
 				//	sleep(1);
 				//	usleep(2000);
 				while (return_val != 0)
-			//	while (1)
+					//	while (1)
 				{
 					return_val = read(hls_read_2, (void*)buff, (sizeof(buff)));  
 					if (return_val == -1)
@@ -582,7 +620,8 @@ void *rxfifo_read2(void *read_buf)
 				//			}
 				//			}
 		}
-	//	sleep(5);
+		//sched_yield();
 	}
+	printf ("File 2 read thread closing!\n");
 	return NULL;
 }

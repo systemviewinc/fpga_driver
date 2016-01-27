@@ -772,7 +772,7 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
 		return -1;
 	}
 
-	crit_printk(KERN_INFO"										<pci_write>: Initial Transmit Data FIFO Fill Level:%x\n", *(mod_desc->kernel_reg_read));
+	criti_printk(KERN_INFO"										<pci_write>: Initial Transmit Data FIFO Fill Level:%x\n", *(mod_desc->kernel_reg_read));
 	/*This While loop will continuously loop until the axi streaming fifo is empty
 	 * if there is a holdup in data, we are stuck here....  */
 
@@ -901,17 +901,17 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 		return -1;
 	}
 
-	/*Set IER Register for interrupt on read*/
-	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_IER;
-	*(mod_desc->kernel_reg_write) = 0x04000000;
-	ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
-	if (ret > 0)
-	{
-		crit_printk(KERN_INFO"<axi_stream_fifo_read>: ERROR resetting the interrupt IER\n");
-		return -1;
-	}
+	/*Reset the AXI Streaming FIFO*/
+//	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RDFR;
+//	*(mod_desc->kernel_reg_write) = 0x000000A5;
+//	ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
+//	if (ret > 0)
+//	{
+//		crit_printk(KERN_INFO"<axi_stream_fifo_read>: Resetting the interrupt IER\n");
+//		return -1;
+//	}
 
-	axi_stream_fifo_init(mod_desc);
+//	axi_stream_fifo_init(mod_desc);
 
 	crit_printk(KERN_INFO"<axi_stream_fifo_read>: Leaving the READ AXI Stream FIFO routine\n");
 	return count;

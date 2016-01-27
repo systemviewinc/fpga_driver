@@ -62,6 +62,7 @@
 #define CDMA 3
 
 
+
 #define MAX_NUM_MASTERS 2
 #define MAX_NUM_SLI 4  // Max number of slaves with interrupts
 #define MAX_NUM_INT MAX_NUM_MASTERS + MAX_NUM_SLI
@@ -151,6 +152,8 @@ unsigned int irq_num;
 struct mutex CDMA_sem;
 struct mutex CDMA_sem_2;
 
+/*Other Semaphores*/
+
 dma_addr_t dma_addr_base;
 void * dma_buffer_base;
 u32 dma_current_offset;
@@ -172,6 +175,7 @@ int num_int;
 
 atomic_t mutex_free = ATOMIC_INIT(0); 
 
+spinlock_t mLock;
 
 const u32 INT_CTRL_IER      = 0x08;
 const u32 INT_CTRL_MER      = 0x1c;
@@ -180,7 +184,11 @@ const u32 INT_CTRL_IAR      = 0x0C;
 
 
 /*This is an array of interrupt structures to hold up to 8 peripherals*/
-struct interr_struct interr_dict[8];
+struct interr_struct interr_dict[8] = {{ 0 }};
+
+/*ISR Tasklet */
+void do_isr_tasklet(unsigned long);
+DECLARE_TASKLET(isr_tasklet, do_isr_tasklet, 0);
 
 /* ************************* file operations *************************** */
 long pci_unlocked_ioctl(struct file * filep, unsigned int cmd, unsigned long arg);
@@ -677,6 +685,19 @@ module_exit(sv_driver_exit);
 /********************** ISR Stuff ***************************/
 static irqreturn_t pci_isr(int irq, void *dev_id)
 {
+
+	critical_printk(KERN_INFO"<pci_isr>:						Entered the ISR");
+
+	tasklet_schedule(&isr_tasklet);
+
+	critical_printk(KERN_INFO"<pci_isr>:						Exiting the ISR");
+
+	return IRQ_HANDLED;
+
+}
+
+void do_isr_tasklet (unsigned long unused)
+{
 	u32 status;
 	u64 axi_dest;
 	int int_num;
@@ -684,12 +705,12 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	int ret;
 	u32 vec_serviced;
 	int i;
+	int interr[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+
+	critical_printk(KERN_INFO"		Entered the Tasklet");
 
 	vec_serviced = 0;
 	i = 0;
-
-	verbose_printk(KERN_INFO"<pci_isr>: Entered the pci ISR");
-
 	/*Here we need to find out who triggered the interrupt*
 	 *Since we only allow one MSI vector, we need to query the
 	 *Interrupt controller to find out. */
@@ -697,25 +718,30 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	/*This is the interrupt status register*/
 	axi_dest = axi_interr_ctrl + INT_CTRL_ISR;
 	ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
-	verbose_printk(KERN_INFO"<pci_isr>: interrupt status register vector is: ('%x')\n", status);
+	critical_printk(KERN_INFO"<soft_isr>: interrupt status register vector is: ('%x')\n", status);
 
 
 	while(status > 0)
 	{
 		int_num = vec2num(status);
-		verbose_printk(KERN_INFO"<pci_isr>: interrupt number is: ('%d')\n", int_num);
+		critical_printk(KERN_INFO"<soft_isr>: interrupt number is: ('%d')\n", int_num);
 		device_mode = *(interr_dict[int_num].mode);
 
 		if (device_mode == CDMA)
 		{
-			verbose_printk(KERN_INFO"<pci_isr>: this interrupt is from the CDMA\n");
+			verbose_printk(KERN_INFO"<soft_isr>: this interrupt is from the CDMA\n");
 			vec_serviced = vec_serviced | num2vec(int_num);
 		}
 
 		else
 		{
-			crit_printk(KERN_INFO"<pci_isr>: this interrupt is from a user peripheral\n");
-			*(interr_dict[int_num].int_count) = (*(interr_dict[int_num].int_count)) + 1;
+			critical_printk(KERN_INFO"<soft_isr>: this interrupt is from a user peripheral\n");
+		
+			//mutex_lock_interruptible(interr_dict[int_num].int_count_sem);
+			//*(interr_dict[int_num].int_count) = (*(interr_dict[int_num].int_count)) + 1;
+			//mutex_unlock(interr_dict[int_num].int_count_sem);
+			interr[int_num] = 1;
+			critical_printk(KERN_INFO"<soft_isr>: this is after the int count add\n");
 
 			vec_serviced = vec_serviced | num2vec(int_num);
 		}
@@ -727,46 +753,52 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 		/*This is the interrupt status register*/
 		axi_dest = axi_interr_ctrl + INT_CTRL_ISR;
-		verbose_printk(KERN_INFO"<pci_isr>: Checking the ISR vector for any additional vectors....\n");
+		critical_printk(KERN_INFO"<soft_isr>: Checking the ISR vector for any additional vectors....\n");
 		ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
 
 
 	}
 
 
-	verbose_printk(KERN_INFO"<pci_isr>: All interrupts serviced. The following Vector is acknowledged: %x\n", vec_serviced);
+	critical_printk(KERN_INFO"<soft_isr>: All interrupts serviced. The following Vector is acknowledged: %x\n", vec_serviced);
 
 	/* The CDMA vectors (1 and 2) */
 	if ((vec_serviced & 0x01) == 0x01) 
 	{	
 		cdma_comp[1] = 1;      //condition for wake_up
-		verbose_printk(KERN_INFO"<pci_isr>: Waking up CDMA 1\n");
+		critical_printk(KERN_INFO"<soft_isr>: Waking up CDMA 1\n");
 		wake_up_interruptible(&wq);
 	}
 
 	if ((vec_serviced & 0x02) == 0x02)
 	{	
 		cdma_comp[2] = 1;      //condition for wake_up
-		verbose_printk(KERN_INFO"<pci_isr>: Waking up CDMA 2\n");
+		critical_printk(KERN_INFO"<soft_isr>: Waking up CDMA 2\n");
 		wake_up_interruptible(&wq);
 	}
 
 	if (vec_serviced >= 0x10)
 	{
-		wake_up(&wq_periph);
+	//	wake_up(&wq_periph);
 	
-		for(i = 0; i<=8; i++)
+		for(i = 4; i<=7; i++)
 		{
-			if (interr_dict[i].int_count > 0)
+		//	mutex_lock_interruptible(interr_dict[i].int_count_sem);
+			//if (interr_dict[i].int_count > 0)
+			if (interr[i] > 0)
 			{
-		    	crit_printk(KERN_INFO"<pci_isr>: Waking up User Peripheral:%x\n", i);
-	//			wake_up(interr_dict[i].iwq);
+		    	critical_printk(KERN_INFO"<soft_isr>: Waking up User Peripheral:%x\n", i);
+		//		mutex_unlock(interr_dict[i].int_count_sem);
+			//	interr_dict[i].int_count = 0;
+				interr[i] = 0;
+				wake_up(interr_dict[i].iwq);
 			}
 		}
-		crit_printk(KERN_INFO"<pci_isr>: Waking up User Peripherals\n");
+		crit_printk(KERN_INFO"<soft_isr>:			Waking up User Peripherals\n");
 	}
-	verbose_printk(KERN_INFO"<pci_isr>: Exiting ISR\n");
-	return IRQ_HANDLED;
+	crit_printk(KERN_INFO"<soft_isr>:						Exiting ISR\n");
+	critical_printk(KERN_INFO"		Exited the Tasklet");
+
 }
 
 /* -----------------File Operations-------------------------*/
@@ -774,12 +806,18 @@ int pci_open(struct inode *inode, struct file *filep)
 {
 	void * mode_address;
 	void * interrupt_count;
+	void * iwq;
+	void * int_count_sem;
+
 	int ret;
 	//	void * kern_reg_write;
 	//	void * kern_reg_read;
 	struct mod_desc * s;
 
-//	wait_queue_head_t iwq;    //the interrupt wait queue for device
+	//wait_queue_head_t * iwq;    //the interrupt wait queue for device
+
+	iwq = kmalloc(sizeof(wait_queue_head_t), GFP_KERNEL);
+	int_count_sem = kmalloc(sizeof(struct mutex), GFP_KERNEL);
 
 	mode_address = kmalloc(sizeof(int), GFP_KERNEL);
 	interrupt_count = kmalloc(sizeof(int), GFP_KERNEL);
@@ -804,7 +842,8 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->kernel_reg_write = 0;
 	s->kernel_reg_read = 0;
 	s->file_size = 4096;   //default to 4K
-//	s->iwq = &iwq;
+	s->iwq = (wait_queue_head_t*)iwq;
+	s->int_count_sem = (struct mutex*)int_count_sem;
 
 	verbose_printk(KERN_INFO"<pci_open>: minor number %d detected\n", s->minor);
 
@@ -935,7 +974,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		case SET_INTERRUPT:
 			verbose_printk(KERN_INFO"<ioctl>: Setting device as an Interrupt source with vector:%llx\n", arg_loc);
 		
-		//	init_waitqueue_head(mod_desc->iwq);
+			init_waitqueue_head(mod_desc->iwq);
 		
 			/*Store the Interrupt Vector*/
 			mod_desc->interrupt_vec = (u32)arg_loc;
@@ -948,6 +987,8 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			interr_dict[int_num].mode = mod_desc->mode;
 		
 			interr_dict[int_num].iwq = mod_desc->iwq;
+			interr_dict[int_num].int_count_sem = mod_desc->int_count_sem;
+			mutex_init(mod_desc->int_count_sem);
 
 			break;
 
@@ -1095,22 +1136,27 @@ int pci_poll(struct file *filep, poll_table * pwait)
 	 *so that every wake_up on the wait queue will see if the 
 	 *peripheral has data*/
 
-	poll_wait(filep, &wq_periph, pwait);
-//	poll_wait(filep, mod_desc->iwq, pwait);
+//	poll_wait(filep, &wq_periph, pwait);
+	poll_wait(filep, mod_desc->iwq, pwait);
 
-	crit_printk(KERN_INFO"<pci_poll>: Peripheral Interrupt Detected!!\n");
+	crit_printk(KERN_INFO"<pci_poll>: Peripheral (' %x ') Interrupt Detected!!\n", mod_desc->int_num);
 
 	/*see if the module has triggered an interrupt*/
-	has_data = *(mod_desc->int_count);
-	crit_printk(KERN_INFO"<pci_poll>: Interrupt count of polling peripheral:%x\n", has_data);
+//	has_data = *(mod_desc->int_count);
+//	crit_printk(KERN_INFO"<pci_poll>: Interrupt count of polling peripheral:%x\n", has_data);
 
-	if (has_data > 0)
-	{
-		verbose_printk(KERN_INFO"<pci_poll>: Interrupting Peripheral Matched!\n");
+//	if (!mutex_is_locked(mod_desc->int_count_sem))
+//	if (has_data > 0)
+//	{
+		critical_printk(KERN_INFO"<pci_poll>: Interrupting Peripheral Matched!\n");
 		/*reset the has_data flag*/
-		*(mod_desc->int_count) = 0;
+	
+//		mutex_lock_interruptible(mod_desc->int_count_sem);
+//		*(mod_desc->int_count) = 0;
+//		mutex_unlock(mod_desc->int_count_sem);
+	
 		mask |= POLLIN;
-	}
+//	}
 
 	return mask;
 
