@@ -344,6 +344,8 @@ int main()
 
 	//sleep(10);
 
+	pthread_exit(0);
+
 	if(pthread_join(rxfifo3, NULL)) 
 	{
 		printf("Error joining threads\n");
@@ -416,11 +418,19 @@ void *rxfifo_read3(void * tx_buf)
 			break;
 		}
 
+		if (ret_val == 0)
+		{
+			sched_yield();
+		}
+		else
+		{
 		printf("file 1 write!\n");
 		counter++;
-	}
+		}
+		}
 
 	printf("Finished file 1 writing!!!!!\n");
+	pthread_exit(0);
 	return NULL;
 }
 
@@ -451,11 +461,19 @@ void *rxfifo_read4(void * tx_buf)
 			printf("WRITE ERROR\n");
 			break;
 		}
-
+		
+		if (ret_val == 0)
+		{
+			sched_yield();
+		}
+		else
+		{
 		printf("file 2 write!\n");
 		counter++;
-	}
+		}
+		}
 	printf("Finished file 2 writing!!!!!\n");
+	pthread_exit(0);
 	return NULL;
 }
 
@@ -466,7 +484,7 @@ void *rxfifo_read(void *read_buf)
 	int return_val;
 	unsigned int txregbuf;
 	struct pollfd pollfds;
-	int timeout = 100;    //in ms
+	int timeout = 1000;    //in ms
 	int result;
 	unsigned int buff2[1];
 	unsigned int buff[1024];  //50 32b data words
@@ -488,6 +506,29 @@ void *rxfifo_read(void *read_buf)
 	s = pthread_getschedparam(pthread_self(), &policy, &param);
 	printf("Thread Priority for read 1: %x\n", param.sched_priority);		   
 	printf("Thread Policy for read 1: %d\n", policy);		   
+	
+	//For the sake of running again and not being deadlocked.
+		return_val = 1;
+	while (return_val != 0)
+					//	while (1)
+				{
+					return_val = read(hls_read, (void*)buff, (sizeof(buff)));  
+					if (return_val == -1)
+					{
+						printf("READ ERROR DATA\n");
+						break;
+					}
+					else if (return_val > 0)
+					{		
+						printf("Number of bytes read from file 1:%d\n", return_val);
+
+					}
+					else if (return_val ==  0)
+					{		
+						printf("No initial values to read from read 1\n");
+
+					}
+				}
 
 	/*This should perform a blocking poll until an interrupt is detected
 	 * to this device*/
@@ -533,6 +574,7 @@ void *rxfifo_read(void *read_buf)
 		//	sleep(10);
 	}
 	printf ("File 1 read thread closing!\n");
+	pthread_exit(0);
 	return NULL;
 }
 
@@ -543,7 +585,7 @@ void *rxfifo_read2(void *read_buf)
 	int return_val;
 	unsigned int txregbuf;
 	struct pollfd pollfds;
-	int timeout = 100;    //in ms
+	int timeout = 1000;    //in ms
 	int result;
 	unsigned int buff2[1];
 	unsigned int buff[1024];  //50 32b data words
@@ -564,6 +606,29 @@ void *rxfifo_read2(void *read_buf)
 	pollfds.events = POLLIN;  //wait for data
 
 	printf("entered rx fifo 2 thread\n");
+
+	//For the sake of running again and not being deadlocked.
+		return_val = 1;
+	while (return_val != 0)
+					//	while (1)
+				{
+					return_val = read(hls_read_2, (void*)buff, (sizeof(buff)));  
+					if (return_val == -1)
+					{
+						printf("READ ERROR DATA\n");
+						break;
+					}
+					else if (return_val > 0)
+					{		
+						printf("Number of bytes read from file 2:%d\n", return_val);
+
+					}
+					else if (return_val ==  0)
+					{		
+						printf("No initial values to read from read 2\n");
+
+					}
+				}
 
 	/*This should perform a blocking poll until an interrupt is detected
 	 * to this device*/
@@ -623,5 +688,6 @@ void *rxfifo_read2(void *read_buf)
 		//sched_yield();
 	}
 	printf ("File 2 read thread closing!\n");
+	pthread_exit(0);
 	return NULL;
 }

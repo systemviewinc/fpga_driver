@@ -33,8 +33,8 @@
 #define critical_printk(...) 
 #endif
 
-#ifndef criti_printk
-#define criti_printk printk
+#ifndef criti_printk(...)
+#define criti_printk(...)
 #endif
 /******************************/
 

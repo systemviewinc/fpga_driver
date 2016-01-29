@@ -305,19 +305,26 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 	else if (cdma_capable == 1)
 	{
 		/* Find an available CDMA to use and wait if both are in use */
-		cdma_num = cdma_query();
-		if (cdma_num == 0)
+		cdma_num = 0;
+		while (cdma_num == 0)
 		{
+			cdma_num = cdma_query();
+			if (cdma_num == 0)
+			schedule();
+		}
+
+	//	if (cdma_num == 0)
+	//	{
 			/*default to CDMA 1 and wait on it*/
-			if (mutex_lock_interruptible(&CDMA_sem))
-			{
-				crit_printk(KERN_INFO"User interrupted while waiting for CDMA semaphore.\n");
-				return -ERESTARTSYS;
-			}
-			cdma_num = 1;
+	//		if (mutex_lock_interruptible(&CDMA_sem))
+	//		{
+	//			crit_printk(KERN_INFO"User interrupted while waiting for CDMA semaphore.\n");
+	//			return -ERESTARTSYS;
+	//		}
+	//		cdma_num = 1;
 			//		atomic_set(&mutex_free, 0);  //wait variable for mutex lock
 			//		wait_event_interruptible(mutexq, atomic_read(&mutex_free) != 0);
-		}
+	//	}
 
 		dma_axi_address = axi_pcie_m + dma_off;  //the AXI address written to the CDMA
 
@@ -786,7 +793,9 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
 		}
 		verbose_printk(KERN_INFO"										<pci_write>: Transmit Data FIFO Fill Level:%x\n", *(mod_desc->kernel_reg_read));
 		if (*(mod_desc->kernel_reg_read) != 0x01fc)
-			msleep(100);
+			//msleep(100);
+			//schedule();
+			return 0;
 	}
 
 	/*Set keyhole*/
