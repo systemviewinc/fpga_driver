@@ -576,7 +576,8 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 	//read the status register
 	axi_dest = axi_cdma_loc + CDMA_SR;
 	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
-	verbose_printk(KERN_INFO"<pci_dma_transfer>: CDMA Status after writing SA:%x\n", status);	
+	if (status != 0x02)
+		printk(KERN_INFO"<pci_dma_transfer>: ERROR! CDMA Status after writing SA:%x\n", status);	
 
 	//Writing DA_MSB	
 	//	axi_dest = axi_cdma + CDMA_DA_MSB;
@@ -589,7 +590,8 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 	//read the status register
 	axi_dest = axi_cdma_loc + CDMA_SR;
 	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
-	verbose_printk(KERN_INFO"<pci_dma_transfer>: CDMA Status after writing DA:%x\n", status);	
+	if (status != 0x02)
+		printk(KERN_INFO"<pci_dma_transfer>: ERROR CDMA Status after writing DA:%x\n", status);	
 
 	//Writing BTT	
 	axi_dest = axi_cdma_loc + CDMA_BTT;
@@ -603,7 +605,7 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 	ret = wait_event_interruptible(wq, cdma_comp[cdma_num] != 0);
 	
 	if (ret != 0)
-		verbose_printk(KERN_INFO"	<pci_dma_transfer>: WAIT EVENT FORCED FROM USER SPACE, CDMA Never interrupted.\n");
+		printk(KERN_INFO"	<pci_dma_transfer>: WAIT EVENT FORCED FROM USER SPACE, CDMA %x Never interrupted.\n", cdma_num);
 
 	cdma_comp[cdma_num] = 0;
 	verbose_printk(KERN_INFO"	<pci_dma_transfer>: returned from ISR.\n");
@@ -698,8 +700,8 @@ int cdma_ack(cdma_num)
 	verbose_printk(KERN_INFO"	<cdma_ack>: CDMA status:%x\n", status);
 	if (status != 0x2)    //this is the expected status report  
 	{
-		crit_printk(KERN_INFO"	<cdma_ack>: CDMA %d status ERROR\n", cdma_num);
-		crit_printk(KERN_INFO"	<cdma_ack>: CDMA %d status:%x\n", cdma_num, status);
+		printk(KERN_INFO"	<cdma_ack>: CDMA %d status ERROR\n", cdma_num);
+		printk(KERN_INFO"	<cdma_ack>: CDMA %d status:%x\n", cdma_num, status);
 		crit_printk(KERN_INFO"	<cdma_ack>: Issuing soft reset to CDMA %d\n", cdma_num);
 
 		axi_dest = axi_cdma_loc;
@@ -768,7 +770,7 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
 	verbose_printk(KERN_INFO"<pci_write>: DMA internal offset write value: %llx\n", dma_offset_internal_write);
 	verbose_printk(KERN_INFO"<pci_write>: DMA internal offset read value: %llx\n", dma_offset_internal_read);
 
-	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFV;
+	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFV;  // the transmit FIFO vacancy
 
 	*(mod_desc->kernel_reg_read) = 0x0;   //set to zero
 	
@@ -801,7 +803,7 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
 	/*Set keyhole*/
 	keyhole_en = KEYHOLE_WRITE;
 
-	axi_dest = mod_desc->axi_addr + AXI_STREAM_TDFD;
+	axi_dest = mod_desc->axi_addr + AXI_STREAM_TDFD;  //The data transfer to the FIFO
 	ret = data_transfer(axi_dest, 0, count, KEYHOLE_WRITE, dma_offset_write);
 	if (ret > 0)
 	{
@@ -930,6 +932,18 @@ void axi_stream_fifo_init(struct mod_desc * mod_desc)
 {
 	int ret;
 	u64 axi_dest;
+
+	//reset The transmit side
+	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFR;
+	*(mod_desc->kernel_reg_write) = 0x000000A5;
+	ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
+	crit_printk(KERN_INFO"<axi_fifo_isr_reg>: Reset the  the axi fifo\n");
+
+	//reset The receive side
+	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RDFR;
+	*(mod_desc->kernel_reg_write) = 0x000000A5;
+	ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
+	crit_printk(KERN_INFO"<axi_fifo_isr_reg>: Reset the  the axi fifo\n");
 
 	//Read CTL interface
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;

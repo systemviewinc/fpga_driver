@@ -421,6 +421,7 @@ void *rxfifo_read3(void * tx_buf)
 		if (ret_val == 0)
 		{
 			sched_yield();
+			printf("TX File 1 FIFO is NOT empty!\n");
 		}
 		else
 		{
@@ -526,6 +527,7 @@ void *rxfifo_read(void *read_buf)
 					else if (return_val ==  0)
 					{		
 						printf("No initial values to read from read 1\n");
+						printf("TX File 2 FIFO is NOT empty!\n");
 
 					}
 				}
