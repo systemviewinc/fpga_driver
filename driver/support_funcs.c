@@ -796,8 +796,8 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
 		verbose_printk(KERN_INFO"										<pci_write>: Transmit Data FIFO Fill Level:%x\n", *(mod_desc->kernel_reg_read));
 		if (*(mod_desc->kernel_reg_read) != 0x01fc)
 			//msleep(100);
-			//schedule();
-			return 0;
+			schedule();
+			//return 0;
 	}
 
 	/*Set keyhole*/

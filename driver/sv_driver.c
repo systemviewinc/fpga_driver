@@ -51,6 +51,7 @@
 #define SET_DMA_SIZE 64
 #define RESET_DMA_ALLOC 65
 #define SET_FILE_SIZE 66
+#define GET_STATISTICS 67
 
 #define ERROR   -1
 #define SUCCESS 0
@@ -842,6 +843,8 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->kernel_reg_write = 0;
 	s->kernel_reg_read = 0;
 	s->file_size = 4096;   //default to 4K
+	s->tx_bytes = 0;
+	s->rx_bytes = 0;
 //	s->iwq = (wait_queue_head_t*)iwq;
 //	s->int_count_sem = (struct mutex*)int_count_sem;
 
@@ -903,6 +906,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	//	u32 kern_reg;
 	int int_num;
 	int ret;
+	struct statistics * statistics;
 
 	copy_from_user(&arg_loc, argp, sizeof(u64));
 
@@ -1026,6 +1030,13 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 				verbose_printk(KERN_INFO"<ioctl_keyhole_read_disable>: Setting the CDMA Keyhole READ as DISABLED\n");
 				ret = cdma_config_set(bit_vec, 0, 1);   //value of 0 means we want to UNSET the register
 			}
+			break;
+
+		case GET_STATISTICS:
+
+			statistics = (struct statistics *)arg;
+			statistics->tx_bytes = mod_desc->tx_bytes;
+			statistics->rx_bytes = mod_desc->rx_bytes;
 			break;
 
 		case SET_MODE:
@@ -1310,6 +1321,10 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 	//msleep(5000);   //experiment....
 
+	//file statistics
+	mod_desc->tx_bytes = mod_desc->tx_bytes + bytes_written;
+	//printk(KERN_INFO"total file tx byes: %d \n", mod_desc->tx_bytes);	
+
 	crit_printk(KERN_INFO"\n");	
 	crit_printk(KERN_INFO"<pci_write>: ************************************************************************\n");	
 	crit_printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION END  **************************\n");	
@@ -1447,6 +1462,9 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	/*eventually this will go away once we add mmap
 	 * for now we copy to the appropriate file buffer*/
 	copy_to_user(buf, mod_desc->dma_read, count);
+
+	mod_desc->rx_bytes = mod_desc->rx_bytes + bytes;
+	//printk(KERN_INFO"total file rx byes: %d \n", mod_desc->rx_bytes);	
 
 	crit_printk(KERN_INFO"\n");	
 	crit_printk(KERN_INFO"<pci_read>: ************************************************************************\n");	

@@ -109,8 +109,10 @@ struct mod_desc
 	u32 dma_offset_internal_read;
 	u32 dma_offset_internal_write;
 	loff_t file_size;
-	wait_queue_head_t * iwq;
+//	wait_queue_head_t * iwq;
 	struct mutex * int_count_sem;
+	int tx_bytes;
+	int rx_bytes;
 };
 
 /*this is the interrupt structure*/
@@ -118,14 +120,18 @@ struct interr_struct
 {
 	u32 * mode;
 	int * int_count;
-	wait_queue_head_t * iwq;
+//	wait_queue_head_t * iwq;
 	struct mutex * int_count_sem;
     	
 };
 
 extern struct interr_struct interr_dict[8];
 
-
+struct statistics
+{
+	int tx_bytes;
+	int rx_bytes;
+};
 
 
 // ********************** support functions **************************

@@ -7,6 +7,12 @@
 
 #define AXI_STREAM_FIFO 1
 
+struct statistics 
+{
+	int tx_bytes;
+	int rx_bytes;
+};
+
 void *rxfifo_read(void *read_buf);
 void *rxfifo_read2(void *read_buf);
 void *rxfifo_read3(void * read_buf);
@@ -73,7 +79,7 @@ unsigned int SET_INTERRUPT = 61;
 unsigned int SET_AXI_CTL_DEVICE = 63;
 unsigned int SET_DMA_SIZE = 64;
 unsigned int RESET_DMA_ALLOC = 65;
-
+unsigned int GET_STATISTICS = 67;
 
 /*these are the register offsets of the AXI-Stream FIFO*/
 const unsigned int ISR = 0x0;  //Interrupt Status Regiser  R/WC
@@ -402,13 +408,14 @@ void *rxfifo_read3(void * tx_buf)
 	unsigned int buff[1024];  //50 32b data words
 	unsigned long long trace_buff[256];  //long long is 64bit on ARM
 	int i;
-
+	int tx_write_bytes;
 
 	printf("entered tx fifo thread\n");
 
 	unsigned int tx[2048];
 	int counter = 0;
 
+	tx_write_bytes = 0;
 	while(counter < 200)
 	{
 		ret_val = write(hls_write, tx_buf, sizeof(tx));   
@@ -425,12 +432,22 @@ void *rxfifo_read3(void * tx_buf)
 		}
 		else
 		{
-		printf("file 1 write!\n");
+//		printf("file 1 write!\n");
+		tx_write_bytes = tx_write_bytes + ret_val;
 		counter++;
 		}
 		}
 
 	printf("Finished file 1 writing!!!!!\n");
+	printf("Total bytes written to file 1 : %d\n", tx_write_bytes);
+
+	struct statistics statistics;
+	if(ioctl(hls_write, GET_STATISTICS, &statistics) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("TX Statstics of file 1 from the driver %d\n", statistics.tx_bytes);
+	
 	pthread_exit(0);
 	return NULL;
 }
@@ -448,12 +465,14 @@ void *rxfifo_read4(void * tx_buf)
 	unsigned long long trace_buff[256];  //long long is 64bit on ARM
 	int i;
 	int counter = 0;
+	int tx_write_bytes;
 
 
 	printf("entered tx fifo thread\n");
 
 	unsigned int tx[2048];
 
+	tx_write_bytes = 0;
 	while(counter < 200)
 	{
 		ret_val = write(hls_write_2, tx_buf, sizeof(tx));   
@@ -469,11 +488,19 @@ void *rxfifo_read4(void * tx_buf)
 		}
 		else
 		{
-		printf("file 2 write!\n");
+//		printf("file 2 write!\n");
 		counter++;
+		tx_write_bytes = tx_write_bytes + ret_val;
 		}
 		}
 	printf("Finished file 2 writing!!!!!\n");
+	printf("Total bytes written to file 2 : %d\n", tx_write_bytes);
+	struct statistics statistics;
+	if(ioctl(hls_write_2, GET_STATISTICS, &statistics) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("TX Statstics of file 2 from the driver %d\n", statistics.tx_bytes);
 	pthread_exit(0);
 	return NULL;
 }
@@ -491,6 +518,7 @@ void *rxfifo_read(void *read_buf)
 	unsigned int buff[1024];  //50 32b data words
 	unsigned long long trace_buff[256];  //long long is 64bit on ARM
 	int i;
+	int total_bytes;
 
 	/*initialize pollfds*/
 	pollfds.fd = hls_read;
@@ -536,6 +564,8 @@ void *rxfifo_read(void *read_buf)
 	 * to this device*/
 	printf("just before poll() 1.....\n");
 
+	total_bytes = 0;
+
 	while(1)
 	{
 		return_val = 1;
@@ -543,6 +573,32 @@ void *rxfifo_read(void *read_buf)
 		switch (result) {
 			case 0: 
 				printf ("timeout occured, no interrupt detected\n");
+				printf ("Total bytes read from File 1: %d\n", total_bytes);
+				//Checking if any remaining data is in the FIFO
+				return_val = 1;
+				while (return_val != 0)
+				{
+					return_val = read(hls_read, (void*)buff, (sizeof(buff)));  
+					if (return_val == -1)
+					{
+						printf("READ ERROR DATA\n");
+						break;
+					}
+					else if (return_val > 0)
+					{
+						total_bytes = total_bytes + return_val;		
+						printf("Yikes more data found\n");
+						printf("Number of bytes read from file 1:%d\n", return_val);
+						printf ("NEW Total bytes read from File 1: %d\n", total_bytes);
+
+					}
+				}
+	struct statistics statistics;
+	if(ioctl(hls_read, GET_STATISTICS, &statistics) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("RX Statstics of file 2 from the driver %d\n", statistics.rx_bytes);
 				return NULL;
 			case -1:
 				printf("error occured in poll\n");
@@ -556,7 +612,6 @@ void *rxfifo_read(void *read_buf)
 				//	sleep(1);
 				//	usleep(2000);
 				while (return_val != 0)
-					//	while (1)
 				{
 					return_val = read(hls_read, (void*)buff, (sizeof(buff)));  
 					if (return_val == -1)
@@ -565,8 +620,9 @@ void *rxfifo_read(void *read_buf)
 						break;
 					}
 					else if (return_val > 0)
-					{		
-						printf("Number of bytes read from file 1:%d\n", return_val);
+					{
+						total_bytes = total_bytes + return_val;		
+//						printf("Number of bytes read from file 1:%d\n", return_val);
 
 					}
 				}
@@ -575,6 +631,7 @@ void *rxfifo_read(void *read_buf)
 		//sched_yield();
 		//	sleep(10);
 	}
+	printf ("Total bytes read from File 1: %d\n", total_bytes);
 	printf ("File 1 read thread closing!\n");
 	pthread_exit(0);
 	return NULL;
@@ -593,6 +650,7 @@ void *rxfifo_read2(void *read_buf)
 	unsigned int buff[1024];  //50 32b data words
 	unsigned long long trace_buff[256];  //long long is 64bit on ARM
 	int i;
+	int total_bytes;
 
 	int policy, s;
 	struct sched_param param;
@@ -622,7 +680,7 @@ void *rxfifo_read2(void *read_buf)
 					}
 					else if (return_val > 0)
 					{		
-						printf("Number of bytes read from file 2:%d\n", return_val);
+					//	printf("Number of bytes read from file 2:%d\n", return_val);
 
 					}
 					else if (return_val ==  0)
@@ -635,6 +693,7 @@ void *rxfifo_read2(void *read_buf)
 	/*This should perform a blocking poll until an interrupt is detected
 	 * to this device*/
 	printf("just before poll() 2.....\n");
+	total_bytes = 0;
 
 	while(1)
 	{
@@ -643,7 +702,32 @@ void *rxfifo_read2(void *read_buf)
 		switch (result) {
 			case 0: 
 				printf ("timeout occured, no interrupt detected\n");
-				//	sleep(1);
+				printf ("Total bytes read from File 2: %d\n", total_bytes);
+				//Checking if any remaining data is in the FIFO
+				return_val = 1;
+				while (return_val != 0)
+				{
+					return_val = read(hls_read_2, (void*)buff, (sizeof(buff)));  
+					if (return_val == -1)
+					{
+						printf("READ ERROR DATA\n");
+						break;
+					}
+					else if (return_val > 0)
+					{
+						total_bytes = total_bytes + return_val;		
+						printf("Yikes more data found\n");
+						printf("Number of bytes read from file 2:%d\n", return_val);
+						printf ("NEW Total bytes read from File 2: %d\n", total_bytes);
+
+					}
+				}
+	struct statistics statistics;
+	if(ioctl(hls_read_2, GET_STATISTICS, &statistics) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("RX Statstics of file 2 from the driver %d\n", statistics.rx_bytes);
 				return NULL;
 
 			case -1:
@@ -667,8 +751,9 @@ void *rxfifo_read2(void *read_buf)
 						break;
 					}
 					else if (return_val > 0)
-					{		
-						printf("Number of bytes read from file 2:%d\n", return_val);
+					{
+						total_bytes = total_bytes + return_val;		
+//						printf("Number of bytes read from file 2:%d\n", return_val);
 
 					}
 				}
@@ -689,6 +774,7 @@ void *rxfifo_read2(void *read_buf)
 		}
 		//sched_yield();
 	}
+	printf ("Total bytes read from File 2: %d\n", total_bytes);
 	printf ("File 2 read thread closing!\n");
 	pthread_exit(0);
 	return NULL;
