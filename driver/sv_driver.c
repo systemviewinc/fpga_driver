@@ -52,6 +52,8 @@
 #define RESET_DMA_ALLOC 65
 #define SET_FILE_SIZE 66
 #define GET_STATISTICS 67
+#define START_TIMER 68
+#define STOP_TIMER 69
 
 #define ERROR   -1
 #define SUCCESS 0
@@ -814,6 +816,11 @@ int pci_open(struct inode *inode, struct file *filep)
 	//	void * kern_reg_write;
 	//	void * kern_reg_read;
 	struct mod_desc * s;
+	struct timespec * start_time;
+	struct timespec * stop_time;
+
+	start_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
+	stop_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
 
 	//wait_queue_head_t * iwq;    //the interrupt wait queue for device
 
@@ -845,7 +852,11 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->file_size = 4096;   //default to 4K
 	s->tx_bytes = 0;
 	s->rx_bytes = 0;
-//	s->iwq = (wait_queue_head_t*)iwq;
+	s->start_time = start_time;
+	s->stop_time = stop_time;
+	s->start_flag = 0;
+	s->stop_flag = 0;
+	//	s->iwq = (wait_queue_head_t*)iwq;
 //	s->int_count_sem = (struct mutex*)int_count_sem;
 
 	verbose_printk(KERN_INFO"<pci_open>: minor number %d detected\n", s->minor);
@@ -907,6 +918,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	int int_num;
 	int ret;
 	struct statistics * statistics;
+	struct timespec diff;
 
 	copy_from_user(&arg_loc, argp, sizeof(u64));
 
@@ -1037,6 +1049,22 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			statistics = (struct statistics *)arg;
 			statistics->tx_bytes = mod_desc->tx_bytes;
 			statistics->rx_bytes = mod_desc->rx_bytes;
+
+			if (mod_desc->stop_flag == 1)
+			{
+				mod_desc->stop_flag = 0;
+				diff = timespec_sub(*(mod_desc->stop_time), *(mod_desc->start_time));
+				statistics->seconds = (unsigned long)diff.tv_sec;
+				statistics->ns = (unsigned long)diff.tv_nsec;
+			}
+			break;
+
+		case START_TIMER: 
+			mod_desc->start_flag = 1;
+			break;
+
+		case STOP_TIMER: 
+			mod_desc->stop_flag = 1;
 			break;
 
 		case SET_MODE:
@@ -1207,6 +1235,12 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	crit_printk(KERN_INFO"<pci_write>:                  Attempting to transfer %zu bytes\n", count);	
 	crit_printk(KERN_INFO"<pci_write>: ************************************************************************\n\n");	
 
+	if (mod_desc->start_flag == 1)
+	{
+		getnstimeofday(mod_desc->start_time);
+		mod_desc->start_flag = 0;
+	}
+
 	while (bytes_written < count)
 	{
 		partial_count = count - bytes_written;
@@ -1325,6 +1359,9 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	mod_desc->tx_bytes = mod_desc->tx_bytes + bytes_written;
 	//printk(KERN_INFO"total file tx byes: %d \n", mod_desc->tx_bytes);	
 
+	/*always update the stop_timer*/
+	getnstimeofday(mod_desc->stop_time);
+
 	crit_printk(KERN_INFO"\n");	
 	crit_printk(KERN_INFO"<pci_write>: ************************************************************************\n");	
 	crit_printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION END  **************************\n");	
@@ -1360,6 +1397,12 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	crit_printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
 
 	crit_printk(KERN_INFO"<pci_read>: Attempting to read %zu bytes\n", count);	
+
+	if (mod_desc->start_flag == 1)
+	{
+		getnstimeofday(mod_desc->start_time);
+		mod_desc->start_flag = 0;
+	}
 
 	if (count > mod_desc->dma_size)
 	{
@@ -1465,6 +1508,9 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 	mod_desc->rx_bytes = mod_desc->rx_bytes + bytes;
 	//printk(KERN_INFO"total file rx byes: %d \n", mod_desc->rx_bytes);	
+
+	/*always update the stop_timer*/
+	getnstimeofday(mod_desc->stop_time);
 
 	crit_printk(KERN_INFO"\n");	
 	crit_printk(KERN_INFO"<pci_read>: ************************************************************************\n");	

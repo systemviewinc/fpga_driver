@@ -11,12 +11,16 @@ struct statistics
 {
 	int tx_bytes;
 	int rx_bytes;
+	unsigned long seconds;
+	unsigned long ns;
 };
 
-void *rxfifo_read(void *read_buf);
-void *rxfifo_read2(void *read_buf);
-void *rxfifo_read3(void * read_buf);
-void *rxfifo_read4(void * read_buf);
+//void *rxfifo_read(void *read_buf);
+//void *rxfifo_read2(void *read_buf);
+//void *rxfifo_read3(void * read_buf);
+void *tx(void * file_handle);
+void *rx(void * file_handle);
+double calc_BW(double bytes, double secs, double ns);
 
 char devname[] = DEV_NAME;
 char devname_2[] = DEV_NAME_2;
@@ -80,6 +84,8 @@ unsigned int SET_AXI_CTL_DEVICE = 63;
 unsigned int SET_DMA_SIZE = 64;
 unsigned int RESET_DMA_ALLOC = 65;
 unsigned int GET_STATISTICS = 67;
+unsigned int START_TIMER = 68;
+unsigned int STOP_TIMER = 69;
 
 /*these are the register offsets of the AXI-Stream FIFO*/
 const unsigned int ISR = 0x0;  //Interrupt Status Regiser  R/WC
@@ -117,24 +123,28 @@ int main()
 		printf("ERROR doing ioctl\n");
 		return -1;
 	}
+	printf("hls_write:%d\n", hls_write);
 
 	hls_read = open(devfilename_2, O_RDWR);
 	if(hls_read < 0){
 		printf("ERROR doing ioctl\n");
 		return -1;
 	}
+	printf("hls_read:%d\n", hls_read);
 
 	hls_write_2 = open(devfilename_3, O_RDWR);
 	if(hls_write < 0){
 		printf("ERROR doing ioctl\n");
 		return -1;
 	}
+	printf("hls_write_2:%d\n", hls_write_2);
 
 	hls_read_2 = open(devfilename_4, O_RDWR);
 	if(hls_read < 0){
 		printf("ERROR doing ioctl\n");
 		return -1;
 	}
+	printf("hls_read_2:%d\n", hls_read_2);
 
 	//	trace_read = open(devfilename_3, O_RDWR);
 	//	if(trace_read < 0){
@@ -311,37 +321,40 @@ int main()
 	//This thread will perform a blocking read until an interrupt
 	//has occured signifying the data is availble
 	//first initialize a receive buffer
-	unsigned int rxbuff[sizeof(in)];
-	unsigned int rxbuff2[sizeof(in)];
+	//unsigned int rxbuff[sizeof(in)];
+	//unsigned int rxbuff2[sizeof(in)];
 
-	pthread_t rxfifo, rxfifo2, rxfifo3, rxfifo4;
+	pthread_t tx1, tx2, rx1, rx2;
 
-	if(pthread_create(&rxfifo2, NULL, rxfifo_read2, rxbuff2))
+	struct statistics * tx_statistics_1;
+
+	struct statistics * tx_statistics_2;
+
+	struct statistics * rx_statistics_1;
+
+	struct statistics * rx_statistics_2;
+
+	if(pthread_create(&rx1, NULL, rx, (void *)(&hls_read)))
 	{
 		printf("Error creating thread\n");
 	}
-	printf("Other Thread 2\n");
 
-	if(pthread_create(&rxfifo, NULL, rxfifo_read, rxbuff))
+	if(pthread_create(&rx2, NULL, rx, (void *)(&hls_read_2)))
 	{
 		printf("Error creating thread\n");
 	}
-	printf("Other Thread\n");
-
 
 	/*the first write thread*/
-	if(pthread_create(&rxfifo3, NULL, rxfifo_read3, in))
+	if(pthread_create(&tx1, NULL, tx, (void *)(&hls_write)))
 	{
 		printf("Error creating thread\n");
 	}
-	printf("Other Thread 3\n");
 
 	/*the second write thread*/
-	if(pthread_create(&rxfifo4, NULL, rxfifo_read4, in))
+	if(pthread_create(&tx2, NULL, tx, (void *)(&hls_write_2)))
 	{
 		printf("Error creating thread\n");
 	}
-	printf("Other Thread 4\n");
 
 	/*******Send data to the TX FIFO (front end) **********/
 
@@ -350,36 +363,56 @@ int main()
 
 	//sleep(10);
 
-	pthread_exit(0);
+	//	pthread_exit(0);
 
-	if(pthread_join(rxfifo3, NULL)) 
+	if(pthread_join(tx1, (void**)&tx_statistics_1)) 
 	{
 		printf("Error joining threads\n");
 	}
 	printf("thread done\n");
 
-	if(pthread_join(rxfifo4, NULL)) 
+	if(pthread_join(tx2, (void**)&tx_statistics_2)) 
 	{
 		printf("Error joining threads\n");
 	}
 	printf("thread done\n");
+//	printf("TX file 2 byte count:%d\n", tx_statistics_2->tx_bytes);
+//	printf("TX file 2 time:%lu\n", tx_statistics_2->ns);
 
 	/*wait for the RX FIFO Thread to return data*/
-	if(pthread_join(rxfifo, NULL)) 
+	if(pthread_join(rx1, (void**)&rx_statistics_1)) 
 	{
 		printf("Error joining threads\n");
 	}
 	printf("thread done\n");
 
-	if(pthread_join(rxfifo2, NULL)) 
+	if(pthread_join(rx2, (void**)&rx_statistics_2)) 
 	{
 		printf("Error joining threads\n");
 	}
 	printf("thread done\n");
 
-	printf("Threads joined!\n");
+	printf("Threads joined!\n\n\n");
 	/*Close files*/	
 	//close(bram);
+
+	printf("****************************************************************************\n");
+	printf("                        TRANSFER STATISTICS                                 \n");
+	printf("****************************************************************************\n\n");
+
+	printf("TX Byte Count of file 1 from the driver %d Bytes\n", tx_statistics_1->tx_bytes);
+	printf("TX Time Elapsed:%lu sec :  %lu ns\n", tx_statistics_1->seconds, tx_statistics_1->ns);
+	printf("TX Bandwidth of File 1: %f MB/s\n\n\n", calc_BW((double)(tx_statistics_1->tx_bytes), (double)(tx_statistics_1->seconds), (double)(tx_statistics_1->ns)));
+	printf("RX Byte Count of file 1 from the driver %d Bytes\n", rx_statistics_1->rx_bytes);
+	printf("RX Time Elapsed:%lu sec :  %lu ns\n", rx_statistics_1->seconds, rx_statistics_1->ns);
+	printf("RX Bandwidth of File 1: %f MB/s\n\n\n", calc_BW((double)(rx_statistics_1->rx_bytes), (double)(rx_statistics_1->seconds), (double)(rx_statistics_1->ns)));
+
+	printf("TX Byte Count of file 2 from the driver %d Bytes\n", tx_statistics_2->tx_bytes);
+	printf("TX Time Elapsed:%lu sec :  %lu ns\n", tx_statistics_2->seconds, tx_statistics_2->ns);
+	printf("TX Bandwidth of File 2: %f MB/s\n\n\n", calc_BW((double)(tx_statistics_2->tx_bytes), (double)(tx_statistics_2->seconds), (double)(tx_statistics_2->ns)));
+	printf("RX Byte Count of file 2 from the driver %d Bytes\n", rx_statistics_2->rx_bytes);
+	printf("RX Time Elapsed:%lu sec :  %lu ns\n", rx_statistics_2->seconds, rx_statistics_2->ns);
+	printf("RX Bandwidth of File 2: %f MB/s\n\n\n", calc_BW((double)(rx_statistics_2->rx_bytes), (double)(rx_statistics_2->seconds), (double)(rx_statistics_2->ns)));
 
 	close(hls_write);
 
@@ -396,64 +429,9 @@ int main()
 	return 0;
 }
 
-/*TX Thread*/
-void *rxfifo_read3(void * tx_buf)
-{	
-	int ret_val;
-	unsigned int txregbuf;
-	struct pollfd pollfds;
-	int timeout = 100;    //in ms
-	int result;
-	unsigned int buff2[1];
-	unsigned int buff[1024];  //50 32b data words
-	unsigned long long trace_buff[256];  //long long is 64bit on ARM
-	int i;
-	int tx_write_bytes;
-
-	printf("entered tx fifo thread\n");
-
-	unsigned int tx[2048];
-	int counter = 0;
-
-	tx_write_bytes = 0;
-	while(counter < 200)
-	{
-		ret_val = write(hls_write, tx_buf, sizeof(tx));   
-		if (ret_val == -1)
-		{
-			printf("WRITE ERROR\n");
-			break;
-		}
-
-		if (ret_val == 0)
-		{
-			sched_yield();
-			printf("TX File 1 FIFO is NOT empty!\n");
-		}
-		else
-		{
-//		printf("file 1 write!\n");
-		tx_write_bytes = tx_write_bytes + ret_val;
-		counter++;
-		}
-		}
-
-	printf("Finished file 1 writing!!!!!\n");
-	printf("Total bytes written to file 1 : %d\n", tx_write_bytes);
-
-	struct statistics statistics;
-	if(ioctl(hls_write, GET_STATISTICS, &statistics) < 0) {
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	printf("TX Statstics of file 1 from the driver %d\n", statistics.tx_bytes);
-	
-	pthread_exit(0);
-	return NULL;
-}
 
 /*TX Thread*/
-void *rxfifo_read4(void * tx_buf)
+void * tx(void * file_desc)
 {	
 	int ret_val;
 	unsigned int txregbuf;
@@ -466,48 +444,70 @@ void *rxfifo_read4(void * tx_buf)
 	int i;
 	int counter = 0;
 	int tx_write_bytes;
+	void * statistics_buf;
+	int * fd;
+	struct statistics * statistics;
 
+	fd = (int *)file_desc;
 
-	printf("entered tx fifo thread\n");
+	statistics_buf = malloc(sizeof(struct statistics));
+	statistics = (struct statistics *)statistics_buf;
+
+	printf("entered tx thread with fd: %d\n", *fd);
+//	pthread_exit(0);
 
 	unsigned int tx[2048];
 
 	tx_write_bytes = 0;
-	while(counter < 200)
+
+	if(ioctl(*fd, START_TIMER, NULL) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+
+	while(counter < 500)
 	{
-		ret_val = write(hls_write_2, tx_buf, sizeof(tx));   
+		//		ret_val = write(hls_write_2, tx_buf, sizeof(tx));   
+		ret_val = write(*fd, in, sizeof(in));   
 		if (ret_val == -1)
 		{
 			printf("WRITE ERROR\n");
 			break;
 		}
-		
+
 		if (ret_val == 0)
 		{
 			sched_yield();
 		}
 		else
 		{
-//		printf("file 2 write!\n");
-		counter++;
-		tx_write_bytes = tx_write_bytes + ret_val;
+			//		printf("file 2 write!\n");
+			counter++;
+			tx_write_bytes = tx_write_bytes + ret_val;
 		}
-		}
-	printf("Finished file 2 writing!!!!!\n");
-	printf("Total bytes written to file 2 : %d\n", tx_write_bytes);
-	struct statistics statistics;
-	if(ioctl(hls_write_2, GET_STATISTICS, &statistics) < 0) {
+	}
+	printf("Finished file writing!!!!!\n");
+	printf("Total bytes written to file: %d\n", tx_write_bytes);
+	//	struct statistics statistics;
+
+	if(ioctl(*fd, STOP_TIMER, NULL) < 0) {
 		printf("ERROR doing ioctl\n");
 		return -1;
 	}
-	printf("TX Statstics of file 2 from the driver %d\n", statistics.tx_bytes);
-	pthread_exit(0);
-	return NULL;
+
+	if(ioctl(*fd, GET_STATISTICS, statistics) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+//	printf("TX Statstics of file from the driver %d\n", statistics->tx_bytes);
+//	printf("TX Time Elapsed:%lu sec :  %lu ns\n\n\n", statistics->seconds, statistics->ns);
+	//	pthread_exit(0);
+	return statistics;
 }
 
 /**************RX FIFO Thread**********/
 
-void *rxfifo_read(void *read_buf)
+void *rx(void * file_desc)
 {	
 	int return_val;
 	unsigned int txregbuf;
@@ -519,12 +519,21 @@ void *rxfifo_read(void *read_buf)
 	unsigned long long trace_buff[256];  //long long is 64bit on ARM
 	int i;
 	int total_bytes;
+	void * statistics_buf;
+	int * fd;
+	struct statistics * statistics;
+
+	fd = (int *)file_desc;
+
+	statistics_buf = malloc(sizeof(struct statistics));
+	statistics = (struct statistics *)statistics_buf;
 
 	/*initialize pollfds*/
-	pollfds.fd = hls_read;
+	pollfds.fd = *fd;
 	pollfds.events = POLLIN;  //wait for data
 
-	printf("entered rx fifo 1 thread\n");
+	printf("entered rx thread with file desc: %d\n", *fd);
+
 
 	int policy, s;
 	struct sched_param param;
@@ -532,33 +541,36 @@ void *rxfifo_read(void *read_buf)
 	//policy = SCHED_BATCH;
 	//pthread_setschedparam(pthread_self(), 2, &param); //1 = FIFO
 
-	s = pthread_getschedparam(pthread_self(), &policy, &param);
-	printf("Thread Priority for read 1: %x\n", param.sched_priority);		   
-	printf("Thread Policy for read 1: %d\n", policy);		   
-	
+	//	s = pthread_getschedparam(pthread_self(), &policy, &param);
+	//	printf("Thread Priority for read 1: %x\n", param.sched_priority);		   
+	//	printf("Thread Policy for read 1: %d\n", policy);		   
+
+	if(ioctl(*fd, START_TIMER, NULL) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
 	//For the sake of running again and not being deadlocked.
-		return_val = 1;
+/*	return_val = 1;
 	while (return_val != 0)
-					//	while (1)
-				{
-					return_val = read(hls_read, (void*)buff, (sizeof(buff)));  
-					if (return_val == -1)
-					{
-						printf("READ ERROR DATA\n");
-						break;
-					}
-					else if (return_val > 0)
-					{		
-						printf("Number of bytes read from file 1:%d\n", return_val);
+		//	while (1)
+	{
+		return_val = read(*fd, (void*)buff, (sizeof(buff)));  
+		if (return_val == -1)
+		{
+			printf("READ ERROR DATA\n");
+			break;
+		}
+		else if (return_val > 0)
+		{		
+			printf("Number of bytes read from file:%d\n", return_val);
 
-					}
-					else if (return_val ==  0)
-					{		
-						printf("No initial values to read from read 1\n");
-						printf("TX File 2 FIFO is NOT empty!\n");
-
-					}
-				}
+		}
+		else if (return_val ==  0)
+		{		
+			printf("No initial values to read from read\n");
+		}
+	}
+*/	
 
 	/*This should perform a blocking poll until an interrupt is detected
 	 * to this device*/
@@ -573,33 +585,40 @@ void *rxfifo_read(void *read_buf)
 		switch (result) {
 			case 0: 
 				printf ("timeout occured, no interrupt detected\n");
-				printf ("Total bytes read from File 1: %d\n", total_bytes);
+				printf ("Total bytes read from File: %d\n", total_bytes);
 				//Checking if any remaining data is in the FIFO
-				return_val = 1;
-				while (return_val != 0)
-				{
-					return_val = read(hls_read, (void*)buff, (sizeof(buff)));  
-					if (return_val == -1)
-					{
-						printf("READ ERROR DATA\n");
-						break;
-					}
-					else if (return_val > 0)
-					{
-						total_bytes = total_bytes + return_val;		
-						printf("Yikes more data found\n");
-						printf("Number of bytes read from file 1:%d\n", return_val);
-						printf ("NEW Total bytes read from File 1: %d\n", total_bytes);
+			//	return_val = 1;
+			//	while (return_val != 0)
+			//	{
+			//		return_val = read(*fd, (void*)buff, (sizeof(buff)));  
+			//		if (return_val == -1)
+			//		{
+			//			printf("READ ERROR DATA\n");
+			//			break;
+			//		}
+			//		else if (return_val > 0)
+			//		{
+			//			total_bytes = total_bytes + return_val;		
+			//			printf("Yikes more data found\n");
+			//			printf("Number of bytes read from file:%d\n", return_val);
+			//			printf ("NEW Total bytes read from File: %d\n", total_bytes);
 
-					}
+			//		}
+			//	}
+
+				if(ioctl(*fd, STOP_TIMER, NULL) < 0) {
+					printf("ERROR doing ioctl\n");
+					return -1;
 				}
-	struct statistics statistics;
-	if(ioctl(hls_read, GET_STATISTICS, &statistics) < 0) {
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	printf("RX Statstics of file 2 from the driver %d\n", statistics.rx_bytes);
-				return NULL;
+
+				if(ioctl(*fd, GET_STATISTICS, statistics) < 0) {
+					printf("ERROR doing ioctl\n");
+					return -1;
+				}
+		//		printf("RX Statstics of file from the driver %d\n", statistics->rx_bytes);
+		//		printf("RX Time Elapsed:%lu sec :  %lu ns\n\n\n", statistics->seconds, statistics->ns);
+				return statistics;
+
 			case -1:
 				printf("error occured in poll\n");
 				while(1);
@@ -613,7 +632,7 @@ void *rxfifo_read(void *read_buf)
 				//	usleep(2000);
 				while (return_val != 0)
 				{
-					return_val = read(hls_read, (void*)buff, (sizeof(buff)));  
+					return_val = read(*fd, (void*)buff, (sizeof(buff)));  
 					if (return_val == -1)
 					{
 						printf("READ ERROR DATA\n");
@@ -622,7 +641,7 @@ void *rxfifo_read(void *read_buf)
 					else if (return_val > 0)
 					{
 						total_bytes = total_bytes + return_val;		
-//						printf("Number of bytes read from file 1:%d\n", return_val);
+						//						printf("Number of bytes read from file 1:%d\n", return_val);
 
 					}
 				}
@@ -631,151 +650,17 @@ void *rxfifo_read(void *read_buf)
 		//sched_yield();
 		//	sleep(10);
 	}
-	printf ("Total bytes read from File 1: %d\n", total_bytes);
-	printf ("File 1 read thread closing!\n");
-	pthread_exit(0);
-	return NULL;
+	printf ("Total bytes read from File: %d\n", total_bytes);
+	printf ("File read thread closing!\n");
+	//	pthread_exit(0);
+	//	return NULL;
+	return statistics;
 }
 
-/**************RX FIFO Thread**********/
-
-void *rxfifo_read2(void *read_buf)
-{	
-	int return_val;
-	unsigned int txregbuf;
-	struct pollfd pollfds;
-	int timeout = 1000;    //in ms
-	int result;
-	unsigned int buff2[1];
-	unsigned int buff[1024];  //50 32b data words
-	unsigned long long trace_buff[256];  //long long is 64bit on ARM
-	int i;
-	int total_bytes;
-
-	int policy, s;
-	struct sched_param param;
-
-	//pthread_setschedparam(pthread_self(), 2, &param);
-
-	s = pthread_getschedparam(pthread_self(), &policy, &param);
-	printf("Thread Priority for read 2: %x\n", param.sched_priority);		   
-	printf("Thread Policy for read 2: %d\n", policy);		   
-
-	/*initialize pollfds*/
-	pollfds.fd = hls_read_2;
-	pollfds.events = POLLIN;  //wait for data
-
-	printf("entered rx fifo 2 thread\n");
-
-	//For the sake of running again and not being deadlocked.
-		return_val = 1;
-	while (return_val != 0)
-					//	while (1)
-				{
-					return_val = read(hls_read_2, (void*)buff, (sizeof(buff)));  
-					if (return_val == -1)
-					{
-						printf("READ ERROR DATA\n");
-						break;
-					}
-					else if (return_val > 0)
-					{		
-					//	printf("Number of bytes read from file 2:%d\n", return_val);
-
-					}
-					else if (return_val ==  0)
-					{		
-						printf("No initial values to read from read 2\n");
-
-					}
-				}
-
-	/*This should perform a blocking poll until an interrupt is detected
-	 * to this device*/
-	printf("just before poll() 2.....\n");
-	total_bytes = 0;
-
-	while(1)
-	{
-		return_val = 1;
-		result = poll(&pollfds, 1, timeout);
-		switch (result) {
-			case 0: 
-				printf ("timeout occured, no interrupt detected\n");
-				printf ("Total bytes read from File 2: %d\n", total_bytes);
-				//Checking if any remaining data is in the FIFO
-				return_val = 1;
-				while (return_val != 0)
-				{
-					return_val = read(hls_read_2, (void*)buff, (sizeof(buff)));  
-					if (return_val == -1)
-					{
-						printf("READ ERROR DATA\n");
-						break;
-					}
-					else if (return_val > 0)
-					{
-						total_bytes = total_bytes + return_val;		
-						printf("Yikes more data found\n");
-						printf("Number of bytes read from file 2:%d\n", return_val);
-						printf ("NEW Total bytes read from File 2: %d\n", total_bytes);
-
-					}
-				}
-	struct statistics statistics;
-	if(ioctl(hls_read_2, GET_STATISTICS, &statistics) < 0) {
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	printf("RX Statstics of file 2 from the driver %d\n", statistics.rx_bytes);
-				return NULL;
-
-			case -1:
-				printf("error occured in poll\n");
-				while(1);
-
-			default:
-				//			printf("RX FIFO INTERRUPT DETECTED!\n");
-
-				/* Read from peripheral */
-
-				//	sleep(1);
-				//	usleep(2000);
-				while (return_val != 0)
-					//	while (1)
-				{
-					return_val = read(hls_read_2, (void*)buff, (sizeof(buff)));  
-					if (return_val == -1)
-					{
-						printf("READ ERROR DATA\n");
-						break;
-					}
-					else if (return_val > 0)
-					{
-						total_bytes = total_bytes + return_val;		
-//						printf("Number of bytes read from file 2:%d\n", return_val);
-
-					}
-				}
-
-				/*Read the trace module FIFO*/
-				//			return_val = 256;
-				//			while (return_val == 256)
-				//			{
-				//			return_val = read(trace_read, (void*)trace_buff, (sizeof(trace_buff)));  
-
-				//			printf("number of TRACE bytes read: %x\n", return_val);
-
-				//			for(i=0;i<(return_val/8);i++)
-				//			{
-				//				printf("trace value read: %llx\n", trace_buff[i]);
-				//			}
-				//			}
-		}
-		//sched_yield();
-	}
-	printf ("Total bytes read from File 2: %d\n", total_bytes);
-	printf ("File 2 read thread closing!\n");
-	pthread_exit(0);
-	return NULL;
+double calc_BW(double bytes, double secs, double ns)
+{
+	double calc;
+	calc = (bytes/1000000)/(secs+(ns/1000000000));
+	return calc;
 }
+

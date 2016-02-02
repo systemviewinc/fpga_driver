@@ -113,6 +113,10 @@ struct mod_desc
 	struct mutex * int_count_sem;
 	int tx_bytes;
 	int rx_bytes;
+	struct timespec * start_time;
+	struct timespec * stop_time;
+	int start_flag;
+	int stop_flag;
 };
 
 /*this is the interrupt structure*/
@@ -131,6 +135,8 @@ struct statistics
 {
 	int tx_bytes;
 	int rx_bytes;
+	unsigned long seconds;
+	unsigned long ns;
 };
 
 
