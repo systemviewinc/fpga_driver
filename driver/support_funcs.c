@@ -786,6 +786,7 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
 	 * if there is a holdup in data, we are stuck here....  */
 
 	while (*(mod_desc->kernel_reg_read) != 0x01fc)  //1fc is an empty 512 depth fifo
+//	while (*(mod_desc->kernel_reg_read) != 0x07fc)  //7fc is an empty 2048 depth fifo
 	{
 		ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, dma_offset_internal_read);
 		if (ret > 0)
@@ -793,11 +794,18 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
 			crit_printk(KERN_INFO"<pci_write>: ERROR reading from AXI Streaming FIFO control interface\n");
 			return -1;
 		}
-		verbose_printk(KERN_INFO"										<pci_write>: Transmit Data FIFO Fill Level:%x\n", *(mod_desc->kernel_reg_read));
+//		printk(KERN_INFO"										<pci_write>: Transmit Data FIFO Fill Level:%x\n", *(mod_desc->kernel_reg_read));
 		if (*(mod_desc->kernel_reg_read) != 0x01fc)
+//		if (*(mod_desc->kernel_reg_read) != 0x07fc)
+		{
 			//msleep(100);
+			mod_desc->ip_not_ready = mod_desc->ip_not_ready + 1;
+		//	atomic_set(interr_dict[4].atomic_poll, 1);
+		//	atomic_set(interr_dict[5].atomic_poll, 1);
+		//	wake_up(&wq_periph);
 			schedule();
 			//return 0;
+		}
 	}
 
 	/*Set keyhole*/
@@ -881,6 +889,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 	{
 		crit_printk(KERN_INFO"<axi_stream_fifo_read> There is more data to be read than requested\n");
 		crit_printk(KERN_INFO"<axi_stream_fifo_read> This could lead to overflow of data in the FPGA\n");
+	//	printk(KERN_INFO"<axi_stream_fifo_read> Lots of data in the read FIFO: 0x%x\n", read_bytes);
 		/*something needs to be done here.....*/
 	}
 

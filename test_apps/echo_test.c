@@ -13,6 +13,8 @@ struct statistics
 	int rx_bytes;
 	unsigned long seconds;
 	unsigned long ns;
+	int cdma_attempt;
+	int ip_not_ready;
 };
 
 //void *rxfifo_read(void *read_buf);
@@ -402,6 +404,7 @@ int main()
 
 	printf("TX Byte Count of file 1 from the driver %d Bytes\n", tx_statistics_1->tx_bytes);
 	printf("TX Time Elapsed:%lu sec :  %lu ns\n", tx_statistics_1->seconds, tx_statistics_1->ns);
+	printf("TX Numer of times the IP was not ready: %d\n", tx_statistics_1->ip_not_ready);
 	printf("TX Bandwidth of File 1: %f MB/s\n\n\n", calc_BW((double)(tx_statistics_1->tx_bytes), (double)(tx_statistics_1->seconds), (double)(tx_statistics_1->ns)));
 	printf("RX Byte Count of file 1 from the driver %d Bytes\n", rx_statistics_1->rx_bytes);
 	printf("RX Time Elapsed:%lu sec :  %lu ns\n", rx_statistics_1->seconds, rx_statistics_1->ns);
@@ -409,6 +412,7 @@ int main()
 
 	printf("TX Byte Count of file 2 from the driver %d Bytes\n", tx_statistics_2->tx_bytes);
 	printf("TX Time Elapsed:%lu sec :  %lu ns\n", tx_statistics_2->seconds, tx_statistics_2->ns);
+	printf("TX Numer of times the IP was not ready: %d\n", tx_statistics_2->ip_not_ready);
 	printf("TX Bandwidth of File 2: %f MB/s\n\n\n", calc_BW((double)(tx_statistics_2->tx_bytes), (double)(tx_statistics_2->seconds), (double)(tx_statistics_2->ns)));
 	printf("RX Byte Count of file 2 from the driver %d Bytes\n", rx_statistics_2->rx_bytes);
 	printf("RX Time Elapsed:%lu sec :  %lu ns\n", rx_statistics_2->seconds, rx_statistics_2->ns);
@@ -436,7 +440,7 @@ void * tx(void * file_desc)
 	int ret_val;
 	unsigned int txregbuf;
 	struct pollfd pollfds;
-	int timeout = 100;    //in ms
+	int timeout = 1000;    //in ms
 	int result;
 	unsigned int buff2[1];
 	unsigned int buff[1024];  //50 32b data words
@@ -484,6 +488,8 @@ void * tx(void * file_desc)
 			//		printf("file 2 write!\n");
 			counter++;
 			tx_write_bytes = tx_write_bytes + ret_val;
+			//usleep(20);
+			sched_yield();
 		}
 	}
 	printf("Finished file writing!!!!!\n");
@@ -522,6 +528,8 @@ void *rx(void * file_desc)
 	void * statistics_buf;
 	int * fd;
 	struct statistics * statistics;
+
+	nice(-5);
 
 	fd = (int *)file_desc;
 
@@ -587,24 +595,24 @@ void *rx(void * file_desc)
 				printf ("timeout occured, no interrupt detected\n");
 				printf ("Total bytes read from File: %d\n", total_bytes);
 				//Checking if any remaining data is in the FIFO
-			//	return_val = 1;
-			//	while (return_val != 0)
-			//	{
-			//		return_val = read(*fd, (void*)buff, (sizeof(buff)));  
-			//		if (return_val == -1)
-			//		{
-			//			printf("READ ERROR DATA\n");
-			//			break;
-			//		}
-			//		else if (return_val > 0)
-			//		{
-			//			total_bytes = total_bytes + return_val;		
-			//			printf("Yikes more data found\n");
-			//			printf("Number of bytes read from file:%d\n", return_val);
-			//			printf ("NEW Total bytes read from File: %d\n", total_bytes);
+				return_val = 1;
+				while (return_val != 0)
+				{
+					return_val = read(*fd, (void*)buff, (sizeof(buff)));  
+					if (return_val == -1)
+					{
+						printf("READ ERROR DATA\n");
+						break;
+					}
+					else if (return_val > 0)
+					{
+						total_bytes = total_bytes + return_val;		
+						printf("Yikes more data found\n");
+						printf("Number of bytes read from file:%d\n", return_val);
+						printf ("NEW Total bytes read from File: %d\n", total_bytes);
 
-			//		}
-			//	}
+					}
+				}
 
 				if(ioctl(*fd, STOP_TIMER, NULL) < 0) {
 					printf("ERROR doing ioctl\n");

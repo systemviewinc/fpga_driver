@@ -117,6 +117,9 @@ struct mod_desc
 	struct timespec * stop_time;
 	int start_flag;
 	int stop_flag;
+	int cdma_attempt;
+	int ip_not_ready;
+	atomic_t * atomic_poll;
 };
 
 /*this is the interrupt structure*/
@@ -126,6 +129,7 @@ struct interr_struct
 	int * int_count;
 //	wait_queue_head_t * iwq;
 	struct mutex * int_count_sem;
+	atomic_t * atomic_poll;
     	
 };
 
@@ -137,6 +141,8 @@ struct statistics
 	int rx_bytes;
 	unsigned long seconds;
 	unsigned long ns;
+	int cdma_attempt;
+	int ip_not_ready;
 };
 
 

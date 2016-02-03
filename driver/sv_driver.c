@@ -739,11 +739,12 @@ void do_isr_tasklet (unsigned long unused)
 		else
 		{
 			critical_printk(KERN_INFO"<soft_isr>: this interrupt is from a user peripheral\n");
-		
-			//mutex_lock_interruptible(interr_dict[int_num].int_count_sem);
-			*(interr_dict[int_num].int_count) = (*(interr_dict[int_num].int_count)) + 1;
-			//mutex_unlock(interr_dict[int_num].int_count_sem);
-		//	interr[int_num] = 1;
+
+		//	if (*(interr_dict[int_num].int_count) < 10)   //set a max here....
+		//	*(interr_dict[int_num].int_count) = (*(interr_dict[int_num].int_count)) + 1;
+			*(interr_dict[int_num].int_count) = 1;
+			atomic_set(interr_dict[int_num].atomic_poll, 1);
+
 			critical_printk(KERN_INFO"<soft_isr>: this is after the int count add\n");
 
 			vec_serviced = vec_serviced | num2vec(int_num);
@@ -765,40 +766,48 @@ void do_isr_tasklet (unsigned long unused)
 
 	critical_printk(KERN_INFO"<soft_isr>: All interrupts serviced. The following Vector is acknowledged: %x\n", vec_serviced);
 
-	/* The CDMA vectors (1 and 2) */
-	if ((vec_serviced & 0x01) == 0x01) 
-	{	
-		cdma_comp[1] = 1;      //condition for wake_up
-		critical_printk(KERN_INFO"<soft_isr>: Waking up CDMA 1\n");
-		wake_up_interruptible(&wq);
-	}
-
-	if ((vec_serviced & 0x02) == 0x02)
-	{	
-		cdma_comp[2] = 1;      //condition for wake_up
-		critical_printk(KERN_INFO"<soft_isr>: Waking up CDMA 2\n");
-		wake_up_interruptible(&wq);
-	}
-
-	if (vec_serviced >= 0x10)
+	if (vec_serviced > 0)
 	{
-		wake_up(&wq_periph);
-	
-	//	for(i = 4; i<=7; i++)
-	//	{
+		/* The CDMA vectors (1 and 2) */
+		if ((vec_serviced & 0x01) == 0x01) 
+		{	
+			cdma_comp[1] = 1;      //condition for wake_up
+			critical_printk(KERN_INFO"<soft_isr>: Waking up CDMA 1\n");
+			wake_up_interruptible(&wq);
+		}
+
+		if ((vec_serviced & 0x02) == 0x02)
+		{	
+			cdma_comp[2] = 1;      //condition for wake_up
+			critical_printk(KERN_INFO"<soft_isr>: Waking up CDMA 2\n");
+			wake_up_interruptible(&wq);
+		}
+
+	//	wake_up_interruptible(&wq);
+		//		*(interr_dict[4].int_count) = (*(interr_dict[4].int_count)) + 1;
+		//		*(interr_dict[5].int_count) = (*(interr_dict[5].int_count)) + 1;
+
+			if (vec_serviced >= 0x10)
+			{
+				wake_up(&wq_periph);
+
+		//	for(i = 4; i<=7; i++)
+		//	{
 		//	mutex_lock_interruptible(interr_dict[i].int_count_sem);
-	//		if (interr_dict[i].int_count > 0)
+		//		if (interr_dict[i].int_count > 0)
 		//	if (interr[i] > 0)
-	//		{
-	//	    	critical_printk(KERN_INFO"<soft_isr>: Waking up User Peripheral:%x\n", i);
+		//		{
+		//	    	critical_printk(KERN_INFO"<soft_isr>: Waking up User Peripheral:%x\n", i);
 		//		mutex_unlock(interr_dict[i].int_count_sem);
-			//	interr_dict[i].int_count = 0;
-			//	interr[i] = 0;
+		//	interr_dict[i].int_count = 0;
+		//	interr[i] = 0;
 		//		wake_up(interr_dict[i].iwq);
-	//		}
-	//	}
-		crit_printk(KERN_INFO"<soft_isr>:			Waking up User Peripherals\n");
+		//		}
+		//	}
+		//		crit_printk(KERN_INFO"<soft_isr>:			Waking up User Peripherals\n");
+			}
 	}
+
 	crit_printk(KERN_INFO"<soft_isr>:						Exiting ISR\n");
 	critical_printk(KERN_INFO"		Exited the Tasklet");
 
@@ -809,8 +818,8 @@ int pci_open(struct inode *inode, struct file *filep)
 {
 	void * mode_address;
 	void * interrupt_count;
-//	void * iwq;
-//	void * int_count_sem;
+	//	void * iwq;
+	//	void * int_count_sem;
 
 	int ret;
 	//	void * kern_reg_write;
@@ -819,13 +828,17 @@ int pci_open(struct inode *inode, struct file *filep)
 	struct timespec * start_time;
 	struct timespec * stop_time;
 
+	atomic_t * atomic_poll;
+
 	start_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
 	stop_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
 
+	atomic_poll = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
+	
 	//wait_queue_head_t * iwq;    //the interrupt wait queue for device
 
-//	iwq = kmalloc(sizeof(wait_queue_head_t), GFP_KERNEL);
-//	int_count_sem = kmalloc(sizeof(struct mutex), GFP_KERNEL);
+	//	iwq = kmalloc(sizeof(wait_queue_head_t), GFP_KERNEL);
+	//	int_count_sem = kmalloc(sizeof(struct mutex), GFP_KERNEL);
 
 	mode_address = kmalloc(sizeof(int), GFP_KERNEL);
 	interrupt_count = kmalloc(sizeof(int), GFP_KERNEL);
@@ -856,8 +869,11 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->stop_time = stop_time;
 	s->start_flag = 0;
 	s->stop_flag = 0;
+	s->cdma_attempt = 0;
+	s->ip_not_ready = 0;
+	s->atomic_poll = atomic_poll;
 	//	s->iwq = (wait_queue_head_t*)iwq;
-//	s->int_count_sem = (struct mutex*)int_count_sem;
+	//	s->int_count_sem = (struct mutex*)int_count_sem;
 
 	verbose_printk(KERN_INFO"<pci_open>: minor number %d detected\n", s->minor);
 
@@ -899,6 +915,8 @@ int pci_release(struct inode *inode, struct file *filep)
 	kfree((const void*)mod_desc->mode);
 
 	kfree((const void*)mod_desc->int_count);
+	kfree((const void*)mod_desc->start_time);
+	kfree((const void*)mod_desc->stop_time);
 
 	kfree((const void*)filep->private_data);
 
@@ -989,9 +1007,9 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 		case SET_INTERRUPT:
 			verbose_printk(KERN_INFO"<ioctl>: Setting device as an Interrupt source with vector:%llx\n", arg_loc);
-		
-		//	init_waitqueue_head(mod_desc->iwq);
-		
+
+			//	init_waitqueue_head(mod_desc->iwq);
+
 			/*Store the Interrupt Vector*/
 			mod_desc->interrupt_vec = (u32)arg_loc;
 
@@ -1001,10 +1019,11 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 			interr_dict[int_num].int_count = mod_desc->int_count;	
 			interr_dict[int_num].mode = mod_desc->mode;
-		
-		//	interr_dict[int_num].iwq = mod_desc->iwq;
-		//	interr_dict[int_num].int_count_sem = mod_desc->int_count_sem;
-		//	mutex_init(mod_desc->int_count_sem);
+
+			interr_dict[int_num].atomic_poll = mod_desc->atomic_poll;
+			//	interr_dict[int_num].iwq = mod_desc->iwq;
+			//	interr_dict[int_num].int_count_sem = mod_desc->int_count_sem;
+			//	mutex_init(mod_desc->int_count_sem);
 
 			break;
 
@@ -1049,6 +1068,8 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			statistics = (struct statistics *)arg;
 			statistics->tx_bytes = mod_desc->tx_bytes;
 			statistics->rx_bytes = mod_desc->rx_bytes;
+			statistics->cdma_attempt = mod_desc->cdma_attempt;
+			statistics->ip_not_ready = mod_desc->ip_not_ready;
 
 			if (mod_desc->stop_flag == 1)
 			{
@@ -1176,24 +1197,24 @@ int pci_poll(struct file *filep, poll_table * pwait)
 	 *peripheral has data*/
 
 	poll_wait(filep, &wq_periph, pwait);
-//	poll_wait(filep, mod_desc->iwq, pwait);
+	//	poll_wait(filep, mod_desc->iwq, pwait);
 
 	crit_printk(KERN_INFO"<pci_poll>: Peripheral (' %x ') Interrupt Detected!!\n", mod_desc->int_num);
 
 	/*see if the module has triggered an interrupt*/
 	has_data = *(mod_desc->int_count);
-//	crit_printk(KERN_INFO"<pci_poll>: Interrupt count of polling peripheral:%x\n", has_data);
+	//	crit_printk(KERN_INFO"<pci_poll>: Interrupt count of polling peripheral:%x\n", has_data);
 
-//	if (!mutex_is_locked(mod_desc->int_count_sem))
-	if (has_data > 0)
+//	if (has_data > 0)
+	if (atomic_read(mod_desc->atomic_poll))
 	{
 		critical_printk(KERN_INFO"<pci_poll>: Interrupting Peripheral Matched!\n");
 		/*reset the has_data flag*/
-	
-//		mutex_lock_interruptible(mod_desc->int_count_sem);
-		*(mod_desc->int_count) = 0;
-//		mutex_unlock(mod_desc->int_count_sem);
-	
+
+			atomic_set(mod_desc->atomic_poll, 0);
+			*(mod_desc->int_count) = 0;
+		//*(mod_desc->int_count) = *(mod_desc->int_count) - 1;
+
 		mask |= POLLIN;
 	}
 
@@ -1257,12 +1278,12 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		/*eventually this will go away once we add mmap
 		 * for now we copy to the appropriate file buffer*/
 		crit_printk(KERN_INFO"<pci_write>: copying data from user space...\n");
-	
+
 		/*the pointer of data to be transferred is incremented by the amout of bytes
 		 * already written.  This handles the case when a chunk of data larger than
 		 * the dma buffer size is attempted to be written*/
 		copy_from_user(mod_desc->dma_write, (buf + bytes_written), partial_count);
-	//	copy_from_user(mod_desc->dma_write, buf, partial_count);
+		//	copy_from_user(mod_desc->dma_write, buf, partial_count);
 
 
 
@@ -1451,7 +1472,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			crit_printk(KERN_INFO"<user_peripheral_write>: current file offset is: %llu\n", filep->f_pos);
 
 			temp = count + filep->f_pos;
-		
+
 			/*Check to see if read will go past the boundary*/
 			if(temp > (size_t)mod_desc->file_size)
 			{
@@ -1510,7 +1531,8 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	//printk(KERN_INFO"total file rx byes: %d \n", mod_desc->rx_bytes);	
 
 	/*always update the stop_timer*/
-	getnstimeofday(mod_desc->stop_time);
+	if (bytes > 0)
+		getnstimeofday(mod_desc->stop_time);
 
 	crit_printk(KERN_INFO"\n");	
 	crit_printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
