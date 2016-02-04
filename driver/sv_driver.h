@@ -79,7 +79,7 @@ extern wait_queue_head_t mutexq;
 
 /*this is the CDMA wait condition variable*/
 extern int cdma_comp[5];
-
+extern atomic_t cdma_atom[5];
 
 extern const u32 INT_CTRL_IER;
 extern const u32 INT_CTRL_MER;
@@ -164,4 +164,5 @@ int dma_file_init(struct mod_desc *mod_desc, int dma_file_size, void *dma_buffer
 size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc);
 size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc);
 void axi_stream_fifo_init(struct mod_desc * mod_desc);
+void cdma_wait_sleep(int cdma_num);
 // ******************************************************************

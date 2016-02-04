@@ -174,6 +174,7 @@ wait_queue_head_t wq;
 wait_queue_head_t wq_periph;
 wait_queue_head_t mutexq;
 int cdma_comp[5];
+atomic_t cdma_atom[5];
 int num_int;
 
 atomic_t mutex_free = ATOMIC_INIT(0); 
@@ -691,7 +692,119 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 	critical_printk(KERN_INFO"<pci_isr>:						Entered the ISR");
 
-	tasklet_schedule(&isr_tasklet);
+//	tasklet_schedule(&isr_tasklet);
+
+	u32 status;
+	u64 axi_dest;
+	int int_num;
+	u32 device_mode;
+	int ret;
+	u32 vec_serviced;
+	int i;
+	int interr[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+
+	critical_printk(KERN_INFO"		Entered the Tasklet");
+
+	vec_serviced = 0;
+	i = 0;
+	/*Here we need to find out who triggered the interrupt*
+	 *Since we only allow one MSI vector, we need to query the
+	 *Interrupt controller to find out. */
+
+	/*This is the interrupt status register*/
+	axi_dest = axi_interr_ctrl + INT_CTRL_ISR;
+	ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
+	critical_printk(KERN_INFO"<soft_isr>: interrupt status register vector is: ('%x')\n", status);
+
+
+	while(status > 0)
+	{
+		int_num = vec2num(status);
+		critical_printk(KERN_INFO"<soft_isr>: interrupt number is: ('%d')\n", int_num);
+		device_mode = *(interr_dict[int_num].mode);
+
+		if (device_mode == CDMA)
+		{
+			verbose_printk(KERN_INFO"<soft_isr>: this interrupt is from the CDMA\n");
+			vec_serviced = vec_serviced | num2vec(int_num);
+		}
+
+		else
+		{
+			critical_printk(KERN_INFO"<soft_isr>: this interrupt is from a user peripheral\n");
+
+		//	if (*(interr_dict[int_num].int_count) < 10)   //set a max here....
+		//	*(interr_dict[int_num].int_count) = (*(interr_dict[int_num].int_count)) + 1;
+			*(interr_dict[int_num].int_count) = 1;
+			atomic_set(interr_dict[int_num].atomic_poll, 1);
+
+			critical_printk(KERN_INFO"<soft_isr>: this is after the int count add\n");
+
+			vec_serviced = vec_serviced | num2vec(int_num);
+		}
+
+		/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
+		axi_dest = axi_interr_ctrl + INT_CTRL_IAR;
+		status = num2vec(int_num);
+		ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE, 0);
+
+		/*This is the interrupt status register*/
+		axi_dest = axi_interr_ctrl + INT_CTRL_ISR;
+		critical_printk(KERN_INFO"<soft_isr>: Checking the ISR vector for any additional vectors....\n");
+		ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
+
+
+	}
+
+
+	critical_printk(KERN_INFO"<soft_isr>: All interrupts serviced. The following Vector is acknowledged: %x\n", vec_serviced);
+
+	if (vec_serviced > 0)
+	{
+		/* The CDMA vectors (1 and 2) */
+		if ((vec_serviced & 0x01) == 0x01) 
+		{	
+			cdma_comp[1] = 1;      //condition for wake_up
+		//	atomic_set(&cdma_atom[1], 1);
+			critical_printk(KERN_INFO"<soft_isr>: Waking up CDMA 1\n");
+			wake_up_interruptible(&wq);
+		}
+
+		if ((vec_serviced & 0x02) == 0x02)
+		{	
+			cdma_comp[2] = 1;      //condition for wake_up
+		//	atomic_set(&cdma_atom[2], 1);
+			critical_printk(KERN_INFO"<soft_isr>: Waking up CDMA 2\n");
+			wake_up_interruptible(&wq);
+		}
+
+	//	wake_up_interruptible(&wq);
+		//		*(interr_dict[4].int_count) = (*(interr_dict[4].int_count)) + 1;
+		//		*(interr_dict[5].int_count) = (*(interr_dict[5].int_count)) + 1;
+
+			if (vec_serviced >= 0x10)
+			{
+				wake_up(&wq_periph);
+
+		//	for(i = 4; i<=7; i++)
+		//	{
+		//	mutex_lock_interruptible(interr_dict[i].int_count_sem);
+		//		if (interr_dict[i].int_count > 0)
+		//	if (interr[i] > 0)
+		//		{
+		//	    	critical_printk(KERN_INFO"<soft_isr>: Waking up User Peripheral:%x\n", i);
+		//		mutex_unlock(interr_dict[i].int_count_sem);
+		//	interr_dict[i].int_count = 0;
+		//	interr[i] = 0;
+		//		wake_up(interr_dict[i].iwq);
+		//		}
+		//	}
+		//		crit_printk(KERN_INFO"<soft_isr>:			Waking up User Peripherals\n");
+			}
+	}
+
+	crit_printk(KERN_INFO"<soft_isr>:						Exiting ISR\n");
+	critical_printk(KERN_INFO"		Exited the Tasklet");
 
 	critical_printk(KERN_INFO"<pci_isr>:						Exiting the ISR");
 
@@ -772,6 +885,7 @@ void do_isr_tasklet (unsigned long unused)
 		if ((vec_serviced & 0x01) == 0x01) 
 		{	
 			cdma_comp[1] = 1;      //condition for wake_up
+		//	atomic_set(&cdma_atom[1], 1);
 			critical_printk(KERN_INFO"<soft_isr>: Waking up CDMA 1\n");
 			wake_up_interruptible(&wq);
 		}
@@ -779,6 +893,7 @@ void do_isr_tasklet (unsigned long unused)
 		if ((vec_serviced & 0x02) == 0x02)
 		{	
 			cdma_comp[2] = 1;      //condition for wake_up
+		//	atomic_set(&cdma_atom[2], 1);
 			critical_printk(KERN_INFO"<soft_isr>: Waking up CDMA 2\n");
 			wake_up_interruptible(&wq);
 		}

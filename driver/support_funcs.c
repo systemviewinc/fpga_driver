@@ -602,12 +602,16 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 
 	/*Go to sleep and wait for interrupt*/
 	verbose_printk(KERN_INFO"	<pci_dma_transfer>: waiting on isr to set cdma num:%x cdma_comp:%x to 1\n", cdma_num, cdma_comp[cdma_num]);	
-	ret = wait_event_interruptible(wq, cdma_comp[cdma_num] != 0);
+	cdma_wait_sleep(cdma_num);
+
+//	iret = wait_event_interruptible(wq, cdma_comp[cdma_num] != 0);
+//	ret = wait_event_interruptible(wq, atomic_read(&cdma_atom[cdma_num]) != 0);
 	
-	if (ret != 0)
-		printk(KERN_INFO"	<pci_dma_transfer>: WAIT EVENT FORCED FROM USER SPACE, CDMA %x Never interrupted.\n", cdma_num);
+//	if (ret != 0)
+//		printk(KERN_INFO"	<pci_dma_transfer>: WAIT EVENT FORCED FROM USER SPACE, CDMA %x Never interrupted.\n", cdma_num);
 
 	cdma_comp[cdma_num] = 0;
+//	atomic_set(&cdma_atom[cdma_num], 0);
 	verbose_printk(KERN_INFO"	<pci_dma_transfer>: returned from ISR.\n");
 	verbose_printk(KERN_INFO"	<pci_dma_transfer>: reset the cdma num:%x wait variable cdma_comp:%x to 0\n", cdma_num, cdma_comp[cdma_num]);	
 
@@ -623,6 +627,18 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 	verbose_printk(KERN_INFO"	<pci_dma_transfer>: ********* CDMA TRANSFER FINISHED *************\n");	
 
 	return ack_status;
+}
+
+void cdma_wait_sleep(int cdma_num)
+{
+	int ret;
+
+	ret = wait_event_interruptible(wq, cdma_comp[cdma_num] != 0);
+//	ret = wait_event_interruptible(wq, atomic_read(&cdma_atom[cdma_num]) != 0);
+	
+	if (ret != 0)
+		printk(KERN_INFO"	<pci_dma_transfer>: WAIT EVENT FORCED FROM USER SPACE, CDMA %x Never interrupted.\n", cdma_num);
+
 }
 
 int cdma_config_set(u32 bit_vec, int set_unset, int cdma_num)
