@@ -602,7 +602,10 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 
 	/*Go to sleep and wait for interrupt*/
 	verbose_printk(KERN_INFO"	<pci_dma_transfer>: waiting on isr to set cdma num:%x cdma_comp:%x to 1\n", cdma_num, cdma_comp[cdma_num]);	
-	cdma_wait_sleep(cdma_num);
+	
+//	cdma_wait_sleep(cdma_num);
+
+	cdma_idle_poll(cdma_num);
 
 //	iret = wait_event_interruptible(wq, cdma_comp[cdma_num] != 0);
 //	ret = wait_event_interruptible(wq, atomic_read(&cdma_atom[cdma_num]) != 0);
@@ -639,6 +642,38 @@ void cdma_wait_sleep(int cdma_num)
 	if (ret != 0)
 		printk(KERN_INFO"	<pci_dma_transfer>: WAIT EVENT FORCED FROM USER SPACE, CDMA %x Never interrupted.\n", cdma_num);
 
+}
+
+void cdma_idle_poll(int cdma_num)
+{
+	u32 cdma_status;
+	u32 status;
+	u64 axi_dest;
+	int ret;
+	u64 axi_cdma_loc;
+
+	switch(cdma_num)
+	{
+		case 1:
+			axi_cdma_loc = axi_cdma;
+			break;
+		case 2:
+			axi_cdma_loc = axi_cdma_2;
+			break;
+		default:
+			crit_printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
+			return 1;	
+	}
+
+	status = 0x0;
+	axi_dest = axi_cdma_loc + CDMA_SR;
+
+	while((status & 0x2) != 0x2)  //this means while CDMA is NOT idle
+	{
+	/* Check the status of the CDMA to see if successful */
+	ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
+	verbose_printk(KERN_INFO"	<cdma_ack>: CDMA status:%x\n", status);
+	}
 }
 
 int cdma_config_set(u32 bit_vec, int set_unset, int cdma_num)

@@ -165,4 +165,5 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc);
 size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc);
 void axi_stream_fifo_init(struct mod_desc * mod_desc);
 void cdma_wait_sleep(int cdma_num);
+void cdma_idle_poll(int cdma_num);
 // ******************************************************************
