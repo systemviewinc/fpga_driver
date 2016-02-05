@@ -65,7 +65,7 @@ int dma_file_init(struct mod_desc *mod_desc, int dma_file_size, void *dma_buffer
 
 	if (((u64)dma_current_offset + dma_file_size) > (u64)((char*)dma_buffer_base + dma_buffer_size))
 	{
-		verbose_printk(KERN_INFO"<dma_file_init>: ERROR! DMA Buffer out of memory!\n");
+		printk(KERN_INFO"<dma_file_init>: ERROR! DMA Buffer out of memory!\n");
 		return -1;
 	}
 	else
@@ -120,7 +120,7 @@ void pcie_m_init(cdma_num)
 	axi_pcie_m = pcie_m_address;
 }
 
-void pcie_ctl_init(u64 axi_address, u32 dma_addr_base)
+int pcie_ctl_init(u64 axi_address, u32 dma_addr_base)
 {
 	u32 dma_addr_loc;
 	u64 axi_dest;
@@ -149,9 +149,14 @@ void pcie_ctl_init(u64 axi_address, u32 dma_addr_base)
 		if (status == dma_addr_loc)
 			verbose_printk(KERN_INFO"<pci_ioctl_cdma_set>: PCIe CTL register set SUCCESS:%x\n", status);
 		else
-			verbose_printk(KERN_INFO"<pci_ioctl_cdma_set>:!!!!!!!!!!! PCIe CTL register FAILURE !!!!!!!!!!!!!!!:%x\n", status);
+		{
+			printk(KERN_INFO"<pci_ioctl_cdma_set>:!!!!!!!!!!! PCIe CTL register FAILURE !!!!!!!!!!!!!!!:%x\n", status);
+			printk(KERN_INFO"<pci_ioctl_cdma_set>: Most likely due to incorrect setting in PCIe IP for AXI to BAR translation HIGH address\n");
+			printk(KERN_INFO"<pci_ioctl_cdma_set>: Must set this value to be the DMA buffer size allocation.\n");
+			return -1;
+				}
 	}
-
+	return 0;
 }
 
 int cdma_init(int cdma_num, int cdma_addr, u32 dma_addr_base)
@@ -178,7 +183,7 @@ int cdma_init(int cdma_num, int cdma_addr, u32 dma_addr_base)
 			mutex_init(&CDMA_sem_2);
 			break;
 		default:
-			verbose_printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
+			printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
 			return -1;
 	}
 
@@ -299,7 +304,7 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 		else if ((transfer_type == NORMAL_WRITE) | (transfer_type == KEYHOLE_WRITE))
 			status = direct_write(axi_address, buf, count, transfer_type);
 		else	
-			crit_printk(KERN_INFO"<data_transfer>: error no transfer type specified\n");
+			verbose_printk(KERN_INFO"<data_transfer>: error no transfer type specified\n");
 	}
 
 	else if (cdma_capable == 1)
@@ -318,7 +323,7 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 			/*default to CDMA 1 and wait on it*/
 	//		if (mutex_lock_interruptible(&CDMA_sem))
 	//		{
-	//			crit_printk(KERN_INFO"User interrupted while waiting for CDMA semaphore.\n");
+	//			verbose_printk(KERN_INFO"User interrupted while waiting for CDMA semaphore.\n");
 	//			return -ERESTARTSYS;
 	//		}
 	//		cdma_num = 1;
@@ -332,7 +337,7 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 		{
 			status = cdma_transfer(axi_address, dma_axi_address, (u32)count, transfer_type, cdma_num);
 			if (status != 0)   //unsuccessful CDMA transmission
-				crit_printk(KERN_INFO"ERROR on CDMA READ!!!.\n");
+				verbose_printk(KERN_INFO"ERROR on CDMA READ!!!.\n");
 			//			memcpy(buf, (const void*)dma_p, count);
 
 		}
@@ -345,18 +350,18 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 			//			memcpy(dma_p, (const void*)&test, 4);	
 		}
 		else
-			crit_printk(KERN_INFO"<data_transfer>: error no transfer type specified\n");
+			verbose_printk(KERN_INFO"<data_transfer>: error no transfer type specified\n");
 
 		/*Release Mutex on CDMA*/
 		switch(cdma_num)
 		{
 			case 1:
-				crit_printk(KERN_INFO"												<data_transfer>: Releasing Mutex on CDMA 1\n");
+				verbose_printk(KERN_INFO"												<data_transfer>: Releasing Mutex on CDMA 1\n");
 				mutex_unlock(&CDMA_sem);
 				break;
 
 			case 2:
-				crit_printk(KERN_INFO"												<data_transfer>: Releasing Mutex on CDMA 2\n");
+				verbose_printk(KERN_INFO"												<data_transfer>: Releasing Mutex on CDMA 2\n");
 				mutex_unlock(&CDMA_sem_2);
 				break;
 			default : verbose_printk(KERN_INFO"<data_transfer>: ERROR: unknown cdma number detected.\n");
@@ -369,7 +374,7 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 	}
 
 	else
-		crit_printk(KERN_INFO"<data_transfer>: ERROR: Address is out of range and CDMA is not initialized\n");
+		verbose_printk(KERN_INFO"<data_transfer>: ERROR: Address is out of range and CDMA is not initialized\n");
 
 	return status;
 }
@@ -488,7 +493,7 @@ int cdma_query(void)
 				verbose_printk(KERN_INFO"User interrupted while waiting for CDMA semaphore.\n");
 				return -ERESTARTSYS;
 			}
-			crit_printk(KERN_INFO"										<cdma_transfer>: CDMA Resource 2 is now locked!\n");
+			verbose_printk(KERN_INFO"										<cdma_transfer>: CDMA Resource 2 is now locked!\n");
 			verbose_printk(KERN_INFO"										<cdma_transfer>: cdma_set[2] = %x\n", cdma_set[2]);
 			return 2;
 		}	
@@ -501,7 +506,7 @@ int cdma_query(void)
 			return -ERESTARTSYS;
 		}
 
-		crit_printk(KERN_INFO"											<cdma_transfer>: CDMA Resource 1 is now locked!\n");
+		verbose_printk(KERN_INFO"											<cdma_transfer>: CDMA Resource 1 is now locked!\n");
 		return 1;
 	}
 
@@ -556,7 +561,7 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 			axi_cdma_loc = axi_cdma_2;
 			verbose_printk(KERN_INFO"	<pci_dma_transfer>:Using CDMA 2\n");	
 			break;
-		default:crit_printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
+		default:verbose_printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
 				return(0);
 	}
 
@@ -661,7 +666,7 @@ void cdma_idle_poll(int cdma_num)
 			axi_cdma_loc = axi_cdma_2;
 			break;
 		default:
-			crit_printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
+			verbose_printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
 			return 1;	
 	}
 
@@ -694,7 +699,7 @@ int cdma_config_set(u32 bit_vec, int set_unset, int cdma_num)
 			axi_cdma_loc = axi_cdma_2;
 			break;
 		default:
-			verbose_printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
+			printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
 			return -1;
 	}
 
@@ -736,7 +741,7 @@ int cdma_ack(cdma_num)
 			axi_cdma_loc = axi_cdma_2;
 			break;
 		default:
-			crit_printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
+			verbose_printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
 			return 1;	
 	}
 
@@ -753,7 +758,7 @@ int cdma_ack(cdma_num)
 	{
 		printk(KERN_INFO"	<cdma_ack>: CDMA %d status ERROR\n", cdma_num);
 		printk(KERN_INFO"	<cdma_ack>: CDMA %d status:%x\n", cdma_num, status);
-		crit_printk(KERN_INFO"	<cdma_ack>: Issuing soft reset to CDMA %d\n", cdma_num);
+		verbose_printk(KERN_INFO"	<cdma_ack>: Issuing soft reset to CDMA %d\n", cdma_num);
 
 		axi_dest = axi_cdma_loc;
 
@@ -808,8 +813,8 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
 	int ret;
 	int keyhole_en;
 
-	crit_printk(KERN_INFO"<axi_stream_fifo_write>: writing to the AXI Stream FIFO\n");
-	crit_printk(KERN_INFO"<axi_stream_fifo_write>: number of bytes to write:%zu\n", count);
+	verbose_printk(KERN_INFO"<axi_stream_fifo_write>: writing to the AXI Stream FIFO\n");
+	verbose_printk(KERN_INFO"<axi_stream_fifo_write>: number of bytes to write:%zu\n", count);
 
 	init_write = *((u32*)(mod_desc->dma_write));
 	dma_offset_write = (u64)mod_desc->dma_offset_write;
@@ -828,11 +833,11 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
 	ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, dma_offset_internal_read);
 	if (ret > 0)
 	{
-		crit_printk(KERN_INFO"<pci_write>: ERROR reading from AXI Streaming FIFO control interface\n");
+		printk(KERN_INFO"<pci_write>: ERROR reading from AXI Streaming FIFO control interface\n");
 		return -1;
 	}
 
-	criti_printk(KERN_INFO"										<pci_write>: Initial Transmit Data FIFO Fill Level:%x\n", *(mod_desc->kernel_reg_read));
+	verbose_printk(KERN_INFO"										<pci_write>: Initial Transmit Data FIFO Fill Level:%x\n", *(mod_desc->kernel_reg_read));
 	/*This While loop will continuously loop until the axi streaming fifo is empty
 	 * if there is a holdup in data, we are stuck here....  */
 
@@ -842,7 +847,7 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
 		ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, dma_offset_internal_read);
 		if (ret > 0)
 		{
-			crit_printk(KERN_INFO"<pci_write>: ERROR reading from AXI Streaming FIFO control interface\n");
+			printk(KERN_INFO"<pci_write>: ERROR reading from AXI Streaming FIFO control interface\n");
 			return -1;
 		}
 //		printk(KERN_INFO"										<pci_write>: Transmit Data FIFO Fill Level:%x\n", *(mod_desc->kernel_reg_read));
@@ -866,7 +871,7 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
 	ret = data_transfer(axi_dest, 0, count, KEYHOLE_WRITE, dma_offset_write);
 	if (ret > 0)
 	{
-		crit_printk(KERN_INFO"<pci_write>: ERROR writing to AXI Streaming FIFO\n");
+		printk(KERN_INFO"<pci_write>: ERROR writing to AXI Streaming FIFO\n");
 		return -1;
 	}
 
@@ -877,7 +882,7 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
 	ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, dma_offset_internal_write);
 	if (ret > 0)
 	{
-		crit_printk(KERN_INFO"<pci_write>: ERROR writing to AXI Streaming FIFO Control Interface\n");
+		printk(KERN_INFO"<pci_write>: ERROR writing to AXI Streaming FIFO Control Interface\n");
 		return -1;
 	}
 
@@ -911,7 +916,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 	ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, dma_offset_internal_write);
 	if (ret > 0)
 	{
-		crit_printk(KERN_INFO"<axi_stream_fifo_read>: ERROR writing to reset interrupts on AXI Stream FIFO\n");
+		printk(KERN_INFO"<axi_stream_fifo_read>: ERROR writing to reset interrupts on AXI Stream FIFO\n");
 		return -1;
 	}
 
@@ -921,7 +926,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 	ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, dma_offset_internal_read);
 	if (ret > 0)
 	{
-		crit_printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Read FIFO fill level\n");
+		printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Read FIFO fill level\n");
 		return -1;
 	}
 
@@ -929,7 +934,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 	 *and sets the LSB to 1 to indicate a partial packet.*/
 	read_bytes = (0x7fff & *(mod_desc->kernel_reg_read));
 
-	crit_printk(KERN_INFO"<axi_stream_fifo_read> Read FIFO fill level:0x%x bytes\n", read_bytes);
+	verbose_printk(KERN_INFO"<axi_stream_fifo_read> Read FIFO fill level:0x%x bytes\n", read_bytes);
 
 	/*So we don't read more data than is available*/
 	if (read_bytes < (u32)count)
@@ -938,8 +943,8 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 	/*if more data is available than what is requested from user space*/
 	else if (read_bytes > (u32)count)
 	{
-		crit_printk(KERN_INFO"<axi_stream_fifo_read> There is more data to be read than requested\n");
-		crit_printk(KERN_INFO"<axi_stream_fifo_read> This could lead to overflow of data in the FPGA\n");
+		verbose_printk(KERN_INFO"<axi_stream_fifo_read> There is more data to be read than requested\n");
+		verbose_printk(KERN_INFO"<axi_stream_fifo_read> This could lead to overflow of data in the FPGA\n");
 	//	printk(KERN_INFO"<axi_stream_fifo_read> Lots of data in the read FIFO: 0x%x\n", read_bytes);
 		/*something needs to be done here.....*/
 	}
@@ -954,7 +959,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 
 	if (count == 0)
 	{	
-		crit_printk(KERN_INFO"<axi_stream_fifo_read> There is either no data to read, or less than 8 bytes.\n");
+		verbose_printk(KERN_INFO"<axi_stream_fifo_read> There is either no data to read, or less than 8 bytes.\n");
 		return 0;
 	}
 
@@ -968,7 +973,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 	ret = data_transfer(axi_dest, 0, count, keyhole_en, dma_offset_read);
 	if (ret > 0)
 	{
-		crit_printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Data from Read FIFO\n");
+		printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Data from Read FIFO\n");
 		return -1;
 	}
 
@@ -978,13 +983,13 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 //	ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
 //	if (ret > 0)
 //	{
-//		crit_printk(KERN_INFO"<axi_stream_fifo_read>: Resetting the interrupt IER\n");
+//		verbose_printk(KERN_INFO"<axi_stream_fifo_read>: Resetting the interrupt IER\n");
 //		return -1;
 //	}
 
 //	axi_stream_fifo_init(mod_desc);
 
-	crit_printk(KERN_INFO"<axi_stream_fifo_read>: Leaving the READ AXI Stream FIFO routine\n");
+	verbose_printk(KERN_INFO"<axi_stream_fifo_read>: Leaving the READ AXI Stream FIFO routine\n");
 	return count;
 }
 
@@ -997,29 +1002,29 @@ void axi_stream_fifo_init(struct mod_desc * mod_desc)
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFR;
 	*(mod_desc->kernel_reg_write) = 0x000000A5;
 	ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
-	crit_printk(KERN_INFO"<axi_fifo_isr_reg>: Reset the  the axi fifo\n");
+	verbose_printk(KERN_INFO"<axi_fifo_isr_reg>: Reset the  the axi fifo\n");
 
 	//reset The receive side
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RDFR;
 	*(mod_desc->kernel_reg_write) = 0x000000A5;
 	ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
-	crit_printk(KERN_INFO"<axi_fifo_isr_reg>: Reset the  the axi fifo\n");
+	verbose_printk(KERN_INFO"<axi_fifo_isr_reg>: Reset the  the axi fifo\n");
 
 	//Read CTL interface
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
 	ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, mod_desc->dma_offset_internal_read);
-	crit_printk(KERN_INFO"<axi_fifo_isr_reg>:%x\n", *(mod_desc->kernel_reg_read));
+	verbose_printk(KERN_INFO"<axi_fifo_isr_reg>:%x\n", *(mod_desc->kernel_reg_read));
 
 	//reset interrupts on CTL interface
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
 	*(mod_desc->kernel_reg_write) = 0xFFFFFFFF;
 	ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
-	crit_printk(KERN_INFO"<axi_fifo_isr_reg>: Reset the interrupts on the axi fifo\n");
+	verbose_printk(KERN_INFO"<axi_fifo_isr_reg>: Reset the interrupts on the axi fifo\n");
 
 	//Read CTL interface
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
 	ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, mod_desc->dma_offset_internal_read);
-	crit_printk(KERN_INFO"<axi_fifo_isr_reg>:%x\n", *(mod_desc->kernel_reg_read));
+	verbose_printk(KERN_INFO"<axi_fifo_isr_reg>:%x\n", *(mod_desc->kernel_reg_read));
 
 	/*Set IER Register for interrupt on read*/
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_IER;

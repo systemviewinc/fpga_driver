@@ -24,18 +24,6 @@
 #ifndef verbose_printk(...)
 #define verbose_printk(...)
 #endif
-
-#ifndef crit_printk(...)
-#define crit_printk(...)
-#endif
-
-#ifndef critical_printk(...)
-#define critical_printk(...) 
-#endif
-
-#ifndef criti_printk(...)
-#define criti_printk(...)
-#endif
 /******************************/
 
 
@@ -157,7 +145,7 @@ int vec2num(u32 vec);
 int cdma_query(void);
 u32 num2vec(int num);
 int cdma_init(int cdma_num, int cdma_address, u32 dma_addr_base);
-void pcie_ctl_init(u64 axi_address, u32 dma_addr_base);
+int pcie_ctl_init(u64 axi_address, u32 dma_addr_base);
 void pcie_m_init(int cdma_num);
 void int_ctlr_init(u64 axi_address);
 int dma_file_init(struct mod_desc *mod_desc, int dma_file_size, void *dma_buffer_base, u64 dma_buffer_size);
