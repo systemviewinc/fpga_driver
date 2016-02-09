@@ -20,6 +20,8 @@
 
 #define DEV_NAME "/dev/vsi_system_vc709_packet_p_arg_2_seq_o"
 #define DEV_NAME_2 "/dev/vsi_system_vc709_packet_p_arg_1_seq_i"
+#define DEV_NAME_3 "/dev/vsi_write_2"
+#define DEV_NAME_4 "/dev/vsi_read_2"
 
 #ifndef __SPCICOMMON_H_
 #define __SPCICOMMON_H_

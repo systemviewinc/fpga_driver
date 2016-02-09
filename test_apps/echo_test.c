@@ -15,6 +15,7 @@ struct statistics
 	unsigned long ns;
 	int cdma_attempt;
 	int ip_not_ready;
+	int cdma_usage_cnt;
 };
 
 //void *rxfifo_read(void *read_buf);
@@ -58,7 +59,7 @@ char * devfilename_8 = devname_8;
 //unsigned int cdma_addr = 0x40001000;
 //unsigned int pcie_m_addr = 0x40010000;
 //unsigned int axi_int_addr = 0x40004000;
-unsigned int in[2048];
+unsigned int in[4096];
 
 /* User Peripheral AXI Addresses */
 //unsigned int bram_axi_addr = 0x80000000;
@@ -476,15 +477,15 @@ int main()
 		printf("Error creating thread\n");
 	}
 
-//	if(pthread_create(&rx3, NULL, rx, (void *)(&hls_read_3)))
-//	{
-//		printf("Error creating thread\n");
-//	}
+	if(pthread_create(&rx3, NULL, rx, (void *)(&hls_read_3)))
+	{
+		printf("Error creating thread\n");
+	}
 
-//	if(pthread_create(&rx4, NULL, rx, (void *)(&hls_read_4)))
-//	{
-//		printf("Error creating thread\n");
-//	}
+	if(pthread_create(&rx4, NULL, rx, (void *)(&hls_read_4)))
+	{
+		printf("Error creating thread\n");
+	}
 
 	/*the first write thread*/
 	if(pthread_create(&tx1, NULL, tx, (void *)(&hls_write)))
@@ -498,15 +499,15 @@ int main()
 		printf("Error creating thread\n");
 	}
 
-//	if(pthread_create(&tx3, NULL, tx, (void *)(&hls_write_3)))
-//	{
-//		printf("Error creating thread\n");
-//	}
+	if(pthread_create(&tx3, NULL, tx, (void *)(&hls_write_3)))
+	{
+		printf("Error creating thread\n");
+	}
 
-//	if(pthread_create(&tx4, NULL, tx, (void *)(&hls_write_4)))
-//	{
-//		printf("Error creating thread\n");
-//	}
+	if(pthread_create(&tx4, NULL, tx, (void *)(&hls_write_4)))
+	{
+		printf("Error creating thread\n");
+	}
 
 	/*******Send data to the TX FIFO (front end) **********/
 
@@ -529,17 +530,17 @@ int main()
 	}
 	printf("thread done\n");
 
-//	if(pthread_join(tx3, (void**)&tx_statistics_3)) 
-//	{
-//		printf("Error joining threads\n");
-//	}
-//	printf("thread done\n");
+	if(pthread_join(tx3, (void**)&tx_statistics_3)) 
+	{
+		printf("Error joining threads\n");
+	}
+	printf("thread done\n");
 
-//	if(pthread_join(tx4, (void**)&tx_statistics_4)) 
-//	{
-//		printf("Error joining threads\n");
-//	}
-//	printf("thread done\n");
+	if(pthread_join(tx4, (void**)&tx_statistics_4)) 
+	{
+		printf("Error joining threads\n");
+	}
+	printf("thread done\n");
 
 	/*wait for the RX FIFO Thread to return data*/
 	if(pthread_join(rx1, (void**)&rx_statistics_1)) 
@@ -554,17 +555,17 @@ int main()
 	}
 	printf("thread done\n");
 
-//	if(pthread_join(rx3, (void**)&rx_statistics_3)) 
-//	{
-//		printf("Error joining threads\n");
-//	}
-//	printf("thread done\n");
+	if(pthread_join(rx3, (void**)&rx_statistics_3)) 
+	{
+		printf("Error joining threads\n");
+	}
+	printf("thread done\n");
 
-//	if(pthread_join(rx4, (void**)&rx_statistics_4)) 
-//	{
-//		printf("Error joining threads\n");
-//	}
-//	printf("thread done\n");
+	if(pthread_join(rx4, (void**)&rx_statistics_4)) 
+	{
+		printf("Error joining threads\n");
+	}
+	printf("thread done\n");
 
 	printf("Threads joined!\n\n\n");
 	/*Close files*/	
@@ -573,6 +574,9 @@ int main()
 	printf("****************************************************************************\n");
 	printf("                        TRANSFER STATISTICS                                 \n");
 	printf("****************************************************************************\n\n");
+
+
+	printf("CDMA Usage Count: %d\n", tx_statistics_1->cdma_usage_cnt);
 
 	printf("TX Byte Count of file 1 from the driver %d Bytes\n", tx_statistics_1->tx_bytes);
 	printf("TX Time Elapsed:%lu sec :  %lu ns\n", tx_statistics_1->seconds, tx_statistics_1->ns);
@@ -583,37 +587,37 @@ int main()
 	printf("RX Bandwidth of File 1: %f MB/s\n\n\n", calc_BW((double)(rx_statistics_1->rx_bytes), (double)(rx_statistics_1->seconds), (double)(rx_statistics_1->ns)));
 
 	printf("TX Byte Count of file 2 from the driver %d Bytes\n", tx_statistics_2->tx_bytes);
-printf("TX Time Elapsed:%lu sec :  %lu ns\n", tx_statistics_2->seconds, tx_statistics_2->ns);
-printf("TX Numer of times the IP was not ready: %d\n", tx_statistics_2->ip_not_ready);
-printf("TX Bandwidth of File 2: %f MB/s\n\n\n", calc_BW((double)(tx_statistics_2->tx_bytes), (double)(tx_statistics_2->seconds), (double)(tx_statistics_2->ns)));
-printf("RX Byte Count of file 2 from the driver %d Bytes\n", rx_statistics_2->rx_bytes);
-printf("RX Time Elapsed:%lu sec :  %lu ns\n", rx_statistics_2->seconds, rx_statistics_2->ns);
-printf("RX Bandwidth of File 2: %f MB/s\n\n\n", calc_BW((double)(rx_statistics_2->rx_bytes), (double)(rx_statistics_2->seconds), (double)(rx_statistics_2->ns)));
+	printf("TX Time Elapsed:%lu sec :  %lu ns\n", tx_statistics_2->seconds, tx_statistics_2->ns);
+	printf("TX Numer of times the IP was not ready: %d\n", tx_statistics_2->ip_not_ready);
+	printf("TX Bandwidth of File 2: %f MB/s\n\n\n", calc_BW((double)(tx_statistics_2->tx_bytes), (double)(tx_statistics_2->seconds), (double)(tx_statistics_2->ns)));
+	printf("RX Byte Count of file 2 from the driver %d Bytes\n", rx_statistics_2->rx_bytes);
+	printf("RX Time Elapsed:%lu sec :  %lu ns\n", rx_statistics_2->seconds, rx_statistics_2->ns);
+	printf("RX Bandwidth of File 2: %f MB/s\n\n\n", calc_BW((double)(rx_statistics_2->rx_bytes), (double)(rx_statistics_2->seconds), (double)(rx_statistics_2->ns)));
 
-//printf("TX Byte Count of file 3 from the driver %d Bytes\n", tx_statistics_3->tx_bytes);
-//printf("TX Time Elapsed:%lu sec :  %lu ns\n", tx_statistics_3->seconds, tx_statistics_3->ns);
-//printf("TX Numer of times the IP was not ready: %d\n", tx_statistics_3->ip_not_ready);
-//printf("TX Bandwidth of File 3: %f MB/s\n\n\n", calc_BW((double)(tx_statistics_3->tx_bytes), (double)(tx_statistics_3->seconds), (double)(tx_statistics_3->ns)));
-//printf("RX Byte Count of file 3 from the driver %d Bytes\n", rx_statistics_3->rx_bytes);
-//printf("RX Time Elapsed:%lu sec :  %lu ns\n", rx_statistics_3->seconds, rx_statistics_3->ns);
-//printf("RX Bandwidth of File 3: %f MB/s\n\n\n", calc_BW((double)(rx_statistics_3->rx_bytes), (double)(rx_statistics_3->seconds), (double)(rx_statistics_3->ns)));
+	printf("TX Byte Count of file 3 from the driver %d Bytes\n", tx_statistics_3->tx_bytes);
+	printf("TX Time Elapsed:%lu sec :  %lu ns\n", tx_statistics_3->seconds, tx_statistics_3->ns);
+	printf("TX Numer of times the IP was not ready: %d\n", tx_statistics_3->ip_not_ready);
+	printf("TX Bandwidth of File 3: %f MB/s\n\n\n", calc_BW((double)(tx_statistics_3->tx_bytes), (double)(tx_statistics_3->seconds), (double)(tx_statistics_3->ns)));
+	printf("RX Byte Count of file 3 from the driver %d Bytes\n", rx_statistics_3->rx_bytes);
+	printf("RX Time Elapsed:%lu sec :  %lu ns\n", rx_statistics_3->seconds, rx_statistics_3->ns);
+	printf("RX Bandwidth of File 3: %f MB/s\n\n\n", calc_BW((double)(rx_statistics_3->rx_bytes), (double)(rx_statistics_3->seconds), (double)(rx_statistics_3->ns)));
 
-//printf("TX Byte Count of file 4 from the driver %d Bytes\n", tx_statistics_4->tx_bytes);
-//printf("TX Time Elapsed:%lu sec :  %lu ns\n", tx_statistics_4->seconds, tx_statistics_4->ns);
-//printf("TX Numer of times the IP was not ready: %d\n", tx_statistics_4->ip_not_ready);
-//printf("TX Bandwidth of File 4: %f MB/s\n\n\n", calc_BW((double)(tx_statistics_4->tx_bytes), (double)(tx_statistics_4->seconds), (double)(tx_statistics_4->ns)));
-//printf("RX Byte Count of file 4 from the driver %d Bytes\n", rx_statistics_4->rx_bytes);
-//printf("RX Time Elapsed:%lu sec :  %lu ns\n", rx_statistics_4->seconds, rx_statistics_4->ns);
-//printf("RX Bandwidth of File 4: %f MB/s\n\n\n", calc_BW((double)(rx_statistics_4->rx_bytes), (double)(rx_statistics_4->seconds), (double)(rx_statistics_4->ns)));
+	printf("TX Byte Count of file 4 from the driver %d Bytes\n", tx_statistics_4->tx_bytes);
+	printf("TX Time Elapsed:%lu sec :  %lu ns\n", tx_statistics_4->seconds, tx_statistics_4->ns);
+	printf("TX Numer of times the IP was not ready: %d\n", tx_statistics_4->ip_not_ready);
+	printf("TX Bandwidth of File 4: %f MB/s\n\n\n", calc_BW((double)(tx_statistics_4->tx_bytes), (double)(tx_statistics_4->seconds), (double)(tx_statistics_4->ns)));
+	printf("RX Byte Count of file 4 from the driver %d Bytes\n", rx_statistics_4->rx_bytes);
+	printf("RX Time Elapsed:%lu sec :  %lu ns\n", rx_statistics_4->seconds, rx_statistics_4->ns);
+	printf("RX Bandwidth of File 4: %f MB/s\n\n\n", calc_BW((double)(rx_statistics_4->rx_bytes), (double)(rx_statistics_4->seconds), (double)(rx_statistics_4->ns)));
 
-close(hls_write);
-close(hls_read);
-close(hls_write_2);
-close(hls_read_2);
-close(hls_write_3);
-close(hls_read_3);
-close(hls_write_4);
-close(hls_read_4);
+	close(hls_write);
+	close(hls_read);
+	close(hls_write_2);
+	close(hls_read_2);
+	close(hls_write_3);
+	close(hls_read_3);
+	close(hls_write_4);
+	close(hls_read_4);
 	//	close(trace_read);
 	//	close(trace_control);
 
@@ -648,7 +652,7 @@ void * tx(void * file_desc)
 	statistics = (struct statistics *)statistics_buf;
 
 	printf("entered tx thread with fd: %d\n", *fd);
-//	pthread_exit(0);
+	//	pthread_exit(0);
 
 	unsigned int tx[2048];
 
@@ -700,8 +704,8 @@ void * tx(void * file_desc)
 		printf("ERROR doing ioctl\n");
 		return -1;
 	}
-//	printf("TX Statstics of file from the driver %d\n", statistics->tx_bytes);
-//	printf("TX Time Elapsed:%lu sec :  %lu ns\n\n\n", statistics->seconds, statistics->ns);
+	//	printf("TX Statstics of file from the driver %d\n", statistics->tx_bytes);
+	//	printf("TX Time Elapsed:%lu sec :  %lu ns\n\n\n", statistics->seconds, statistics->ns);
 	//	pthread_exit(0);
 	return statistics;
 }
@@ -716,7 +720,7 @@ void *rx(void * file_desc)
 	int timeout = 1000;    //in ms
 	int result;
 	unsigned int buff2[1];
-	unsigned int buff[1024];  //50 32b data words
+	unsigned int buff[4096];  //50 32b data words
 	unsigned long long trace_buff[256];  //long long is 64bit on ARM
 	int i;
 	int total_bytes;
@@ -754,27 +758,27 @@ void *rx(void * file_desc)
 		return -1;
 	}
 	//For the sake of running again and not being deadlocked.
-/*	return_val = 1;
-	while (return_val != 0)
-		//	while (1)
+	/*	return_val = 1;
+		while (return_val != 0)
+	//	while (1)
 	{
-		return_val = read(*fd, (void*)buff, (sizeof(buff)));  
-		if (return_val == -1)
-		{
-			printf("READ ERROR DATA\n");
-			break;
-		}
-		else if (return_val > 0)
-		{		
-			printf("Number of bytes read from file:%d\n", return_val);
-
-		}
-		else if (return_val ==  0)
-		{		
-			printf("No initial values to read from read\n");
-		}
+	return_val = read(*fd, (void*)buff, (sizeof(buff)));  
+	if (return_val == -1)
+	{
+	printf("READ ERROR DATA\n");
+	break;
 	}
-*/	
+	else if (return_val > 0)
+	{		
+	printf("Number of bytes read from file:%d\n", return_val);
+
+	}
+	else if (return_val ==  0)
+	{		
+	printf("No initial values to read from read\n");
+	}
+	}
+	 */	
 
 	/*This should perform a blocking poll until an interrupt is detected
 	 * to this device*/
@@ -819,8 +823,8 @@ void *rx(void * file_desc)
 					printf("ERROR doing ioctl\n");
 					return -1;
 				}
-		//		printf("RX Statstics of file from the driver %d\n", statistics->rx_bytes);
-		//		printf("RX Time Elapsed:%lu sec :  %lu ns\n\n\n", statistics->seconds, statistics->ns);
+				//		printf("RX Statstics of file from the driver %d\n", statistics->rx_bytes);
+				//		printf("RX Time Elapsed:%lu sec :  %lu ns\n\n\n", statistics->seconds, statistics->ns);
 				return statistics;
 
 			case -1:
@@ -836,8 +840,8 @@ void *rx(void * file_desc)
 				//	usleep(2000);
 				zero_count = 0;
 				while (return_val != 0)
-			//	while (zero_count < 1000)
-			//	while (1)
+					//	while (zero_count < 1000)
+					//	while (1)
 				{
 					return_val = read(*fd, (void*)buff, (sizeof(buff)));  
 					if (return_val == -1)

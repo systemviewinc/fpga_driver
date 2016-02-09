@@ -69,6 +69,8 @@ extern wait_queue_head_t mutexq;
 extern int cdma_comp[5];
 extern atomic_t cdma_atom[5];
 
+extern int cdma_usage_cnt;
+
 extern const u32 INT_CTRL_IER;
 extern const u32 INT_CTRL_MER;
 extern const u32 INT_CTRL_ISR;
@@ -131,6 +133,7 @@ struct statistics
 	unsigned long ns;
 	int cdma_attempt;
 	int ip_not_ready;
+	int cdma_usage_cnt;
 };
 
 

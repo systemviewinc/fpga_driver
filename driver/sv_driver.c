@@ -150,6 +150,7 @@ u8 pcie_ctl_set;
 int cdma_status;
 int cdma_capable = 0;
 unsigned int irq_num;
+int cdma_usage_cnt = 0;
 
 /*CDMA Semaphores*/
 struct mutex CDMA_sem;
@@ -767,16 +768,16 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 		/* The CDMA vectors (1 and 2) */
 		if ((vec_serviced & 0x01) == 0x01) 
 		{	
-			cdma_comp[1] = 1;      //condition for wake_up
-		//	atomic_set(&cdma_atom[1], 1);
+		//	cdma_comp[1] = 1;      //condition for wake_up
+			atomic_set(&cdma_atom[1], 1);
 			verbose_printk(KERN_INFO"<soft_isr>: Waking up CDMA 1\n");
 			wake_up_interruptible(&wq);
 		}
 
 		if ((vec_serviced & 0x02) == 0x02)
 		{	
-			cdma_comp[2] = 1;      //condition for wake_up
-		//	atomic_set(&cdma_atom[2], 1);
+		//	cdma_comp[2] = 1;      //condition for wake_up
+			atomic_set(&cdma_atom[2], 1);
 			verbose_printk(KERN_INFO"<soft_isr>: Waking up CDMA 2\n");
 			wake_up_interruptible(&wq);
 		}
@@ -953,6 +954,7 @@ int pci_open(struct inode *inode, struct file *filep)
 
 	atomic_poll = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
 	
+	atomic_set(atomic_poll, 0);
 	//wait_queue_head_t * iwq;    //the interrupt wait queue for device
 
 	//	iwq = kmalloc(sizeof(wait_queue_head_t), GFP_KERNEL);
@@ -1188,6 +1190,8 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			statistics->rx_bytes = mod_desc->rx_bytes;
 			statistics->cdma_attempt = mod_desc->cdma_attempt;
 			statistics->ip_not_ready = mod_desc->ip_not_ready;
+			statistics->cdma_usage_cnt = cdma_usage_cnt;
+			cdma_usage_cnt = 0;
 
 			if (mod_desc->stop_flag == 1)
 			{
