@@ -1001,12 +1001,12 @@ int pci_open(struct inode *inode, struct file *filep)
 	filep->private_data = s;   
 
 	/*initialize the DMA for the file*/
-	ret = dma_file_init(s, dma_file_size, dma_buffer_base, dma_buffer_size);
-	if (ret < 0)
-	{
-		verbose_printk(KERN_INFO"<pci_open>:!!!!file open FAILURE!!!!.\n");
-		return ERROR;
-	}
+//	ret = dma_file_init(s, dma_file_size, dma_buffer_base, dma_buffer_size);
+//	if (ret < 0)
+//	{
+//		printk(KERN_INFO"<pci_open>:!!!!file open FAILURE!!!!.\n");
+//		return ERROR;
+//	}
 
 	verbose_printk(KERN_INFO"<pci_open>: file open complete.\n");
 	return SUCCESS;
@@ -1150,6 +1150,14 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		case SET_FILE_SIZE:
 			mod_desc->file_size = ((loff_t)arg_loc & 0xffffffff);
 			verbose_printk(KERN_INFO"<ioctl>: Setting device file size:%llu\n", mod_desc->file_size);
+
+			/*initialize the DMA for the file*/
+			ret = dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size);
+			if (ret < 0)
+			{
+			printk(KERN_INFO"<pci_open>:!!!!file open FAILURE!!!!.\n");
+			return ERROR;
+			}
 			break;
 
 

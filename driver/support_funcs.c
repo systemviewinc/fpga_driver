@@ -57,8 +57,11 @@ u64 axi_cdma;
 u64 axi_cdma_2;
 
 /******************************** Support functions ***************************************/
-int dma_file_init(struct mod_desc *mod_desc, int dma_file_size, void *dma_buffer_base, u64 dma_buffer_size)
+int dma_file_init(struct mod_desc *mod_desc, void *dma_buffer_base, u64 dma_buffer_size)
 {
+
+	int dma_file_size;
+	dma_file_size = (int)(mod_desc->file_size);
 
 	verbose_printk(KERN_INFO"<dma_file_init>: Setting Peripheral DMA size:%d\n", dma_file_size);
 	mod_desc->dma_size = (size_t)dma_file_size;
@@ -829,6 +832,7 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
 	u64 dma_offset_internal_write;
 	int ret;
 	int keyhole_en;
+	u32 fifo_empty_level;
 
 	verbose_printk(KERN_INFO"<axi_stream_fifo_write>: writing to the AXI Stream FIFO\n");
 	verbose_printk(KERN_INFO"<axi_stream_fifo_write>: number of bytes to write:%zu\n", count);
@@ -858,9 +862,11 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
 	/*This While loop will continuously loop until the axi streaming fifo is empty
 	 * if there is a holdup in data, we are stuck here....  */
 
+	fifo_empty_level = (((u32)(mod_desc->file_size))/8)-4;  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
 //	while (*(mod_desc->kernel_reg_read) != 0x01fc)  //1fc is an empty 512 depth fifo
 //	while (*(mod_desc->kernel_reg_read) != 0x07fc)  //7fc is an empty 2048 depth fifo
-	while (*(mod_desc->kernel_reg_read) != 0x0ffc)  //1fc is an empty 512 depth fifo
+//	while (*(mod_desc->kernel_reg_read) != 0x0ffc)  //1fc is an empty 512 depth fifo
+	while (*(mod_desc->kernel_reg_read) != fifo_empty_level)  //1fc is an empty 512 depth fifo
 	{
 		ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, dma_offset_internal_read);
 		if (ret > 0)
