@@ -1208,6 +1208,11 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 				statistics->seconds = (unsigned long)diff.tv_sec;
 				statistics->ns = (unsigned long)diff.tv_nsec;
 			}
+
+			/*reset the counters*/
+			mod_desc->tx_bytes = 0;
+			mod_desc->rx_bytes = 0;
+			mod_desc->ip_not_ready = 0;
 			break;
 
 		case START_TIMER: 
