@@ -51,9 +51,12 @@
 #define SET_DMA_SIZE 64
 #define RESET_DMA_ALLOC 65
 #define SET_FILE_SIZE 66
-#define GET_STATISTICS 67
-#define START_TIMER 68
-#define STOP_TIMER 69
+#define GET_FILE_STATISTICS 67
+#define GET_DRIVER_STATISTICS 70
+#define START_FILE_TIMER 68
+#define STOP_FILE_TIMER 69
+#define START_DRIVER_TIMER 71
+#define STOP_DRIVER_TIMER 72
 
 #define ERROR   -1
 #define SUCCESS 0
@@ -179,6 +182,14 @@ atomic_t cdma_atom[5];
 int num_int;
 
 atomic_t mutex_free = ATOMIC_INIT(0); 
+
+/*Driver Statistics*/
+atomic_t driver_tx_bytes = ATOMIC_INIT(0); 
+atomic_t driver_rx_bytes = ATOMIC_INIT(0); 
+atomic_t driver_start_flag = ATOMIC_INIT(0); 
+atomic_t driver_stop_flag = ATOMIC_INIT(0); 
+struct timespec driver_start_time;
+struct timespec driver_stop_time;
 
 spinlock_t mLock;
 
@@ -1191,7 +1202,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			}
 			break;
 
-		case GET_STATISTICS:
+		case GET_FILE_STATISTICS:
 
 			statistics = (struct statistics *)arg;
 			statistics->tx_bytes = mod_desc->tx_bytes;
@@ -1214,15 +1225,47 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			mod_desc->rx_bytes = 0;
 			mod_desc->ip_not_ready = 0;
 			break;
+	
+		case GET_DRIVER_STATISTICS:
 
-		case START_TIMER: 
+			statistics = (struct statistics *)arg;
+			statistics->tx_bytes = atomic_read(&driver_tx_bytes);
+			statistics->rx_bytes = atomic_read(&driver_rx_bytes);
+		//	statistics->cdma_attempt = atomic_read(driver_cdma_attempt);
+		//	statistics->ip_not_ready = atomic_read(driver_ip_not_ready);
+		//	statistics->cdma_usage_cnt = cdma_usage_cnt;
+		//	cdma_usage_cnt = 0;
+
+			if (atomic_read(&driver_stop_flag) == 1)
+			{
+				atomic_set(&driver_stop_flag, 0);
+				diff = timespec_sub((driver_stop_time), (driver_start_time));
+				statistics->seconds = (unsigned long)diff.tv_sec;
+				statistics->ns = (unsigned long)diff.tv_nsec;
+			}
+
+			/*reset the counters*/
+			atomic_set(&driver_tx_bytes, 0);
+			atomic_set(&driver_rx_bytes, 0);
+			//driver_ip_not_ready = 0;
+			break;
+
+		case START_FILE_TIMER: 
 			mod_desc->start_flag = 1;
 			break;
 
-		case STOP_TIMER: 
+		case STOP_FILE_TIMER: 
 			mod_desc->stop_flag = 1;
 			break;
 
+		case START_DRIVER_TIMER: 
+			atomic_set(&driver_start_flag, 1);
+			break;
+
+		case STOP_DRIVER_TIMER: 
+			atomic_set(&driver_stop_flag, 1);
+			break;
+	
 		case SET_MODE:
 			verbose_printk(KERN_INFO"<ioctl_set_mode>: Setting the mode of the peripheral\n");
 			*(mod_desc->mode) = (u32)arg_loc;
@@ -1391,12 +1434,20 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	verbose_printk(KERN_INFO"<pci_write>:                  Attempting to transfer %zu bytes\n", count);	
 	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n\n");	
 
+	/*Start timers for statistics*/
 	if (mod_desc->start_flag == 1)
 	{
 		getnstimeofday(mod_desc->start_time);
 		mod_desc->start_flag = 0;
 	}
 
+	if (atomic_read(&driver_start_flag) == 1)
+	{
+		getnstimeofday(&driver_start_time);
+		atomic_set(&driver_start_flag, 0);
+	}
+
+	/*Stay until requested transmission is complete*/
 	while (bytes_written < count)
 	{
 		partial_count = count - bytes_written;
@@ -1513,10 +1564,12 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 	//file statistics
 	mod_desc->tx_bytes = mod_desc->tx_bytes + bytes_written;
+	atomic_add(bytes_written, &driver_tx_bytes);	
 	//printk(KERN_INFO"total file tx byes: %d \n", mod_desc->tx_bytes);	
 
 	/*always update the stop_timer*/
 	getnstimeofday(mod_desc->stop_time);
+	getnstimeofday(&driver_stop_time);
 
 	verbose_printk(KERN_INFO"\n");	
 	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n");	
@@ -1558,6 +1611,12 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	{
 		getnstimeofday(mod_desc->start_time);
 		mod_desc->start_flag = 0;
+	}
+
+	if (atomic_read(&driver_start_flag) == 1)
+	{
+		getnstimeofday(&driver_start_time);
+		atomic_set(&driver_start_flag, 0);
 	}
 
 	if (count > mod_desc->dma_size)
@@ -1662,12 +1721,16 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	 * for now we copy to the appropriate file buffer*/
 	copy_to_user(buf, mod_desc->dma_read, count);
 
-	mod_desc->rx_bytes = mod_desc->rx_bytes + bytes;
 	//printk(KERN_INFO"total file rx byes: %d \n", mod_desc->rx_bytes);	
 
 	/*always update the stop_timer*/
 	if (bytes > 0)
+	{
 		getnstimeofday(mod_desc->stop_time);
+		getnstimeofday(&driver_stop_time);
+		mod_desc->rx_bytes = mod_desc->rx_bytes + bytes;
+		atomic_add(bytes, &driver_rx_bytes);	
+	}
 
 	verbose_printk(KERN_INFO"\n");	
 	verbose_printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
