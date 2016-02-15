@@ -989,7 +989,7 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->keyhole_config = 0;
 	s->dma_offset_read = 0;
 	s->dma_offset_write = 0;
-	s->dma_size = 0;
+	s->dma_size = 4096;
 	s->dma_offset_internal_read = 0;
 	s->dma_offset_internal_write = 0;
 	s->kernel_reg_write = 0;
