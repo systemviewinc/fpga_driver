@@ -444,10 +444,10 @@ void * tx(void * file_desc)
 
 	tx_write_bytes = 0;
 
-	if(ioctl(fd, START_FILE_TIMER, NULL) < 0) {
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
+		if(ioctl(fd, START_FILE_TIMER, NULL) < 0) {
+			printf("ERROR doing ioctl\n");
+			return -1;
+		}
 
 	if (fd == hls_write)
 		iter = 500;
@@ -478,23 +478,17 @@ void * tx(void * file_desc)
 			sched_yield();
 		}
 	}
-	//	printf("Finished file writing!!!!!\n");
-	//	printf("Total bytes written to file: %d\n", tx_write_bytes);
-	//	struct statistics statistics;
 
-	if(ioctl(fd, STOP_FILE_TIMER, NULL) < 0) {
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
+		if(ioctl(fd, STOP_FILE_TIMER, NULL) < 0) {
+			printf("ERROR doing ioctl\n");
+			return -1;
+		}
 
-	if(ioctl(fd, GET_FILE_STATISTICS, statistics) < 0) {
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	//	printf("TX Statstics of file from the driver %d\n", statistics->tx_bytes);
-	//	printf("TX Time Elapsed:%lu sec :  %lu ns\n\n\n", statistics->seconds, statistics->ns);
-	//	pthread_exit(0);
-	return statistics;
+		if(ioctl(fd, GET_FILE_STATISTICS, statistics) < 0) {
+			printf("ERROR doing ioctl\n");
+			return -1;
+		}
+		return statistics;
 }
 
 /**************RX FIFO Thread**********/
@@ -546,37 +540,10 @@ void *rx(void * file_desc)
 	//	printf("Thread Priority for read 1: %x\n", param.sched_priority);		   
 	//	printf("Thread Policy for read 1: %d\n", policy);		   
 
-	//	if(ioctl(*fd, START_FILE_TIMER, NULL) < 0) {
-	if(ioctl(fd, START_FILE_TIMER, NULL) < 0) {
-		printf("ERROR doing ioctl\n");
-		return -1;
+		if(ioctl(fd, START_FILE_TIMER, NULL) < 0) {
+			printf("ERROR doing ioctl\n");
+			return -1;
 	}
-	//For the sake of running again and not being deadlocked.
-	/*	return_val = 1;
-		while (return_val != 0)
-	//	while (1)
-	{
-	return_val = read(*fd, (void*)buff, (sizeof(buff)));  
-	if (return_val == -1)
-	{
-	printf("READ ERROR DATA\n");
-	break;
-	}
-	else if (return_val > 0)
-	{		
-	printf("Number of bytes read from file:%d\n", return_val);
-
-	}
-	else if (return_val ==  0)
-	{		
-	printf("No initial values to read from read\n");
-	}
-	}
-	*/	
-
-	/*This should perform a blocking poll until an interrupt is detected
-	 * to this device*/
-	//	printf("just before poll() 1.....\n");
 
 	total_bytes = 0;
 
@@ -588,37 +555,6 @@ void *rx(void * file_desc)
 		switch (result) {
 			case 0: 
 				printf ("timeout occured, no interrupt detected\n");
-				//				printf ("Total bytes read from File: %d\n", total_bytes);
-				//Checking if any remaining data is in the FIFO
-				//	return_val = 1;
-				//	while (return_val != 0)
-				//	{
-				//		return_val = read(fd, (void*)buff, (thread_struct_loc->transfer_size));  
-				//		if (return_val == -1)
-				//		{
-				//			printf("READ ERROR DATA\n");
-				//			break;
-				//		}
-				//		else if (return_val > 0)
-				//		{
-				//			total_bytes = total_bytes + return_val;		
-				//			printf("Yikes more data found\n");
-				//			printf("Number of bytes read from file:%d\n", return_val);
-				//			printf ("NEW Total bytes read from File: %d\n", total_bytes);
-
-				//		}
-				//	}
-
-				//	if(ioctl(fd, STOP_FILE_TIMER, NULL) < 0) {
-				//		printf("ERROR doing ioctl\n");
-				//		return -1;
-				//	}
-
-				//	if(ioctl(fd, GET_FILE_STATISTICS, statistics) < 0) {
-				//		printf("ERROR doing ioctl\n");
-				//		return -1;
-				//	}
-				//	return statistics;
 				break;
 
 			case -1:
@@ -655,20 +591,16 @@ void *rx(void * file_desc)
 		//sched_yield();
 		//	sleep(10);
 	}
-	if(ioctl(fd, STOP_FILE_TIMER, NULL) < 0) {
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
+		if(ioctl(fd, STOP_FILE_TIMER, NULL) < 0) {
+			printf("ERROR doing ioctl\n");
+			return -1;
+		}
 
-	if(ioctl(fd, GET_FILE_STATISTICS, statistics) < 0) {
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	//		printf("RX Statstics of file from the driver %d\n", statistics->rx_bytes);
-	//		printf("RX Time Elapsed:%lu sec :  %lu ns\n\n\n", statistics->seconds, statistics->ns);
+		if(ioctl(fd, GET_FILE_STATISTICS, statistics) < 0) {
+			printf("ERROR doing ioctl\n");
+			return -1;
+		}
 	return statistics;
-	//	printf ("Total bytes read from File: %d\n", total_bytes);
-	//	printf ("File read thread closing!\n");
 }
 
 double calc_BW(double bytes, double secs, double ns)
@@ -734,16 +666,10 @@ double spawn_threads(int file_1, int file_2, int file_3, int file_4)
 	int driver_bytes;
 	double rx_bandwidth, tx_bandwidth, total_bandwidth, driver_bandwidth;
 
-	/*reset the counters*/
-	//	if(ioctl(hls_read, GET_DRIVER_STATISTICS, NULL) < 0) {
-	//		printf("ERROR doing ioctl\n");
-	//		return -1;
-	//	}
-
-	if(ioctl(hls_read, START_DRIVER_TIMER, NULL) < 0) {
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
+		if(ioctl(hls_read, START_DRIVER_TIMER, NULL) < 0) {
+			printf("ERROR doing ioctl\n");
+			return -1;
+		}
 
 	driver_bandwidth = 0;
 
@@ -901,19 +827,16 @@ double spawn_threads(int file_1, int file_2, int file_3, int file_4)
 		}
 		//	printf("thread done\n");
 	}
-	//	printf("Threads joined!\n\n\n");
-	/*Close files*/	
-	//close(bram);
 
-	if(ioctl(hls_read, STOP_DRIVER_TIMER, NULL) < 0) {
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
+		if(ioctl(hls_read, STOP_DRIVER_TIMER, NULL) < 0) {
+			printf("ERROR doing ioctl\n");
+			return -1;
+		}
 
-	if(ioctl(hls_read, GET_DRIVER_STATISTICS, &driver_statistics) < 0) {
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
+		if(ioctl(hls_read, GET_DRIVER_STATISTICS, &driver_statistics) < 0) {
+			printf("ERROR doing ioctl\n");
+			return -1;
+		}
 
 	printf("****************************************************************************\n");
 	printf("                        TRANSFER STATISTICS                                 \n");

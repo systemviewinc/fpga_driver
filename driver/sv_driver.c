@@ -32,6 +32,7 @@
 #include <linux/platform_device.h>
 #include <linux/mutex.h>
 #include <linux/atomic.h>
+#include <linux/time.h>
 #include "sv_driver.h"
 
 /*IOCTLS */
@@ -1066,7 +1067,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	//	u32 kern_reg;
 	int int_num;
 	int ret;
-	struct statistics * statistics;
+	struct statistics * statistics = kmalloc(sizeof(struct statistics), GFP_KERNEL);
 	struct timespec diff;
 
 	copy_from_user(&arg_loc, argp, sizeof(u64));
@@ -1204,7 +1205,9 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 		case GET_FILE_STATISTICS:
 
-			statistics = (struct statistics *)arg;
+			copy_from_user(statistics, (void *)arg, sizeof(struct statistics));
+			
+			//statistics = (struct statistics *)arg;
 			statistics->tx_bytes = mod_desc->tx_bytes;
 			statistics->rx_bytes = mod_desc->rx_bytes;
 			statistics->cdma_attempt = mod_desc->cdma_attempt;
@@ -1224,17 +1227,17 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			mod_desc->tx_bytes = 0;
 			mod_desc->rx_bytes = 0;
 			mod_desc->ip_not_ready = 0;
+		
+			copy_to_user((void *)arg, statistics, sizeof(struct statistics));
+			
 			break;
 	
 		case GET_DRIVER_STATISTICS:
 
-			statistics = (struct statistics *)arg;
+			copy_from_user(statistics, (void *)arg, sizeof(struct statistics));
+		//	statistics = (struct statistics *)arg;
 			statistics->tx_bytes = atomic_read(&driver_tx_bytes);
 			statistics->rx_bytes = atomic_read(&driver_rx_bytes);
-		//	statistics->cdma_attempt = atomic_read(driver_cdma_attempt);
-		//	statistics->ip_not_ready = atomic_read(driver_ip_not_ready);
-		//	statistics->cdma_usage_cnt = cdma_usage_cnt;
-		//	cdma_usage_cnt = 0;
 
 			if (atomic_read(&driver_stop_flag) == 1)
 			{
@@ -1248,6 +1251,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			atomic_set(&driver_tx_bytes, 0);
 			atomic_set(&driver_rx_bytes, 0);
 			//driver_ip_not_ready = 0;
+			copy_to_user((void *)arg, statistics, sizeof(struct statistics));
 			break;
 
 		case START_FILE_TIMER: 
