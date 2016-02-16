@@ -1004,6 +1004,7 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->cdma_attempt = 0;
 	s->ip_not_ready = 0;
 	s->atomic_poll = atomic_poll;
+    s->set_dma_flag = 0;
 	//	s->iwq = (wait_queue_head_t*)iwq;
 	//	s->int_count_sem = (struct mutex*)int_count_sem;
 
@@ -1438,6 +1439,18 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	verbose_printk(KERN_INFO"<pci_write>:                  Attempting to transfer %zu bytes\n", count);	
 	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n\n");	
 
+	if(mod_desc->set_dma_flag == 0)
+	{
+			ret = dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size);
+			if (ret < 0)
+			{
+			printk(KERN_INFO"<pci_write>:!!!! DMA init FAILURE!!!!.\n");
+			return ERROR;
+			}
+			printk(KERN_INFO"<pci_write>: Warning - Set the DMA file size to default value %d. IOCTL SET_FILE_SIZE was never called for file minor: %d.\n", (int)mod_desc->file_size, (int)mod_desc->minor);
+			mod_desc->set_dma_flag = 1;
+	}
+
 	/*Start timers for statistics*/
 	if (mod_desc->start_flag == 1)
 	{
@@ -1608,6 +1621,18 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	verbose_printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
 	verbose_printk(KERN_INFO"<pci_read>: ******************** READ TRANSACTION BEGIN  **************************\n");	
 	verbose_printk(KERN_INFO"<pci_read>: ************************************************************************\n");	
+
+	if(mod_desc->set_dma_flag == 0)
+	{
+			ret = dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size);
+			if (ret < 0)
+			{
+			printk(KERN_INFO"<pci_read>:!!!! DMA init FAILURE!!!!.\n");
+			return ERROR;
+			}
+			printk(KERN_INFO"<pci_write>: Warning - Set the DMA file size to default value %d. IOCTL SET_FILE_SIZE was never called for file minor: %d.\n", (int)mod_desc->file_size, (int)mod_desc->minor);
+			mod_desc->set_dma_flag = 1;
+	}
 
 	verbose_printk(KERN_INFO"<pci_read>: Attempting to read %zu bytes\n", count);	
 

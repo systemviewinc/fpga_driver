@@ -83,6 +83,8 @@ int dma_file_init(struct mod_desc *mod_desc, void *dma_buffer_base, u64 dma_buff
 		dma_current_offset = dma_current_offset + (u32)(2*dma_file_size);            //update the current dma allocation pointer, 2 buffers (R/W)
 		verbose_printk(KERN_INFO"<dma_file_init>: Success setting peripheral DMA\n");
 	}
+	mod_desc->set_dma_flag = 1;
+
 	return 0;
 }
 

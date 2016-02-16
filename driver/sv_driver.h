@@ -110,6 +110,7 @@ struct mod_desc
 	int cdma_attempt;
 	int ip_not_ready;
 	atomic_t * atomic_poll;
+	int set_dma_flag;
 };
 
 /*this is the interrupt structure*/
