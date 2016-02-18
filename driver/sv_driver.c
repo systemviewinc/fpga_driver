@@ -407,6 +407,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	if(NULL == dma_buffer_base)
 	{
 		printk("%s:<sv_driver_init>DMA buffer base allocation ERROR\n", pci_devName);
+		printk("<sv_driver_init> typical max DMA size is 4M, check your linux settings\n");
 		return -1;
 	}
 	else
