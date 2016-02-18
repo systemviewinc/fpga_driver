@@ -21,7 +21,7 @@
 #endif
 
 /********* printk statements *********/
-#ifndef verbose_printk(...)
+#ifndef verbose_printk
 #define verbose_printk(...)
 #endif
 /******************************/
@@ -45,9 +45,9 @@ extern struct mutex CDMA_sem_2;
 extern u32 dma_current_offset;
 
 /*these are used in the data_transfer function to check for out of range memory r/w */
-extern unsigned long pci_bar_size;          
-extern unsigned long pci_bar_1_size;        
-extern unsigned long pci_bar_2_size;        
+extern unsigned long pci_bar_size;
+extern unsigned long pci_bar_1_size;
+extern unsigned long pci_bar_2_size;
 
 extern void * pci_bar_vir_addr;        //hardware base virtual address
 extern void * pci_bar_1_vir_addr;        //hardware base virtual address
@@ -78,7 +78,7 @@ extern const u32 INT_CTRL_IAR;
 
 /*this is the module description struct*/
 
-struct mod_desc 
+struct mod_desc
 {
 	int minor;
 	u64 axi_addr;
@@ -121,7 +121,7 @@ struct interr_struct
 //	wait_queue_head_t * iwq;
 	struct mutex * int_count_sem;
 	atomic_t * atomic_poll;
-    	
+
 };
 
 extern struct interr_struct interr_dict[8];
