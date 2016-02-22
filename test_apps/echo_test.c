@@ -7,10 +7,10 @@
 
 #define AXI_STREAM_FIFO 1
 
-#define FILE_SIZE_1 65536
-#define FILE_SIZE_2 65536
-#define FILE_SIZE_3 65536
-#define FILE_SIZE_4 65536
+#define FILE_SIZE_1 1024*256
+#define FILE_SIZE_2 1024*256
+#define FILE_SIZE_3 1024*256
+#define FILE_SIZE_4 1024*256
 
 #define TRANSFER_SIZE_1 1024
 #define TRANSFER_SIZE_2 1024
@@ -39,7 +39,7 @@ void *rx(void * file_handle);
 double calc_BW(double bytes, double secs, double ns);
 int file_init(int file_h, unsigned long axi_addr, unsigned long axi_ctl_addr, unsigned int mode, unsigned int interrupt_vector, unsigned int file_size);
 double spawn_threads(int file_1, int file_2, int file_3, int file_4);
-void create_csv(char *filename, double a[4][5][10],int n,int m, int x);
+void create_csv(char *filename, double a[4][7][10],int n,int m, int x);
 
 char devname[] = DEV_NAME;
 char devname_2[] = DEV_NAME_2;
@@ -90,25 +90,42 @@ unsigned int in[FILE_SIZE_4/4];
 //unsigned int hls_read_ctl_axi_addr = 0x80002000;
 //unsigned int hls_read_axi_addr = 0x80020000;
 
-unsigned long hls_read_ctl_axi_addr = 0xC0010000;
-unsigned long hls_read_axi_addr = 0xC0000000;
-unsigned long hls_write_ctl_axi_addr = 0x80010000;
-unsigned long hls_write_axi_addr = 0x80000000;
-unsigned long hls_read_2_ctl_axi_addr = 0xC0030000;
-unsigned long hls_read_2_axi_addr = 0xC0020000;
-unsigned long hls_write_2_ctl_axi_addr = 0x80030000;
-unsigned long hls_write_2_axi_addr = 0x80020000;
-unsigned long hls_read_3_ctl_axi_addr = 0xC0050000;
-unsigned long hls_read_3_axi_addr = 0xC0040000;
-unsigned long hls_write_3_ctl_axi_addr = 0x80050000;
-unsigned long hls_write_3_axi_addr = 0x80040000;
-unsigned long hls_read_4_ctl_axi_addr = 0xC0070000;
-unsigned long hls_read_4_axi_addr = 0xC0060000;
-unsigned long hls_write_4_ctl_axi_addr = 0x80070000;
-unsigned long hls_write_4_axi_addr = 0x80060000;
+//unsigned long hls_read_ctl_axi_addr = 0xC0010000;
+//unsigned long hls_read_axi_addr = 0xC0000000;
+//unsigned long hls_write_ctl_axi_addr = 0x80010000;
+//unsigned long hls_write_axi_addr = 0x80000000;
+//unsigned long hls_read_2_ctl_axi_addr = 0xC0030000;
+//unsigned long hls_read_2_axi_addr = 0xC0020000;
+//unsigned long hls_write_2_ctl_axi_addr = 0x80030000;
+//unsigned long hls_write_2_axi_addr = 0x80020000;
+//unsigned long hls_read_3_ctl_axi_addr = 0xC0050000;
+//unsigned long hls_read_3_axi_addr = 0xC0040000;
+//unsigned long hls_write_3_ctl_axi_addr = 0x80050000;
+//unsigned long hls_write_3_axi_addr = 0x80040000;
+//unsigned long hls_read_4_ctl_axi_addr = 0xC0070000;
+//unsigned long hls_read_4_axi_addr = 0xC0060000;
+//unsigned long hls_write_4_ctl_axi_addr = 0x80070000;
+//unsigned long hls_write_4_axi_addr = 0x80060000;
 //unsigned long trace_read_ctl_axi_addr = 0x80020000;
 //unsigned long trace_read_axi_addr = 0x80010000;
 //unsigned long trace_control_axi_addr = 0x80000000;
+
+unsigned long hls_read_ctl_axi_addr = 0x40150000;
+unsigned long hls_read_axi_addr = 0xC0000000;
+unsigned long hls_write_ctl_axi_addr = 0x40110000;
+unsigned long hls_write_axi_addr = 0x80000000;
+unsigned long hls_read_2_ctl_axi_addr = 0x40160000;
+unsigned long hls_read_2_axi_addr = 0xC0020000;
+unsigned long hls_write_2_ctl_axi_addr = 0x40120000;
+unsigned long hls_write_2_axi_addr = 0x80020000;
+unsigned long hls_read_3_ctl_axi_addr = 0x40170000;
+unsigned long hls_read_3_axi_addr = 0xC0040000;
+unsigned long hls_write_3_ctl_axi_addr = 0x40130000;
+unsigned long hls_write_3_axi_addr = 0x80040000;
+unsigned long hls_read_4_ctl_axi_addr = 0x40180000;
+unsigned long hls_read_4_axi_addr = 0xC0060000;
+unsigned long hls_write_4_ctl_axi_addr = 0x40140000;
+unsigned long hls_write_4_axi_addr = 0x80060000;
 
 unsigned long hls_fifo_mode = AXI_STREAM_FIFO;
 unsigned long dma_size = 4096;
@@ -171,7 +188,7 @@ struct statistics * rx_statistics_4;
 
 int main()
 {
-
+	
 	/* Open device file and initialize */
 	//	bram = open(devfilename, O_RDWR);
 	//	if(bram < 0){
@@ -253,7 +270,6 @@ int main()
 		return -1;
 	}
 	printf("DMA Allocation Reset\n");
-
 	int ret;
 
 	ret = file_init(hls_write, hls_write_axi_addr, hls_write_ctl_axi_addr, hls_fifo_mode, 0, FILE_SIZE_1);
@@ -299,7 +315,6 @@ int main()
 		printf("ERROR doing file init\n");
 		return -1;
 	}
-
 	/*initialize and reset the trace module counter*/
 	//	unsigned int activate = 3;
 	//	ret_val = write(trace_control, &activate, sizeof(activate));   
@@ -329,7 +344,7 @@ int main()
 
 
 	double bw, avg;
-	double bw_arr[4][5][10];
+	double bw_arr[4][7][10];
 	bw = 0.0;
 	int i, j, k, x;
 
@@ -339,7 +354,7 @@ int main()
 
 		k = 0;
 
-		for(j = 4; j<=64; j=j*2)
+		for(j = 4; j<=256; j=j*2)
 		{
 			xfer_size_1 = TRANSFER_SIZE_1*j;
 			xfer_size_2 = TRANSFER_SIZE_1*j;
@@ -383,7 +398,7 @@ int main()
 	/*write to file*/
 	char* filename; 
 	filename = "statistics.csv";
-	create_csv(filename, bw_arr , 10, 5, 4);
+	create_csv(filename, bw_arr , 10, 7, 4);
 
 	//	bw = spawn_threads(1, 0, 0, 0);
 	//	bw = spawn_threads(0, 1, 0, 0);
@@ -625,6 +640,11 @@ int file_init(int file_h, unsigned long axi_addr, unsigned long axi_ctl_addr, un
 	}
 	printf("set peripheral to axi base address %x\n", axi_addr);
 
+	if(ioctl(file_h, SET_FILE_SIZE, &file_size) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	printf("set file size to: %d\n", file_size);
 
 	/* set mode of AXI_FIFO*/
 	if(ioctl(file_h, SET_MODE, &mode) < 0) {
@@ -632,12 +652,6 @@ int file_init(int file_h, unsigned long axi_addr, unsigned long axi_ctl_addr, un
 		return -1;
 	}
 	printf("set axi fifo to mode: %d\n", mode);
-
-	if(ioctl(file_h, SET_FILE_SIZE, &file_size) < 0) {
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	printf("set file size to: %d\n", file_size);
 
 	if(interrupt_vector > 0)
 	{
@@ -913,7 +927,7 @@ double spawn_threads(int file_1, int file_2, int file_3, int file_4)
 	return driver_bandwidth;
 }
 
-void create_csv(char *filename, double a[4][5][10],int n,int m, int x){
+void create_csv(char *filename, double a[4][7][10],int n,int m, int x){
 
 	printf("\n Creating %s file",filename);
 
@@ -940,6 +954,12 @@ void create_csv(char *filename, double a[4][5][10],int n,int m, int x){
 				case 3: amt = 32;
 						break;
 				case 4: amt = 64;
+						break;
+				case 5: amt = 128;
+						break;
+				case 6: amt = 256;
+						break;
+				case 7: amt = 512;
 			}
 
 			fprintf(fp,"\n\n%dK Transfer size\n",amt);

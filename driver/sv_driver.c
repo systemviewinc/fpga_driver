@@ -90,6 +90,7 @@ int int_ctlr_address = 0xFFFFFFFF;
 int driver_type = PCI;
 int dma_system_size = 1048576;
 int dma_file_size = 4096;
+int dma_byte_width = 8;   //64b data width
 
 module_param(device_id, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(device_id, "DeviceID");
@@ -123,6 +124,9 @@ MODULE_PARM_DESC(dma_system_size, "DMASystemSize");
 
 module_param(dma_file_size, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(dma_file_size, "DMAFileSize");
+
+module_param(dma_byte_width, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(dma_byte_width, "DMAByteWidth");
 /*****************************************************************************/
 
 const char pci_devName[] = "vsi_driver"; //name of the device
@@ -217,14 +221,14 @@ ssize_t pci_read(struct file *filp, char __user *buf, size_t count, loff_t *f_po
 int pci_poll(struct file *filep, poll_table * pwait);
 
 struct file_operations pci_fops = {
-	read:           pci_read,
-	write:          pci_write,
-	unlocked_ioctl: pci_unlocked_ioctl,
-	open:           pci_open,
-	release:        pci_release,
-	llseek:         pci_llseek,
-	poll:           pci_poll,
-	//	mmap:           pci_map,
+read:           pci_read,
+		write:          pci_write,
+		unlocked_ioctl: pci_unlocked_ioctl,
+		open:           pci_open,
+		release:        pci_release,
+		llseek:         pci_llseek,
+		poll:           pci_poll,
+		//	mmap:           pci_map,
 };
 
 /* ************************device init and exit *********************** */
@@ -297,7 +301,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	}
 	//get the base memory size
 	pci_bar_size = pci_resource_len(pci_dev_struct, 0);
-	verbose_printk(KERN_INFO"<probe>pci bar size is:%lu\n", pci_bar_size);
+	printk(KERN_INFO"<probe>pci bar size is:%lu\n", pci_bar_size);
 
 	//map the hardware space to virtual space
 	pci_bar_vir_addr = ioremap(pci_bar_hw_addr, pci_bar_size);
@@ -305,7 +309,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 		printk(KERN_INFO"%s:<probe>ioremap error when mapping to vritaul address\n", pci_devName);
 		return ERROR;
 	}
-	verbose_printk(KERN_INFO"<probe>pci bar virtual address base is:%p\n", pci_bar_vir_addr);
+	printk(KERN_INFO"<probe>pci bar virtual address base is:%p\n", pci_bar_vir_addr);
 
 	/****************** BAR 1 Mapping *******************************************/
 	//get the base hardware address
@@ -717,7 +721,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 	verbose_printk(KERN_INFO"<pci_isr>:						Entered the ISR");
 
-//	tasklet_schedule(&isr_tasklet);
+	//	tasklet_schedule(&isr_tasklet);
 	verbose_printk(KERN_INFO"		Entered the Tasklet");
 
 	vec_serviced = 0;
@@ -748,8 +752,8 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 		{
 			verbose_printk(KERN_INFO"<soft_isr>: this interrupt is from a user peripheral\n");
 
-		//	if (*(interr_dict[int_num].int_count) < 10)   //set a max here....
-		//	*(interr_dict[int_num].int_count) = (*(interr_dict[int_num].int_count)) + 1;
+			//	if (*(interr_dict[int_num].int_count) < 10)   //set a max here....
+			//	*(interr_dict[int_num].int_count) = (*(interr_dict[int_num].int_count)) + 1;
 			*(interr_dict[int_num].int_count) = 1;
 			atomic_set(interr_dict[int_num].atomic_poll, 1);
 
@@ -779,7 +783,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 		/* The CDMA vectors (1 and 2) */
 		if ((vec_serviced & 0x01) == 0x01)
 		{
-		//	cdma_comp[1] = 1;      //condition for wake_up
+			//	cdma_comp[1] = 1;      //condition for wake_up
 			atomic_set(&cdma_atom[1], 1);
 			verbose_printk(KERN_INFO"<soft_isr>: Waking up CDMA 1\n");
 			wake_up_interruptible(&wq);
@@ -787,35 +791,35 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 		if ((vec_serviced & 0x02) == 0x02)
 		{
-		//	cdma_comp[2] = 1;      //condition for wake_up
+			//	cdma_comp[2] = 1;      //condition for wake_up
 			atomic_set(&cdma_atom[2], 1);
 			verbose_printk(KERN_INFO"<soft_isr>: Waking up CDMA 2\n");
 			wake_up_interruptible(&wq);
 		}
 
-	//	wake_up_interruptible(&wq);
+		//	wake_up_interruptible(&wq);
 		//		*(interr_dict[4].int_count) = (*(interr_dict[4].int_count)) + 1;
 		//		*(interr_dict[5].int_count) = (*(interr_dict[5].int_count)) + 1;
 
-			if (vec_serviced >= 0x10)
-			{
-				wake_up(&wq_periph);
+		if (vec_serviced >= 0x10)
+		{
+			wake_up(&wq_periph);
 
-		//	for(i = 4; i<=7; i++)
-		//	{
-		//	mutex_lock_interruptible(interr_dict[i].int_count_sem);
-		//		if (interr_dict[i].int_count > 0)
-		//	if (interr[i] > 0)
-		//		{
-		//	    	verbose_printk(KERN_INFO"<soft_isr>: Waking up User Peripheral:%x\n", i);
-		//		mutex_unlock(interr_dict[i].int_count_sem);
-		//	interr_dict[i].int_count = 0;
-		//	interr[i] = 0;
-		//		wake_up(interr_dict[i].iwq);
-		//		}
-		//	}
-		//		verbose_printk(KERN_INFO"<soft_isr>:			Waking up User Peripherals\n");
-			}
+			//	for(i = 4; i<=7; i++)
+			//	{
+			//	mutex_lock_interruptible(interr_dict[i].int_count_sem);
+			//		if (interr_dict[i].int_count > 0)
+			//	if (interr[i] > 0)
+			//		{
+			//	    	verbose_printk(KERN_INFO"<soft_isr>: Waking up User Peripheral:%x\n", i);
+			//		mutex_unlock(interr_dict[i].int_count_sem);
+			//	interr_dict[i].int_count = 0;
+			//	interr[i] = 0;
+			//		wake_up(interr_dict[i].iwq);
+			//		}
+			//	}
+			//		verbose_printk(KERN_INFO"<soft_isr>:			Waking up User Peripherals\n");
+		}
 	}
 
 	verbose_printk(KERN_INFO"<soft_isr>:						Exiting ISR\n");
@@ -868,8 +872,8 @@ void do_isr_tasklet (unsigned long unused)
 		{
 			verbose_printk(KERN_INFO"<soft_isr>: this interrupt is from a user peripheral\n");
 
-		//	if (*(interr_dict[int_num].int_count) < 10)   //set a max here....
-		//	*(interr_dict[int_num].int_count) = (*(interr_dict[int_num].int_count)) + 1;
+			//	if (*(interr_dict[int_num].int_count) < 10)   //set a max here....
+			//	*(interr_dict[int_num].int_count) = (*(interr_dict[int_num].int_count)) + 1;
 			*(interr_dict[int_num].int_count) = 1;
 			atomic_set(interr_dict[int_num].atomic_poll, 1);
 
@@ -900,7 +904,7 @@ void do_isr_tasklet (unsigned long unused)
 		if ((vec_serviced & 0x01) == 0x01)
 		{
 			cdma_comp[1] = 1;      //condition for wake_up
-		//	atomic_set(&cdma_atom[1], 1);
+			//	atomic_set(&cdma_atom[1], 1);
 			verbose_printk(KERN_INFO"<soft_isr>: Waking up CDMA 1\n");
 			wake_up_interruptible(&wq);
 		}
@@ -908,34 +912,34 @@ void do_isr_tasklet (unsigned long unused)
 		if ((vec_serviced & 0x02) == 0x02)
 		{
 			cdma_comp[2] = 1;      //condition for wake_up
-		//	atomic_set(&cdma_atom[2], 1);
+			//	atomic_set(&cdma_atom[2], 1);
 			verbose_printk(KERN_INFO"<soft_isr>: Waking up CDMA 2\n");
 			wake_up_interruptible(&wq);
 		}
 
-	//	wake_up_interruptible(&wq);
+		//	wake_up_interruptible(&wq);
 		//		*(interr_dict[4].int_count) = (*(interr_dict[4].int_count)) + 1;
 		//		*(interr_dict[5].int_count) = (*(interr_dict[5].int_count)) + 1;
 
-			if (vec_serviced >= 0x10)
-			{
-				wake_up(&wq_periph);
+		if (vec_serviced >= 0x10)
+		{
+			wake_up(&wq_periph);
 
-		//	for(i = 4; i<=7; i++)
-		//	{
-		//	mutex_lock_interruptible(interr_dict[i].int_count_sem);
-		//		if (interr_dict[i].int_count > 0)
-		//	if (interr[i] > 0)
-		//		{
-		//	    	verbose_printk(KERN_INFO"<soft_isr>: Waking up User Peripheral:%x\n", i);
-		//		mutex_unlock(interr_dict[i].int_count_sem);
-		//	interr_dict[i].int_count = 0;
-		//	interr[i] = 0;
-		//		wake_up(interr_dict[i].iwq);
-		//		}
-		//	}
-		//		verbose_printk(KERN_INFO"<soft_isr>:			Waking up User Peripherals\n");
-			}
+			//	for(i = 4; i<=7; i++)
+			//	{
+			//	mutex_lock_interruptible(interr_dict[i].int_count_sem);
+			//		if (interr_dict[i].int_count > 0)
+			//	if (interr[i] > 0)
+			//		{
+			//	    	verbose_printk(KERN_INFO"<soft_isr>: Waking up User Peripheral:%x\n", i);
+			//		mutex_unlock(interr_dict[i].int_count_sem);
+			//	interr_dict[i].int_count = 0;
+			//	interr[i] = 0;
+			//		wake_up(interr_dict[i].iwq);
+			//		}
+			//	}
+			//		verbose_printk(KERN_INFO"<soft_isr>:			Waking up User Peripherals\n");
+		}
 	}
 
 	verbose_printk(KERN_INFO"<soft_isr>:						Exiting ISR\n");
@@ -1002,7 +1006,7 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->cdma_attempt = 0;
 	s->ip_not_ready = 0;
 	s->atomic_poll = atomic_poll;
-    s->set_dma_flag = 0;
+	s->set_dma_flag = 0;
 	//	s->iwq = (wait_queue_head_t*)iwq;
 	//	s->int_count_sem = (struct mutex*)int_count_sem;
 
@@ -1012,12 +1016,12 @@ int pci_open(struct inode *inode, struct file *filep)
 	filep->private_data = s;
 
 	/*initialize the DMA for the file*/
-//	ret = dma_file_init(s, dma_file_size, dma_buffer_base, dma_buffer_size);
-//	if (ret < 0)
-//	{
-//		printk(KERN_INFO"<pci_open>:!!!!file open FAILURE!!!!.\n");
-//		return ERROR;
-//	}
+	//	ret = dma_file_init(s, dma_file_size, dma_buffer_base, dma_buffer_size);
+	//	if (ret < 0)
+	//	{
+	//		printk(KERN_INFO"<pci_open>:!!!!file open FAILURE!!!!.\n");
+	//		return ERROR;
+	//	}
 
 	verbose_printk(KERN_INFO"<pci_open>: file open complete.\n");
 	return SUCCESS;
@@ -1166,8 +1170,8 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			ret = dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size);
 			if (ret < 0)
 			{
-			printk(KERN_INFO"<pci_open>:!!!!file open FAILURE!!!!.\n");
-			return ERROR;
+				printk(KERN_INFO"<pci_open>:!!!!file open FAILURE!!!!.\n");
+				return ERROR;
 			}
 			break;
 
@@ -1234,7 +1238,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		case GET_DRIVER_STATISTICS:
 
 			ret = copy_from_user(statistics, (void *)arg, sizeof(struct statistics));
-		//	statistics = (struct statistics *)arg;
+			//	statistics = (struct statistics *)arg;
 			statistics->tx_bytes = atomic_read(&driver_tx_bytes);
 			statistics->rx_bytes = atomic_read(&driver_rx_bytes);
 
@@ -1323,8 +1327,9 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 						verbose_printk(KERN_INFO"<ioctl_axi_stream_fifo>: kernel R/W register kernel addresses:%llx / %llx\n", (u64)mod_desc->kernel_reg_read, (u64)mod_desc->kernel_reg_write );
 						current_dma_offset_internal = current_dma_offset_internal + 0x08;   // update the current dma buffer status (just added two 32b buffers)
 
-						axi_stream_fifo_init(mod_desc);
-
+						ret = axi_stream_fifo_init(mod_desc);
+						if (ret < 0)
+							return ERROR;
 					}
 
 					break;
@@ -1386,14 +1391,14 @@ int pci_poll(struct file *filep, poll_table * pwait)
 	has_data = *(mod_desc->int_count);
 	//	verbose_printk(KERN_INFO"<pci_poll>: Interrupt count of polling peripheral:%x\n", has_data);
 
-//	if (has_data > 0)
+	//	if (has_data > 0)
 	if (atomic_read(mod_desc->atomic_poll))
 	{
 		verbose_printk(KERN_INFO"<pci_poll>: Interrupting Peripheral Matched!\n");
 		/*reset the has_data flag*/
 
-			atomic_set(mod_desc->atomic_poll, 0);
-			*(mod_desc->int_count) = 0;
+		atomic_set(mod_desc->atomic_poll, 0);
+		*(mod_desc->int_count) = 0;
 		//*(mod_desc->int_count) = *(mod_desc->int_count) - 1;
 
 		mask |= POLLIN;
@@ -1439,14 +1444,14 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 	if(mod_desc->set_dma_flag == 0)
 	{
-			ret = dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size);
-			if (ret < 0)
-			{
+		ret = dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size);
+		if (ret < 0)
+		{
 			printk(KERN_INFO"<pci_write>:!!!! DMA init FAILURE!!!!.\n");
 			return ERROR;
-			}
-			printk(KERN_INFO"<pci_write>: Warning - Set the DMA file size to default value %d. IOCTL SET_FILE_SIZE was never called for file minor: %d.\n", (int)mod_desc->file_size, (int)mod_desc->minor);
-			mod_desc->set_dma_flag = 1;
+		}
+		printk(KERN_INFO"<pci_write>: Warning - Set the DMA file size to default value %d. IOCTL SET_FILE_SIZE was never called for file minor: %d.\n", (int)mod_desc->file_size, (int)mod_desc->minor);
+		mod_desc->set_dma_flag = 1;
 	}
 
 	/*Start timers for statistics*/
@@ -1622,14 +1627,14 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 	if(mod_desc->set_dma_flag == 0)
 	{
-			ret = dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size);
-			if (ret < 0)
-			{
+		ret = dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size);
+		if (ret < 0)
+		{
 			printk(KERN_INFO"<pci_read>:!!!! DMA init FAILURE!!!!.\n");
 			return ERROR;
-			}
-			printk(KERN_INFO"<pci_write>: Warning - Set the DMA file size to default value %d. IOCTL SET_FILE_SIZE was never called for file minor: %d.\n", (int)mod_desc->file_size, (int)mod_desc->minor);
-			mod_desc->set_dma_flag = 1;
+		}
+		printk(KERN_INFO"<pci_write>: Warning - Set the DMA file size to default value %d. IOCTL SET_FILE_SIZE was never called for file minor: %d.\n", (int)mod_desc->file_size, (int)mod_desc->minor);
+		mod_desc->set_dma_flag = 1;
 	}
 
 	verbose_printk(KERN_INFO"<pci_read>: Attempting to read %zu bytes\n", count);

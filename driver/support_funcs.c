@@ -67,7 +67,7 @@ int dma_file_init(struct mod_desc *mod_desc, void *dma_buffer_base, u64 dma_buff
 	mod_desc->dma_size = (size_t)dma_file_size;
 
 	//if (((u64)dma_current_offset + dma_file_size) > (u64)((char*)dma_buffer_base + dma_buffer_size))
-	if (((u64)dma_current_offset + dma_file_size) > (u64)dma_buffer_size)
+	if (((u64)dma_current_offset + (2*dma_file_size)) > (u64)dma_buffer_size)
 	{
 		printk(KERN_INFO"<dma_file_init>: ERROR! DMA Buffer out of memory!\n");
 		printk(KERN_INFO"<dma_file_init>: Decrease file sizes or increase dma size insmod parameter\n");
@@ -151,11 +151,11 @@ int pcie_ctl_init(u64 axi_address, u32 dma_addr_base)
 
 		//write DMA addr to PCIe CTL for address translation
 		ret = data_transfer(axi_dest, (void *)(&dma_addr_loc), 4, NORMAL_WRITE, 0);
-		verbose_printk(KERN_INFO"<pci_ioctl_cdma_set>: writing dma address ('%x') to pcie_ctl at AXI address:%llx\n", dma_addr_loc, axi_dest);
+		printk(KERN_INFO"<pci_ioctl_cdma_set>: writing dma address ('%x') to pcie_ctl at AXI address:%llx\n", dma_addr_loc, axi_dest);
 
 		//check the pcie-ctl got the translation address
 		ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
-		verbose_printk(KERN_INFO"<pci_ioctl_cdma_set>: PCIe CTL register:%x\n", status);
+		printk(KERN_INFO"<pci_ioctl_cdma_set>: PCIe CTL register:%x\n", status);
 
 		if (status == dma_addr_loc)
 			verbose_printk(KERN_INFO"<pci_ioctl_cdma_set>: PCIe CTL register set SUCCESS:%x\n", status);
@@ -845,6 +845,7 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
 	int ret;
 	int keyhole_en;
 	u32 fifo_empty_level;
+	u32 buf, read_reg;
 
 	verbose_printk(KERN_INFO"<axi_stream_fifo_write>: writing to the AXI Stream FIFO\n");
 	verbose_printk(KERN_INFO"<axi_stream_fifo_write>: number of bytes to write:%zu\n", count);
@@ -862,33 +863,44 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFV;  // the transmit FIFO vacancy
 
 	*(mod_desc->kernel_reg_read) = 0x0;   //set to zero
+	buf = 0x0;
 
-	ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, dma_offset_internal_read);
+	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, dma_offset_internal_read);
 	if (ret > 0)
 	{
 		printk(KERN_INFO"<pci_write>: ERROR reading from AXI Streaming FIFO control interface\n");
 		return -1;
 	}
+	read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 
-	verbose_printk(KERN_INFO"										<pci_write>: Initial Transmit Data FIFO Fill Level:%x\n", *(mod_desc->kernel_reg_read));
+	//printk(KERN_INFO"<pci_write>: Initial Transmit Data FIFO Fill Level:%x\n", buf);
+
 	/*This While loop will continuously loop until the axi streaming fifo is empty
 	 * if there is a holdup in data, we are stuck here....  */
 
-	fifo_empty_level = (((u32)(mod_desc->file_size))/8)-4;  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
+	//	fifo_empty_level = (((u32)(mod_desc->file_size))/8)-4;  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
+	//	fifo_empty_level = (((u32)(mod_desc->file_size))/32)-4;  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
+	fifo_empty_level = (((u32)(mod_desc->file_size))/dma_byte_width)-4;  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
+
+	//printk(KERN_INFO"<pci_write>: (0x%x/32)-4 = 0x%x \n", (mod_desc->file_size), fifo_empty_level);
+	//printk(KERN_INFO"<pci_write>: The Calculated Fifo Empty level is: %x\n", fifo_empty_level);
 	//	while (*(mod_desc->kernel_reg_read) != 0x01fc)  //1fc is an empty 512 depth fifo
 	//	while (*(mod_desc->kernel_reg_read) != 0x07fc)  //7fc is an empty 2048 depth fifo
 	//	while (*(mod_desc->kernel_reg_read) != 0x0ffc)  //1fc is an empty 512 depth fifo
-	while (*(mod_desc->kernel_reg_read) != fifo_empty_level)  //1fc is an empty 512 depth fifo
+	//	while (*(mod_desc->kernel_reg_read) != fifo_empty_level)  //1fc is an empty 512 depth fifo
+	while (read_reg != fifo_empty_level)  //1fc is an empty 512 depth fifo
 	{
 		mod_desc->ip_not_ready = mod_desc->ip_not_ready + 1;
 		schedule();
+		//printk(KERN_INFO"<pci_write>: current fifo level: %x\n", buf);
 
-		ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, dma_offset_internal_read);
+		ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, dma_offset_internal_read);
 		if (ret > 0)
 		{
 			printk(KERN_INFO"<pci_write>: ERROR reading from AXI Streaming FIFO control interface\n");
 			return -1;
 		}
+		read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 	}
 
 	/*Set keyhole*/
@@ -906,7 +918,8 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TLR;
 
 	*(mod_desc->kernel_reg_write) = (u32)count;
-	ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, dma_offset_internal_write);
+	buf = (u32)count;
+	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, dma_offset_internal_write);
 	if (ret > 0)
 	{
 		printk(KERN_INFO"<pci_write>: ERROR writing to AXI Streaming FIFO Control Interface\n");
@@ -922,6 +935,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 	int keyhole_en;
 	u32 read_bytes;
 	u64 axi_dest;
+	u32 buf, read_reg;
 
 	u64 dma_offset_write;
 	u64 dma_offset_read;
@@ -940,7 +954,8 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 
 	//reset interrupts on CTL interface
 	*(mod_desc->kernel_reg_write) = 0xFFFFFFFF;
-	ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, dma_offset_internal_write);
+	buf = 0xFFFFFFFF;
+	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, dma_offset_internal_write);
 	if (ret > 0)
 	{
 		printk(KERN_INFO"<axi_stream_fifo_read>: ERROR writing to reset interrupts on AXI Stream FIFO\n");
@@ -950,18 +965,19 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 
 	/*Read FIFO Fill level*/
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RLR;
-	ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, dma_offset_internal_read);
+	buf = 0;
+	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, dma_offset_internal_read);
 	if (ret > 0)
 	{
 		printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Read FIFO fill level\n");
 		return -1;
 	}
+	read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 
 	/*we are masking off the 32nd bit because the FIFO is in cut through mode
 	 *and sets the LSB to 1 to indicate a partial packet.*/
-	read_bytes = (0x7fffffff & *(mod_desc->kernel_reg_read));
-
-	verbose_printk(KERN_INFO"<axi_stream_fifo_read> Read FIFO fill level:0x%x bytes\n", read_bytes);
+	//read_bytes = (0x7fffffff & *(mod_desc->kernel_reg_read));
+	read_bytes = (0x7fffffff & read_reg);
 
 	/*So we don't read more data than is available*/
 	if (read_bytes < (u32)count)
@@ -977,10 +993,10 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 	}
 
 	/*Check to make sure we are doing an 8 byte aligned read*/
-	if ((count % 8) > 0)
+	if ((count % 32) > 0)
 	{
 
-		count = count - (count % 8);
+		count = count - (count % 32);
 		verbose_printk(KERN_INFO"<axi_stream_fifo_read> Read value changed to: 0x%x for alignment.\n", (u32)count);
 	}
 
@@ -996,6 +1012,8 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 	axi_dest = mod_desc->axi_addr + AXI_STREAM_RDFD;
 
 	verbose_printk(KERN_INFO"<axi_stream_fifo_read> AXI Address of FIFO:%llx\n", mod_desc->axi_addr);
+
+	//printk(KERN_INFO"<axi_stream_fifo_read> Final Read value is 0x%x \n", (u32)count);
 
 	ret = data_transfer(axi_dest, 0, count, keyhole_en, dma_offset_read);
 	if (ret > 0)
@@ -1020,41 +1038,109 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 	return count;
 }
 
-void axi_stream_fifo_init(struct mod_desc * mod_desc)
+int axi_stream_fifo_init(struct mod_desc * mod_desc)
 {
 	int ret;
 	u64 axi_dest;
+	u32 buf, read_reg;
+	u32 fifo_empty_level;
 
 	//reset The transmit side
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFR;
 	*(mod_desc->kernel_reg_write) = 0x000000A5;
-	ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
+	buf = 0x000000A5;
+	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
+	if (ret > 0)
+	{
+		printk(KERN_INFO"<axi_stream_fifo_init>: ERROR\n");
+		return -1;
+	}
 	verbose_printk(KERN_INFO"<axi_fifo_isr_reg>: Reset the  the axi fifo\n");
 
 	//reset The receive side
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RDFR;
 	*(mod_desc->kernel_reg_write) = 0x000000A5;
-	ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
+	buf = 0x000000A5;
+	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
+	if (ret > 0)
+	{
+		printk(KERN_INFO"<axi_stream_fifo_init>: ERROR\n");
+		return -1;
+	}
 	verbose_printk(KERN_INFO"<axi_fifo_isr_reg>: Reset the  the axi fifo\n");
 
 	//Read CTL interface
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
-	ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, mod_desc->dma_offset_internal_read);
+	buf = 0;
+	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, mod_desc->dma_offset_internal_read);
+	if (ret > 0)
+	{
+		printk(KERN_INFO"<axi_stream_fifo_init>: ERROR\n");
+		return -1;
+	}
 	verbose_printk(KERN_INFO"<axi_fifo_isr_reg>:%x\n", *(mod_desc->kernel_reg_read));
 
 	//reset interrupts on CTL interface
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
 	*(mod_desc->kernel_reg_write) = 0xFFFFFFFF;
-	ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
+	buf = 0xFFFFFFFF;
+	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
+	if (ret > 0)
+	{
+		printk(KERN_INFO"<axi_stream_fifo_init>: ERROR\n");
+		return -1;
+	}
 	verbose_printk(KERN_INFO"<axi_fifo_isr_reg>: Reset the interrupts on the axi fifo\n");
 
 	//Read CTL interface
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
-	ret = data_transfer(axi_dest, 0, 4, NORMAL_READ, mod_desc->dma_offset_internal_read);
+	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, mod_desc->dma_offset_internal_read);
+	if (ret > 0)
+	{
+		printk(KERN_INFO"<axi_stream_fifo_init>: ERROR\n");
+		return -1;
+	}
 	verbose_printk(KERN_INFO"<axi_fifo_isr_reg>:%x\n", *(mod_desc->kernel_reg_read));
 
 	/*Set IER Register for interrupt on read*/
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_IER;
 	*(mod_desc->kernel_reg_write) = 0x04000000;
-	ret = data_transfer(axi_dest, 0, 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
+	buf = 0x04000000;
+	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
+	if (ret > 0)
+	{
+		printk(KERN_INFO"<axi_stream_fifo_init>: ERROR\n");
+		return -1;
+	}
+
+	*(mod_desc->kernel_reg_read) = 0x0;   //set to zero
+	buf = 0x0;
+
+	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFV;  // the transmit FIFO vacancy
+	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, mod_desc->dma_offset_internal_read);
+	if (ret > 0)
+	{
+		printk(KERN_INFO"<axi_stream_fifo_init>: ERROR\n");
+		return -1;
+	}
+	read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+
+	/*Check to see if the calculated fifo empty level via the DMA data byte width (aka the axi-s fifo byte width)
+	 * and file size (aka the fifo size) is equal to the actual fifo empty level when read */	
+	if (read_reg > 0)
+	{
+		fifo_empty_level = (((u32)(mod_desc->file_size))/dma_byte_width)-4;  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
+		if (read_reg != fifo_empty_level)  
+		{	
+			printk(KERN_INFO"<axi_stream_fifo_init>: Error during initialization, the calculated axi-s fifo size is not equivalent to the actual size, Fix parameters\n");
+			printk(KERN_INFO"<axi_stream_fifo_init>: calculated size: 0x%x\n", fifo_empty_level);
+			printk(KERN_INFO"<axi_stream_fifo_init>: register read size: 0x%x\n", read_reg);
+			//return -1;
+		}
+		printk(KERN_INFO"<axi_stream_fifo_init>: Transmit axi-s fifo initialized\n");
+	}
+	else
+		printk(KERN_INFO"<axi_stream_fifo_init>: Receive axi-s fifo initialized\n");
+
+	return 0;
 }

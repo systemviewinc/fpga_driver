@@ -32,6 +32,7 @@
 extern u64 axi_pcie_ctl;
 extern u64 axi_interr_ctrl;
 extern u64 axi_pcie_m;
+extern int dma_byte_width;
 
 extern u8 cdma_set[5];
 extern u8 pcie_ctl_set;
@@ -99,7 +100,7 @@ struct mod_desc
 	u32 dma_offset_internal_read;
 	u32 dma_offset_internal_write;
 	loff_t file_size;
-//	wait_queue_head_t * iwq;
+	//	wait_queue_head_t * iwq;
 	struct mutex * int_count_sem;
 	int tx_bytes;
 	int rx_bytes;
@@ -118,7 +119,7 @@ struct interr_struct
 {
 	u32 * mode;
 	int * int_count;
-//	wait_queue_head_t * iwq;
+	//	wait_queue_head_t * iwq;
 	struct mutex * int_count_sem;
 	atomic_t * atomic_poll;
 
@@ -156,7 +157,7 @@ void int_ctlr_init(u64 axi_address);
 int dma_file_init(struct mod_desc *mod_desc, void *dma_buffer_base, u64 dma_buffer_size);
 size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc);
 size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc);
-void axi_stream_fifo_init(struct mod_desc * mod_desc);
+int axi_stream_fifo_init(struct mod_desc * mod_desc);
 void cdma_wait_sleep(int cdma_num);
 void cdma_idle_poll(int cdma_num);
 // ******************************************************************
