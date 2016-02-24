@@ -1442,6 +1442,9 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	verbose_printk(KERN_INFO"<pci_write>:                  Attempting to transfer %zu bytes\n", count);
 	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n\n");
 
+	verbose_printk(KERN_INFO"WRITE file struct offset: %x", filep->f_pos);
+	verbose_printk(KERN_INFO"WRITE offset param: %x", *f_pos);
+
 	if(mod_desc->set_dma_flag == 0)
 	{
 		ret = dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size);
@@ -1625,6 +1628,9 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	verbose_printk(KERN_INFO"<pci_read>: ******************** READ TRANSACTION BEGIN  **************************\n");
 	verbose_printk(KERN_INFO"<pci_read>: ************************************************************************\n");
 
+	verbose_printk(KERN_INFO"READ file struct offset: %x", filep->f_pos);
+	verbose_printk(KERN_INFO"READ offset param: %x", *f_pos);
+
 	if(mod_desc->set_dma_flag == 0)
 	{
 		ret = dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size);
@@ -1685,7 +1691,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			dma_offset_internal_read = (u64)mod_desc->dma_offset_internal_read;
 			dma_offset_internal_write = (u64)mod_desc->dma_offset_internal_write;
 
-			axi_dest = mod_desc->axi_addr + filep->f_pos;
+			axi_dest = mod_desc->axi_addr + *f_pos;
 
 			if (mod_desc->keyhole_config & 0x1)
 				transfer_type = KEYHOLE_READ;
@@ -1695,16 +1701,16 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 			verbose_printk(KERN_INFO"<user_peripheral_read>: reading peripheral using a transfer_type: %x\n", transfer_type);
 
-			verbose_printk(KERN_INFO"<user_peripheral_write>: current file offset is: %llu\n", filep->f_pos);
+			verbose_printk(KERN_INFO"<user_peripheral_write>: current file offset is: %llu\n", *f_pos);
 
-			temp = count + filep->f_pos;
+			temp = count + *f_pos;
 
 			/*Check to see if read will go past the boundary*/
 			if(temp > (size_t)mod_desc->file_size)
 			{
 				verbose_printk(KERN_INFO"<user_peripheral_read>: Read will overrun the file size because \n");
 				verbose_printk(KERN_INFO"<user_peripheral_read>: (the current file offset + amount to read)->(%llu) > (%llu)->file_size\n", temp, mod_desc->file_size);
-				count = (size_t)(mod_desc->file_size - filep->f_pos);
+				count = (size_t)(mod_desc->file_size - *f_pos);
 				verbose_printk(KERN_INFO"<user_peripheral_read>: Adjusting to only reading %zu bytes to end of file!\n", count);
 
 			}
@@ -1719,7 +1725,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			if (transfer_type == NORMAL_READ)
 			{
 
-				*f_pos = (loff_t)(filep->f_pos + (loff_t)count);
+				*f_pos = (loff_t)(*f_pos + (loff_t)count);
 				verbose_printk(KERN_INFO"<user_peripheral_write>: updated file offset after adding count(%zu) is: %llu\n", count, *f_pos);
 
 				if (*f_pos == mod_desc->file_size)
