@@ -4,18 +4,23 @@
 #include <sys/poll.h>
 #include <unistd.h>
 #include <sched.h>
+#include <math.h>
 
 #define AXI_STREAM_FIFO 1
 
-#define FILE_SIZE_1 1024*256
-#define FILE_SIZE_2 1024*256
-#define FILE_SIZE_3 1024*256
-#define FILE_SIZE_4 1024*256
+#define FILE_SIZE_1 1024*16
+#define FILE_SIZE_2 1024*16
+#define FILE_SIZE_3 1024*16
+#define FILE_SIZE_4 1024*16
 
 #define TRANSFER_SIZE_1 1024
 #define TRANSFER_SIZE_2 1024
 #define TRANSFER_SIZE_3 1024
 #define TRANSFER_SIZE_4 1024
+
+#define NUM_HLS 4
+#define NUM_ITER 10
+#define NUM_XFER_SIZE_STEPS 3    //(log10(FILE_SIZE_1/1024)/log10(2))-1
 
 int xfer_size_1, xfer_size_2, xfer_size_3, xfer_size_4;
 
@@ -39,7 +44,7 @@ void *rx(void * file_handle);
 double calc_BW(double bytes, double secs, double ns);
 int file_init(int file_h, unsigned long axi_addr, unsigned long axi_ctl_addr, unsigned int mode, unsigned int interrupt_vector, unsigned int file_size);
 double spawn_threads(int file_1, int file_2, int file_3, int file_4);
-void create_csv(char *filename, double a[4][7][10],int n,int m, int x);
+void create_csv(char *filename, double a[NUM_HLS][NUM_XFER_SIZE_STEPS][NUM_ITER],int n,int m, int x);
 
 char devname[] = DEV_NAME;
 char devname_2[] = DEV_NAME_2;
@@ -90,42 +95,42 @@ unsigned int in[FILE_SIZE_4/4];
 //unsigned int hls_read_ctl_axi_addr = 0x80002000;
 //unsigned int hls_read_axi_addr = 0x80020000;
 
-//unsigned long hls_read_ctl_axi_addr = 0xC0010000;
-//unsigned long hls_read_axi_addr = 0xC0000000;
-//unsigned long hls_write_ctl_axi_addr = 0x80010000;
-//unsigned long hls_write_axi_addr = 0x80000000;
-//unsigned long hls_read_2_ctl_axi_addr = 0xC0030000;
-//unsigned long hls_read_2_axi_addr = 0xC0020000;
-//unsigned long hls_write_2_ctl_axi_addr = 0x80030000;
-//unsigned long hls_write_2_axi_addr = 0x80020000;
-//unsigned long hls_read_3_ctl_axi_addr = 0xC0050000;
-//unsigned long hls_read_3_axi_addr = 0xC0040000;
-//unsigned long hls_write_3_ctl_axi_addr = 0x80050000;
-//unsigned long hls_write_3_axi_addr = 0x80040000;
-//unsigned long hls_read_4_ctl_axi_addr = 0xC0070000;
-//unsigned long hls_read_4_axi_addr = 0xC0060000;
-//unsigned long hls_write_4_ctl_axi_addr = 0x80070000;
-//unsigned long hls_write_4_axi_addr = 0x80060000;
+unsigned long hls_read_ctl_axi_addr = 0xC0010000;
+unsigned long hls_read_axi_addr = 0xC0000000;
+unsigned long hls_write_ctl_axi_addr = 0x80010000;
+unsigned long hls_write_axi_addr = 0x80000000;
+unsigned long hls_read_2_ctl_axi_addr = 0xC0030000;
+unsigned long hls_read_2_axi_addr = 0xC0020000;
+unsigned long hls_write_2_ctl_axi_addr = 0x80030000;
+unsigned long hls_write_2_axi_addr = 0x80020000;
+unsigned long hls_read_3_ctl_axi_addr = 0xC0050000;
+unsigned long hls_read_3_axi_addr = 0xC0040000;
+unsigned long hls_write_3_ctl_axi_addr = 0x80050000;
+unsigned long hls_write_3_axi_addr = 0x80040000;
+unsigned long hls_read_4_ctl_axi_addr = 0xC0070000;
+unsigned long hls_read_4_axi_addr = 0xC0060000;
+unsigned long hls_write_4_ctl_axi_addr = 0x80070000;
+unsigned long hls_write_4_axi_addr = 0x80060000;
 //unsigned long trace_read_ctl_axi_addr = 0x80020000;
 //unsigned long trace_read_axi_addr = 0x80010000;
 //unsigned long trace_control_axi_addr = 0x80000000;
 
-unsigned long hls_read_ctl_axi_addr = 0x40150000;
-unsigned long hls_read_axi_addr = 0xC0000000;
-unsigned long hls_write_ctl_axi_addr = 0x40110000;
-unsigned long hls_write_axi_addr = 0x80000000;
-unsigned long hls_read_2_ctl_axi_addr = 0x40160000;
-unsigned long hls_read_2_axi_addr = 0xC0020000;
-unsigned long hls_write_2_ctl_axi_addr = 0x40120000;
-unsigned long hls_write_2_axi_addr = 0x80020000;
-unsigned long hls_read_3_ctl_axi_addr = 0x40170000;
-unsigned long hls_read_3_axi_addr = 0xC0040000;
-unsigned long hls_write_3_ctl_axi_addr = 0x40130000;
-unsigned long hls_write_3_axi_addr = 0x80040000;
-unsigned long hls_read_4_ctl_axi_addr = 0x40180000;
-unsigned long hls_read_4_axi_addr = 0xC0060000;
-unsigned long hls_write_4_ctl_axi_addr = 0x40140000;
-unsigned long hls_write_4_axi_addr = 0x80060000;
+//unsigned long hls_read_ctl_axi_addr = 0x40150000;
+//unsigned long hls_read_axi_addr = 0xC0000000;
+//unsigned long hls_write_ctl_axi_addr = 0x40110000;
+//unsigned long hls_write_axi_addr = 0x80000000;
+//unsigned long hls_read_2_ctl_axi_addr = 0x40160000;
+//unsigned long hls_read_2_axi_addr = 0xC0020000;
+//unsigned long hls_write_2_ctl_axi_addr = 0x40120000;
+//unsigned long hls_write_2_axi_addr = 0x80020000;
+//unsigned long hls_read_3_ctl_axi_addr = 0x40170000;
+//unsigned long hls_read_3_axi_addr = 0xC0040000;
+//unsigned long hls_write_3_ctl_axi_addr = 0x40130000;
+//unsigned long hls_write_3_axi_addr = 0x80040000;
+//unsigned long hls_read_4_ctl_axi_addr = 0x40180000;
+//unsigned long hls_read_4_axi_addr = 0xC0060000;
+//unsigned long hls_write_4_ctl_axi_addr = 0x40140000;
+//unsigned long hls_write_4_axi_addr = 0x80060000;
 
 unsigned long hls_fifo_mode = AXI_STREAM_FIFO;
 unsigned long dma_size = 4096;
@@ -342,19 +347,24 @@ int main()
 		//	in[p++] = 0x44444440;
 	}
 
+	//pwrite test
+	//pwrite(hls_write, in, 0, 0x4);
+	//pread(hls_read, in, 0, 0x4);
+	//return 0;
+
 
 	double bw, avg;
-	double bw_arr[4][7][10];
+	double bw_arr[NUM_HLS][NUM_XFER_SIZE_STEPS][NUM_ITER];
 	bw = 0.0;
 	int i, j, k, x;
 
-	for(x = 0; x<4; x++)
+	for(x = 0; x<NUM_HLS; x++)
 	{
 		printf("Number of Threads: %d \n", x+1);
 
 		k = 0;
 
-		for(j = 4; j<=256; j=j*2)
+		for(j = 4; j<=FILE_SIZE_1/1024; j=j*2)
 		{
 			xfer_size_1 = TRANSFER_SIZE_1*j;
 			xfer_size_2 = TRANSFER_SIZE_1*j;
@@ -398,7 +408,7 @@ int main()
 	/*write to file*/
 	char* filename; 
 	filename = "statistics.csv";
-	create_csv(filename, bw_arr , 10, 7, 4);
+	create_csv(filename, bw_arr , NUM_ITER,NUM_XFER_SIZE_STEPS, NUM_HLS);
 
 	//	bw = spawn_threads(1, 0, 0, 0);
 	//	bw = spawn_threads(0, 1, 0, 0);
@@ -562,7 +572,6 @@ void *rx(void * file_desc)
 
 	total_bytes = 0;
 
-	//	while(1)
 	while(total_bytes < (FILE_SIZE_1*512/(2*2)))  //this holds amount of data constant
 	{
 		return_val = 1;
@@ -571,7 +580,7 @@ void *rx(void * file_desc)
 			case 0: 
 				printf ("timeout occured, no interrupt detected\n");
 				break;
-
+	
 			case -1:
 				printf("error occured in poll\n");
 				while(1);
@@ -599,6 +608,7 @@ void *rx(void * file_desc)
 					else if (return_val == 0)
 					{
 						zero_count = zero_count + 1;
+		//				sched_yield();
 					}
 				}
 
@@ -927,7 +937,7 @@ double spawn_threads(int file_1, int file_2, int file_3, int file_4)
 	return driver_bandwidth;
 }
 
-void create_csv(char *filename, double a[4][7][10],int n,int m, int x){
+void create_csv(char *filename, double a[NUM_HLS][NUM_XFER_SIZE_STEPS][NUM_ITER],int n,int m, int x){
 
 	printf("\n Creating %s file",filename);
 

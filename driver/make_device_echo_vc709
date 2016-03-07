@@ -1,4 +1,4 @@
-insmod vsi_driver.ko cdma_2_address="0x40002000" dma_byte_width=32 cdma_address="0x40001000" device_id="0x7028" dma_file_size=16384 dma_system_size=4194304 driver_type=1 enable_cdma_2=1 int_ctlr_address="0x40000000" major=241 pcie_ctl_address="0x40100000" pcie_m_address="0" 
+insmod vsi_driver_2.ko pci_devName="vsi_driver_2" cdma_2_address="0x40002000" dma_byte_width=32 cdma_address="0x40001000" device_id="0x7028" dma_file_size=16384 dma_system_size=4194304 driver_type=1 enable_cdma_2=1 int_ctlr_address="0x40000000" major=241 pcie_ctl_address="0x40003000" pcie_m_address="0" 
 
 rm -rf /dev/vsi_system_vc709_packet_p_arg_2_seq_o
 rm -rf /dev/vsi_system_vc709_packet_p_arg_1_seq_i

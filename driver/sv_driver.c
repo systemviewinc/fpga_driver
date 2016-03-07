@@ -80,6 +80,7 @@
 
 /***********Set default values for insmod parameters***************************/
 int device_id = 100;
+int device_id_2 = 0x07021;
 int major = 241;
 int cdma_address = 0xFFFFFFFF;
 int cdma_2_address = 0xFFFFFFFF;
@@ -91,9 +92,15 @@ int driver_type = PCI;
 int dma_system_size = 1048576;
 int dma_file_size = 4096;
 int dma_byte_width = 8;   //64b data width
+static char buffer[128];
+static char  *pci_devName = &buffer[0];
+//const char * pci_devName_const;
 
 module_param(device_id, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(device_id, "DeviceID");
+
+module_param(pci_devName, charp, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(pci_devName, "DeviceName");
 
 module_param(major, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(major, "MajorNumber");
@@ -129,7 +136,8 @@ module_param(dma_byte_width, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(dma_byte_width, "DMAByteWidth");
 /*****************************************************************************/
 
-const char pci_devName[] = "vsi_driver"; //name of the device
+//const char pci_devName[] = "vsi_driver"; //name of the device
+char pci_devName_const[128] ;
 unsigned long pci_bar_hw_addr;         //hardware base address of the device
 unsigned long pci_bar_size;            //hardware bar memory size
 unsigned long pci_bar_1_addr;         //hardware base address of the device
@@ -245,6 +253,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id);
 
 static struct pci_device_id ids[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_XILINX, 0x7022), },
+	//{ PCI_DEVICE(PCI_VENDOR_ID_XILINX, 0x7021), },
 	{ 0, }
 };
 
@@ -279,6 +288,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	int ret;
 	int pcie_m_set;
 	int int_ctrl_set;
+	int dynamic_major;
 	/* Do probing type stuff here.
 	 * 	 * Like calling request_region();
 	 * 	 	 */
@@ -399,7 +409,9 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 	//register the char device
 	if(0 > register_chrdev(major, pci_devName, &pci_fops)){
+//	dynamic_major = register_chrdev(0, pci_devName, &pci_fops);
 		printk(KERN_INFO"%s:<probe>char driver not registered\n", pci_devName);
+		printk(KERN_INFO"%s:<probe>char driver major number: 0x%x\n", major);
 		return ERROR;
 	}
 
@@ -637,8 +649,8 @@ static int sv_plat_remove(struct platform_device *pdev)
 }
 
 static struct pci_driver pci_driver = {
-	.name = "vsi_driver",
-	//	.name = pci_devName,
+	//.name = "vsi_driver",
+	.name = pci_devName_const,
 	.id_table = ids,
 	.probe = probe,
 	.remove = remove,
@@ -661,6 +673,12 @@ static int __init sv_driver_init(void)
 
 			ids[0].vendor =  PCI_VENDOR_ID_XILINX;
 			ids[0].device =  (u32)device_id;
+			//ids[1].vendor = PCI_VENDOR_ID_XILINX;
+			//ids[1].device = (u32)device_id;
+		
+			strcpy(pci_devName_const, pci_devName);
+			printk("using driver name: %s\n", pci_devName_const);
+			//pci_devName_const = pci_devName;
 
 			return pci_register_driver(&pci_driver);
 			break;
