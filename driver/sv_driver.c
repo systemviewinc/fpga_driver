@@ -33,6 +33,7 @@
 #include <linux/mutex.h>
 #include <linux/atomic.h>
 #include <linux/time.h>
+#include <linux/kthread.h>
 #include "sv_driver.h"
 
 /*IOCTLS */
@@ -80,7 +81,6 @@
 
 /***********Set default values for insmod parameters***************************/
 int device_id = 100;
-int device_id_2 = 0x07021;
 int major = 241;
 int cdma_address = 0xFFFFFFFF;
 int cdma_2_address = 0xFFFFFFFF;
@@ -190,6 +190,7 @@ size_t dma_size;
 wait_queue_head_t wq;
 wait_queue_head_t wq_periph;
 wait_queue_head_t mutexq;
+wait_queue_head_t thread_q_head;
 int cdma_comp[5];
 atomic_t cdma_atom[5];
 int num_int;
@@ -670,6 +671,7 @@ static int __init sv_driver_init(void)
 			init_waitqueue_head(&wq);
 			init_waitqueue_head(&wq_periph);
 			init_waitqueue_head(&mutexq);
+			init_waitqueue_head(&thread_q_head);
 
 			ids[0].vendor =  PCI_VENDOR_ID_XILINX;
 			ids[0].device =  (u32)device_id;
@@ -691,6 +693,7 @@ static int __init sv_driver_init(void)
 			init_waitqueue_head(&wq);
 			init_waitqueue_head(&wq_periph);
 			init_waitqueue_head(&mutexq);
+			init_waitqueue_head(&thread_q_head);
 
 			bar_0_axi_offset = 0x40000000;
 
@@ -970,14 +973,10 @@ int pci_open(struct inode *inode, struct file *filep)
 {
 	void * mode_address;
 	void * interrupt_count;
-	//	void * iwq;
-	//	void * int_count_sem;
-
-	//	void * kern_reg_write;
-	//	void * kern_reg_read;
 	struct mod_desc * s;
 	struct timespec * start_time;
 	struct timespec * stop_time;
+	struct task_struct * kthread;
 
 	atomic_t * atomic_poll;
 
@@ -987,10 +986,6 @@ int pci_open(struct inode *inode, struct file *filep)
 	atomic_poll = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
 
 	atomic_set(atomic_poll, 0);
-	//wait_queue_head_t * iwq;    //the interrupt wait queue for device
-
-	//	iwq = kmalloc(sizeof(wait_queue_head_t), GFP_KERNEL);
-	//	int_count_sem = kmalloc(sizeof(struct mutex), GFP_KERNEL);
 
 	mode_address = kmalloc(sizeof(int), GFP_KERNEL);
 	interrupt_count = kmalloc(sizeof(int), GFP_KERNEL);
@@ -1025,21 +1020,14 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->ip_not_ready = 0;
 	s->atomic_poll = atomic_poll;
 	s->set_dma_flag = 0;
-	//	s->iwq = (wait_queue_head_t*)iwq;
-	//	s->int_count_sem = (struct mutex*)int_count_sem;
+	s->thread_struct_write = NULL;
+	s->thread_q = 0;
 
 	verbose_printk(KERN_INFO"<pci_open>: minor number %d detected\n", s->minor);
 
 	/*set the private data field of the file pointer for file op use*/
 	filep->private_data = s;
 
-	/*initialize the DMA for the file*/
-	//	ret = dma_file_init(s, dma_file_size, dma_buffer_base, dma_buffer_size);
-	//	if (ret < 0)
-	//	{
-	//		printk(KERN_INFO"<pci_open>:!!!!file open FAILURE!!!!.\n");
-	//		return ERROR;
-	//	}
 
 	verbose_printk(KERN_INFO"<pci_open>: file open complete.\n");
 	return SUCCESS;
@@ -1055,6 +1043,7 @@ int pci_release(struct inode *inode, struct file *filep)
 	 * only be open once. */
 
 	struct mod_desc* mod_desc;
+	int ret = 0;
 
 	mod_desc = filep->private_data;
 
@@ -1071,6 +1060,16 @@ int pci_release(struct inode *inode, struct file *filep)
 	kfree((const void*)mod_desc->start_time);
 	kfree((const void*)mod_desc->stop_time);
 
+	//ret = kthread_stop(mod_desc->thread_struct_write);
+	mod_desc->thread_q = 1;
+	wake_up_interruptible(&thread_q_head);
+	while(kthread_stop(mod_desc->thread_struct_write)<0)
+	{
+		schedule();
+		mod_desc->thread_q = 1;
+		wake_up_interruptible(&thread_q_head);
+	}
+	
 	kfree((const void*)filep->private_data);
 
 	return SUCCESS;
@@ -1348,6 +1347,13 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 						ret = axi_stream_fifo_init(mod_desc);
 						if (ret < 0)
 							return ERROR;
+
+						//spawn write ring buff thread
+						//struct task_struct* kthread;
+						mod_desc->thread_struct_write = create_thread(mod_desc);
+						//msleep(100);
+						//ret = kthread_stop(mod_desc->thread_struct_write);
+						//spawn read ring buff thread
 					}
 
 					break;

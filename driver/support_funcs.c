@@ -57,6 +57,44 @@ u64 axi_cdma;
 u64 axi_cdma_2;
 
 /******************************** Support functions ***************************************/
+
+void write_thread(struct mod_desc *mod_desc)
+{
+	printk("Entered thread\n");
+	int ret = 0;
+//		ret = wait_event_interruptible(thread_q_head, mod_desc->thread_q == 1);
+//		mod_desc->thread_q = 0;
+//		printk("got past the wait event\n");
+
+	while(!kthread_should_stop()){
+		schedule();	
+		ret = wait_event_interruptible(thread_q_head, mod_desc->thread_q == 1);
+		mod_desc->thread_q = 0;
+		printk("got past the wait event\n");
+	}
+	printk("Leaving thread\n");
+}
+
+struct task_struct* create_thread(struct mod_desc *mod_desc)
+{
+	//struct task_struct * kthread_local;
+	struct task_struct * kthread_heap;
+	//kthread_heap = (struct task_struct*)kmalloc(sizeof(struct task_struct), GFP_KERNEL);
+	//kthread_local = kthread_create(write_thread,NULL,"vsi_write_thread");
+	kthread_heap = kthread_create(write_thread,(void*)mod_desc,"vsi_write_thread");
+
+	//memcpy(kthread_heap, kthread_local, sizeof(struct task_struct));
+
+	if((kthread_heap))
+	{
+		printk("thread created\n");
+		wake_up_process(kthread_heap);
+	}
+	return kthread_heap;
+}
+
+
+
 int dma_file_init(struct mod_desc *mod_desc, void *dma_buffer_base, u64 dma_buffer_size)
 {
 
@@ -879,7 +917,7 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
 	/*This While loop will continuously loop until the axi streaming fifo is empty
 	 * if there is a holdup in data, we are stuck here....  */
 
-		fifo_empty_level = (((u32)(mod_desc->file_size))/8)-4;  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
+	fifo_empty_level = (((u32)(mod_desc->file_size))/8)-4;  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
 	//	fifo_empty_level = (((u32)(mod_desc->file_size))/32)-4;  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
 	//fifo_empty_level = (u32)(((u32)(mod_desc->file_size)/(u32)dma_byte_width)-4);  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
 

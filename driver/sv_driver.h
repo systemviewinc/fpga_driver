@@ -1,4 +1,6 @@
 
+#include <linux/kthread.h>
+
 /*These are the CDMA R/W types */
 #ifndef KEYHOLE_WRITE
 #define KEYHOLE_WRITE 2
@@ -65,7 +67,7 @@ extern int pcie_m_address;
 extern wait_queue_head_t wq;
 extern wait_queue_head_t wq_periph;
 extern wait_queue_head_t mutexq;
-
+extern wait_queue_head_t thread_q_head;
 /*this is the CDMA wait condition variable*/
 extern int cdma_comp[5];
 extern atomic_t cdma_atom[5];
@@ -112,6 +114,8 @@ struct mod_desc
 	int ip_not_ready;
 	atomic_t * atomic_poll;
 	int set_dma_flag;
+	struct task_struct * thread_struct_write;
+	int thread_q;
 };
 
 /*this is the interrupt structure*/
@@ -160,4 +164,6 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc);
 int axi_stream_fifo_init(struct mod_desc * mod_desc);
 void cdma_wait_sleep(int cdma_num);
 void cdma_idle_poll(int cdma_num);
+void write_thread(struct mod_desc *mod_desc);
+struct task_struct* create_thread(struct mod_desc *mod_desc);
 // ******************************************************************
