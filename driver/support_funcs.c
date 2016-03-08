@@ -58,8 +58,26 @@ u64 axi_cdma_2;
 
 /******************************** Support functions ***************************************/
 
+int data_to_write(struct mod_desc *mod_desc)
+{
+	int wth, wtk;
+	
+	wth = atomic_read(mod_desc->wth);
+	wtk = atomic_read(mod_desc->wtk);
+	
+	if(wtk == wth)
+		return 0;
+
+	if(wtk > wth)
+		return wtk-wth;
+
+	if(wtk < wth)
+		return wtk+(mod_desc->file_size)-wth;
+}
+
 void write_thread(struct mod_desc *mod_desc)
 {
+	int d2w = 0;
 	printk("Entered thread\n");
 	int ret = 0;
 //		ret = wait_event_interruptible(thread_q_head, mod_desc->thread_q == 1);
@@ -67,10 +85,21 @@ void write_thread(struct mod_desc *mod_desc)
 //		printk("got past the wait event\n");
 
 	while(!kthread_should_stop()){
-		schedule();	
 		ret = wait_event_interruptible(thread_q_head, mod_desc->thread_q == 1);
 		mod_desc->thread_q = 0;
-		printk("got past the wait event\n");
+
+		/*Determine amount of data to write*/
+		d2w = data_to_write(mod_desc);
+		while(d2w>0)
+		{
+		/*write the data*/
+
+		/*update write pointer*/
+
+		/*update data_to_write*/
+		d2w = data_to_write(mod_desc);
+		}
+		
 	}
 	printk("Leaving thread\n");
 }

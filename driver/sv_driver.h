@@ -116,6 +116,8 @@ struct mod_desc
 	int set_dma_flag;
 	struct task_struct * thread_struct_write;
 	int thread_q;
+	atomic_t * wth;    //write to hardware pointer
+	atomic_t * wtk;    //write to kernel pointer
 };
 
 /*this is the interrupt structure*/
@@ -166,4 +168,5 @@ void cdma_wait_sleep(int cdma_num);
 void cdma_idle_poll(int cdma_num);
 void write_thread(struct mod_desc *mod_desc);
 struct task_struct* create_thread(struct mod_desc *mod_desc);
+int data_to_write(struct mod_desc *mod_desc);
 // ******************************************************************

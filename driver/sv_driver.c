@@ -979,13 +979,19 @@ int pci_open(struct inode *inode, struct file *filep)
 	struct task_struct * kthread;
 
 	atomic_t * atomic_poll;
+	atomic_t * wth;
+	atomic_t * wtk;
 
 	start_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
 	stop_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
 
 	atomic_poll = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
+	wtk = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
+	wth = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
 
 	atomic_set(atomic_poll, 0);
+	atomic_set(wth, 1);
+	atomic_set(wtk, 1);
 
 	mode_address = kmalloc(sizeof(int), GFP_KERNEL);
 	interrupt_count = kmalloc(sizeof(int), GFP_KERNEL);
@@ -1022,6 +1028,8 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->set_dma_flag = 0;
 	s->thread_struct_write = NULL;
 	s->thread_q = 0;
+	s->wth = wth;
+	s->wtk = wtk;
 
 	verbose_printk(KERN_INFO"<pci_open>: minor number %d detected\n", s->minor);
 
