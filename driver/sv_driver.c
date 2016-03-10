@@ -205,7 +205,7 @@ const u32 INT_CTRL_IAR      = 0x0C;
 
 
 /*This is an array of interrupt structures to hold up to 8 peripherals*/
-struct interr_struct interr_dict[8] = {{ 0 }};
+struct interr_struct interr_dict[12] = {{ 0 }};
 
 /*ISR Tasklet */
 void do_isr_tasklet(unsigned long);

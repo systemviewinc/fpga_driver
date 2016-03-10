@@ -125,7 +125,7 @@ struct interr_struct
 
 };
 
-extern struct interr_struct interr_dict[8];
+extern struct interr_struct interr_dict[12];
 
 struct statistics
 {
