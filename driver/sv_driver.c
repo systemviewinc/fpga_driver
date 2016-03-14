@@ -36,48 +36,6 @@
 #include <linux/kthread.h>
 #include "sv_driver.h"
 
-/*IOCTLS */
-#define SET_AXI_DEVICE 50
-#define SET_AXI_CDMA  51
-#define SET_AXI_PCIE_CTL 52
-#define SET_AXI_PCIE_M 53
-#define SET_AXI_INT_CTRL 54
-#define SET_AXI_DEV_SI 55
-#define SET_AXI_DEV_M 56
-#define CLEAR_AXI_INTERRUPT_CTLR 60
-#define SET_CDMA_KEYHOLE_WRITE 58
-#define SET_CDMA_KEYHOLE_READ 59
-#define SET_MODE 62
-#define SET_INTERRUPT 61
-#define SET_AXI_CTL_DEVICE 63
-#define SET_DMA_SIZE 64
-#define RESET_DMA_ALLOC 65
-#define SET_FILE_SIZE 66
-#define GET_FILE_STATISTICS 67
-#define GET_DRIVER_STATISTICS 70
-#define START_FILE_TIMER 68
-#define STOP_FILE_TIMER 69
-#define START_DRIVER_TIMER 71
-#define STOP_DRIVER_TIMER 72
-
-#define ERROR   -1
-#define SUCCESS 0
-
-/* MODE Types */
-#define SLAVE 0
-#define AXI_STREAM_FIFO 1
-#define MASTER 2
-#define CDMA 3
-
-
-
-#define MAX_NUM_MASTERS 2
-#define MAX_NUM_SLI 4  // Max number of slaves with interrupts
-#define MAX_NUM_INT MAX_NUM_MASTERS + MAX_NUM_SLI
-
-/*These are the Driver types that are matched through insmod parameter "driver_type" */
-#define PCI 1
-#define PLATFORM 2
 
 /***********Set default values for insmod parameters***************************/
 int device_id = 100;
@@ -410,7 +368,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 	//register the char device
 	if(0 > register_chrdev(major, pci_devName, &pci_fops)){
-//	dynamic_major = register_chrdev(0, pci_devName, &pci_fops);
+		//	dynamic_major = register_chrdev(0, pci_devName, &pci_fops);
 		printk(KERN_INFO"%s:<probe>char driver not registered\n", pci_devName);
 		printk(KERN_INFO"%s:<probe>char driver major number: 0x%x\n", major);
 		return ERROR;
@@ -677,7 +635,7 @@ static int __init sv_driver_init(void)
 			ids[0].device =  (u32)device_id;
 			//ids[1].vendor = PCI_VENDOR_ID_XILINX;
 			//ids[1].device = (u32)device_id;
-		
+
 			strcpy(pci_devName_const, pci_devName);
 			printk("using driver name: %s\n", pci_devName_const);
 			//pci_devName_const = pci_devName;
@@ -1077,7 +1035,7 @@ int pci_release(struct inode *inode, struct file *filep)
 		mod_desc->thread_q = 1;
 		wake_up_interruptible(&thread_q_head);
 	}
-	
+
 	kfree((const void*)filep->private_data);
 
 	return SUCCESS;
@@ -1468,6 +1426,55 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	bytes = 0;
 	bytes_written = 0;
 
+	//loop here until all data is transferred from the write call into the DMA buffer
+	//	while (bytes_written < count)
+	//	{
+	//		partial_count = count - bytes_written;
+	//		
+	//		if (partial_count > mod_desc->dma_size) //this is the maximum allowable transfer size to DMA buffer
+	//		{
+	//			remaining_size = count - bytes_written;
+	//			verbose_printk(KERN_INFO"<pci_write>: the current DMA Buffer size of: 0x%x is not large enough for *remaining* transfer size:%zu bytes\n", mod_desc->dma_size, remaining_size);
+	//			partial_count = mod_desc->dma_size;
+	//		}
+	//
+	//		verbose_printk(KERN_INFO"<pci_write>: the amount of bytes being copied to kernel: %zu\n", partial_count);
+	//
+	//		//if memory interface, do a normal blocking write
+	//		{
+	//			ret = copy_from_user(mod_desc->dma_write, (buf + bytes_written), partial_count);
+	//			//call write_data() with ring pointer offset as the current file pointer.
+	//				//write_data() is blocking/looping until all passed data is written to the HW
+	//			// update the file pointer
+	//			if (transfer_type == NORMAL_WRITE)
+	//			{
+	//				*f_pos = *f_pos + partial_count;
+	//
+	//				if (*f_pos == mod_desc->file_size)
+	//				{
+	//					*f_pos = 0;
+	//					verbose_printk(KERN_INFO"<user_peripheral_write>: Resetting file pointer back to zero...\n");
+	//				}
+	//				else if (*f_pos > mod_desc->file_size)
+	//				{
+	//					//perform the pointer wrap around, this is no longer an error. Eventually the ping pong buffer
+	//					//  HW logic will control the data flow into a different buffer in this case.
+	//					//printk(KERN_INFO"<user_peripheral_write>: ERROR! Wrote past the file size. This should not have happened...\n");
+	//					//printk(KERN_INFO"<user_peripheral_write>: Resetting file pointer back to zero...\n");
+	//					//*f_pos = something;
+	//				}
+	//				verbose_printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llx\n", *f_pos);
+	//			}
+	//		}
+	//		
+	//	
+	//	//else if streaming fifo inferface, use the ring buffer
+	//	ring_buffer_query(mod_desc, partial_count); //blocks until count is able to be copied to the ring buff
+	//	ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), partial_count);
+	//	//atomic_set(wtk, new)
+	//	//wake up write thread
+	//	}
+
 	verbose_printk(KERN_INFO"\n\n");
 	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n");
 	verbose_printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION BEGIN  **************************\n");
@@ -1531,7 +1538,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		if (*(mod_desc->mode) == AXI_STREAM_FIFO)
 		{
 
-			bytes = axi_stream_fifo_write(partial_count, mod_desc);
+			bytes = axi_stream_fifo_write(partial_count, mod_desc, 0);
 			if (bytes < 0)
 			{
 				printk(KERN_INFO"<pci_write>: Write Error, exiting write routine...\n\n\n");
@@ -1811,3 +1818,4 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 	return bytes;
 }
+

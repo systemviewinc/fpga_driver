@@ -28,6 +28,48 @@
 #endif
 /******************************/
 
+/*IOCTLS */
+#define SET_AXI_DEVICE 50
+#define SET_AXI_CDMA  51
+#define SET_AXI_PCIE_CTL 52
+#define SET_AXI_PCIE_M 53
+#define SET_AXI_INT_CTRL 54
+#define SET_AXI_DEV_SI 55
+#define SET_AXI_DEV_M 56
+#define CLEAR_AXI_INTERRUPT_CTLR 60
+#define SET_CDMA_KEYHOLE_WRITE 58
+#define SET_CDMA_KEYHOLE_READ 59
+#define SET_MODE 62
+#define SET_INTERRUPT 61
+#define SET_AXI_CTL_DEVICE 63
+#define SET_DMA_SIZE 64
+#define RESET_DMA_ALLOC 65
+#define SET_FILE_SIZE 66
+#define GET_FILE_STATISTICS 67
+#define GET_DRIVER_STATISTICS 70
+#define START_FILE_TIMER 68
+#define STOP_FILE_TIMER 69
+#define START_DRIVER_TIMER 71
+#define STOP_DRIVER_TIMER 72
+
+#define ERROR   -1
+#define SUCCESS 0
+
+/* MODE Types */
+#define SLAVE 0
+#define AXI_STREAM_FIFO 1
+#define MASTER 2
+#define CDMA 3
+
+
+
+#define MAX_NUM_MASTERS 2
+#define MAX_NUM_SLI 4  // Max number of slaves with interrupts
+#define MAX_NUM_INT MAX_NUM_MASTERS + MAX_NUM_SLI
+
+/*These are the Driver types that are matched through insmod parameter "driver_type" */
+#define PCI 1
+#define PLATFORM 2
 
 /* Shared Global Variables */
 
@@ -79,6 +121,16 @@ extern const u32 INT_CTRL_MER;
 extern const u32 INT_CTRL_ISR;
 extern const u32 INT_CTRL_IAR;
 
+extern atomic_t driver_tx_bytes; 
+extern atomic_t driver_rx_bytes; 
+extern atomic_t driver_start_flag;
+extern atomic_t driver_stop_flag;
+extern struct timespec driver_start_time;
+extern struct timespec driver_stop_time;
+
+extern void * dma_buffer_base;
+extern u32 dma_current_offset;
+extern u64 dma_buffer_size;
 /*this is the module description struct*/
 
 struct mod_desc
@@ -161,7 +213,7 @@ void pcie_m_init(int cdma_num);
 void int_ctlr_init(u64 axi_address);
 //int dma_file_init(struct mod_desc *mod_desc, int dma_file_size, void *dma_buffer_base, u64 dma_buffer_size);
 int dma_file_init(struct mod_desc *mod_desc, void *dma_buffer_base, u64 dma_buffer_size);
-size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc);
+size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_pointer_offset);
 size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc);
 int axi_stream_fifo_init(struct mod_desc * mod_desc);
 void cdma_wait_sleep(int cdma_num);
@@ -169,4 +221,6 @@ void cdma_idle_poll(int cdma_num);
 void write_thread(struct mod_desc *mod_desc);
 struct task_struct* create_thread(struct mod_desc *mod_desc);
 int data_to_write(struct mod_desc *mod_desc);
+int write_data(struct mod_desc* mod_desc, int count, u64 ring_pointer_offset);
+int get_new_ring_pointer(int ring_pointer_offset, int bytes_written, struct mod_desc* mod_desc);
 // ******************************************************************

@@ -58,13 +58,212 @@ u64 axi_cdma_2;
 
 /******************************** Support functions ***************************************/
 
+int write_data(struct mod_desc* mod_desc, int count, u64 ring_pointer_offset)
+{
+
+	size_t partial_count;
+	int bytes_written;
+	u64 dma_offset_write;
+	u64 dma_offset_internal_read;
+	u64 dma_offset_internal_write;
+	int bytes, ret;
+	u64 axi_dest;
+	int transfer_type;
+
+	verbose_printk(KERN_INFO"\n\n");
+	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n");
+	verbose_printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION BEGIN  **************************\n");
+	verbose_printk(KERN_INFO"<pci_write>:                  Attempting to transfer %zu bytes\n", count);
+	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n\n");
+
+	if(mod_desc->set_dma_flag == 0)
+	{
+		ret = dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size);
+		if (ret < 0)
+		{
+			printk(KERN_INFO"<pci_write>:!!!! DMA init FAILURE!!!!.\n");
+			return ERROR;
+		}
+		printk(KERN_INFO"<pci_write>: Warning - Set the DMA file size to default value %d. IOCTL SET_FILE_SIZE was never called for file minor: %d.\n", (int)mod_desc->file_size, (int)mod_desc->minor);
+		mod_desc->set_dma_flag = 1;
+	}
+
+	/*Start timers for statistics*/
+	if (mod_desc->start_flag == 1)
+	{
+		getnstimeofday(mod_desc->start_time);
+		mod_desc->start_flag = 0;
+	}
+
+	if (atomic_read(&driver_start_flag) == 1)
+	{
+		getnstimeofday(&driver_start_time);
+		atomic_set(&driver_start_flag, 0);
+	}
+
+	bytes_written = 0;
+	bytes = 0;
+
+	while(bytes_written < count)
+	{
+		partial_count = count - bytes_written;
+
+		/*Check to see if write will go past the boundary*/
+		if((partial_count + ring_pointer_offset) > mod_desc->file_size)
+		{
+			verbose_printk(KERN_INFO"<user_peripheral_write>: End of file overrun!\n");
+			partial_count = (size_t)(mod_desc->file_size - ring_pointer_offset);
+			verbose_printk(KERN_INFO"<user_peripheral_write>: Only writing %zu bytes to end of file!\n", partial_count);
+			//return bytes_written + partial_count;
+		}
+
+		if (*(mod_desc->mode) == AXI_STREAM_FIFO)
+		{
+
+			bytes = axi_stream_fifo_write(partial_count, mod_desc, ring_pointer_offset);
+			if (bytes < 0)
+			{
+				printk(KERN_INFO"<pci_write>: Write Error, exiting write routine...\n\n\n");
+				return -1;
+			}
+			if (bytes == 0)
+			{
+				return count;   //why would this happen?
+			}
+
+		}
+
+		else
+		{
+			dma_offset_write = ((u64)mod_desc->dma_offset_write);
+			dma_offset_internal_read = (u64)mod_desc->dma_offset_internal_read;
+			dma_offset_internal_write = (u64)mod_desc->dma_offset_internal_write;
+
+			verbose_printk(KERN_INFO"<pci_write>: DMA offset write value: %llx\n", dma_offset_write);
+			verbose_printk(KERN_INFO"<pci_write>: DMA internal offset write value: %llx\n", dma_offset_internal_write);
+			verbose_printk(KERN_INFO"<pci_write>: DMA internal offset read value: %llx\n", dma_offset_internal_read);
+
+			axi_dest = mod_desc->axi_addr + ring_pointer_offset;
+
+			if (mod_desc->keyhole_config & 0x1)
+				transfer_type = KEYHOLE_WRITE;
+			else
+				transfer_type = NORMAL_WRITE;
+
+			verbose_printk(KERN_INFO"<pci_write>: writing peripheral using a transfer_type: %x\n", transfer_type);
+
+			verbose_printk(KERN_INFO"<user_peripheral_write>: current file offset is: %llx\n", ring_pointer_offset);
+
+			if (transfer_type == NORMAL_WRITE)
+			{
+				/*Check to see if write will go past the boundary*/
+				if((partial_count + ring_pointer_offset) > mod_desc->file_size)
+				{
+					verbose_printk(KERN_INFO"<user_peripheral_write>: End of file overrun!\n");
+					partial_count = (size_t)(mod_desc->file_size - ring_pointer_offset);
+					verbose_printk(KERN_INFO"<user_peripheral_write>: Only writing %zu bytes to end of file!\n", partial_count);
+					//return bytes_written + partial_count;
+				}
+			}
+
+			ret = data_transfer(axi_dest, 0, partial_count, transfer_type, dma_offset_write);
+			if (ret > 0)
+			{
+				printk(KERN_INFO"<pci_write>: ERROR writing to User Peripheral\n");
+				return -1;
+			}
+
+
+		}
+
+		ring_pointer_offset = ring_pointer_offset + partial_count;
+
+		if (ring_pointer_offset == mod_desc->file_size)
+		{
+			ring_pointer_offset = 0;
+			verbose_printk(KERN_INFO"<user_peripheral_write>: Resetting file pointer back to zero...\n");
+		}
+		else if (ring_pointer_offset > mod_desc->file_size)
+		{
+			printk(KERN_INFO"<user_peripheral_write>: ERROR! Wrote past the file size. This should not have happened...\n");
+			printk(KERN_INFO"<user_peripheral_write>: Resetting file pointer back to zero...\n");
+			return -1;
+		}
+
+		bytes_written = bytes_written + partial_count;
+		verbose_printk(KERN_INFO"<pci_write>: Wrote %zu bytes in this pass.\n", partial_count);
+	}
+	//bytes = bytes_written;
+
+	//msleep(5000);   //experiment....
+
+	//file statistics
+	mod_desc->tx_bytes = mod_desc->tx_bytes + bytes_written;
+	atomic_add(bytes_written, &driver_tx_bytes);
+	//printk(KERN_INFO"total file tx byes: %d \n", mod_desc->tx_bytes);
+
+	/*always update the stop_timer*/
+	getnstimeofday(mod_desc->stop_time);
+	getnstimeofday(&driver_stop_time);
+
+	verbose_printk(KERN_INFO"\n");
+	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n");
+	verbose_printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION END  **************************\n");
+	verbose_printk(KERN_INFO"<pci_write>: Wrote a total of %zu bytes in write call.\n", bytes_written);
+	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n");
+	verbose_printk(KERN_INFO"\n");
+	return bytes_written;
+}
+
+size_t query_ring_buff(struct mod_desc* mod_desc, size_t count)
+{
+	int wth, wtk;
+	wtk = atomic_read(mod_desc->wtk);
+	int max_space;
+
+	max_space = 0;
+	while(max_space < count)
+	{
+		wth = atomic_read(mod_desc->wth);
+		while(wth==wtk)
+		{
+			schedule();   //blocking so we don't overwrite
+			wth = atomic_read(mod_desc->wth);
+		}
+
+		if(wth<wtk)
+		{
+			max_space = (mod_desc->file_size)-wtk+wth; //wrap around case
+		}
+		else
+		{
+			max_space = wth-wtk;
+		}
+		if(max_space < count)
+			schedule();
+	}
+
+	return count;
+}
+
+int get_new_ring_pointer(int ring_pointer_offset, int bytes_written, struct mod_desc* mod_desc)
+{
+	int new_pointer;
+
+	//find new pointer and take wrap around into account
+
+	return new_pointer;
+}
+
+
+
 int data_to_write(struct mod_desc *mod_desc)
 {
 	int wth, wtk;
-	
+
 	wth = atomic_read(mod_desc->wth);
 	wtk = atomic_read(mod_desc->wtk);
-	
+
 	if(wtk == wth)
 		return 0;
 
@@ -80,9 +279,12 @@ void write_thread(struct mod_desc *mod_desc)
 	int d2w = 0;
 	printk("Entered thread\n");
 	int ret = 0;
-//		ret = wait_event_interruptible(thread_q_head, mod_desc->thread_q == 1);
-//		mod_desc->thread_q = 0;
-//		printk("got past the wait event\n");
+	int ring_pointer_offset;
+	int bytes_written;
+
+	//		ret = wait_event_interruptible(thread_q_head, mod_desc->thread_q == 1);
+	//		mod_desc->thread_q = 0;
+	//		printk("got past the wait event\n");
 
 	while(!kthread_should_stop()){
 		ret = wait_event_interruptible(thread_q_head, mod_desc->thread_q == 1);
@@ -92,14 +294,18 @@ void write_thread(struct mod_desc *mod_desc)
 		d2w = data_to_write(mod_desc);
 		while(d2w>0)
 		{
-		/*write the data*/
+			/*write the data*/
+			ring_pointer_offset = atomic_read(mod_desc->wth);
+			bytes_written = write_data(mod_desc, d2w, (u64)ring_pointer_offset);
 
-		/*update write pointer*/
+			/*update write pointer*/
+			ring_pointer_offset = get_new_ring_pointer(ring_pointer_offset, bytes_written, mod_desc);
+			atomic_set(mod_desc->wth, ring_pointer_offset);
 
-		/*update data_to_write*/
-		d2w = data_to_write(mod_desc);
+			/*check for any new data_to_write*/
+			d2w = data_to_write(mod_desc);
 		}
-		
+
 	}
 	printk("Leaving thread\n");
 }
@@ -654,6 +860,8 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 	//	verbose_printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA_MSB address ('%x') to CDMA at axi address:%llx\n", SA_MSB, axi_dest);
 	//Writing SA_LSB
 	axi_dest = axi_cdma_loc + CDMA_SA;
+	printk(KERN_INFO"	<pci_dma_transfer>:CDMA Checkpoint 1\n");
+	
 	direct_write(axi_dest, (void*)&SA_LSB, 4, NORMAL_WRITE);
 	verbose_printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA_LSB address ('%x') to CDMA at axi address:%llx\n", SA_LSB, axi_dest);
 	//read the status register
@@ -688,7 +896,9 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 
 	//	cdma_wait_sleep(cdma_num);
 
+	printk(KERN_INFO"	<pci_dma_transfer>:CDMA Checkpoint 2\n");
 	cdma_idle_poll(cdma_num);
+	printk(KERN_INFO"	<pci_dma_transfer>:CDMA Checkpoint 3\n");
 
 	//	iret = wait_event_interruptible(wq, cdma_comp[cdma_num] != 0);
 	//	ret = wait_event_interruptible(wq, atomic_read(&cdma_atom[cdma_num]) != 0);
@@ -759,7 +969,7 @@ void cdma_idle_poll(int cdma_num)
 	{
 		/* Check the status of the CDMA to see if successful */
 		ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
-		verbose_printk(KERN_INFO"	<cdma_ack>: CDMA status:%x\n", status);
+		printk(KERN_INFO"	<cdma_ack>: CDMA status:%x\n", status);
 	}
 	if (status == 0xFFFFFFFF)
 	{
@@ -902,7 +1112,7 @@ int cdma_ack(cdma_num)
 	}
 }
 
-size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
+size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_pointer_offset)
 {
 	u64 axi_dest;
 	u32 init_write;
@@ -918,7 +1128,7 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc)
 	verbose_printk(KERN_INFO"<axi_stream_fifo_write>: number of bytes to write:%zu\n", count);
 
 	init_write = *((u32*)(mod_desc->dma_write));
-	dma_offset_write = (u64)mod_desc->dma_offset_write;
+	dma_offset_write = ((u64)mod_desc->dma_offset_write) + ring_pointer_offset;
 	dma_offset_internal_read = (u64)mod_desc->dma_offset_internal_read;
 	dma_offset_internal_write = (u64)mod_desc->dma_offset_internal_write;
 
@@ -1121,6 +1331,7 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFR;
 	*(mod_desc->kernel_reg_write) = 0x000000A5;
 	buf = 0x000000A5;
+	printk(KERN_INFO"<axi_stream_fifo_init>: Checkpoint 1\n");
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
 	if (ret > 0)
 	{
@@ -1128,6 +1339,7 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 		return -1;
 	}
 	verbose_printk(KERN_INFO"<axi_fifo_isr_reg>: Reset the  the axi fifo\n");
+	printk(KERN_INFO"<axi_stream_fifo_init>: Checkpoint 2\n");
 
 	//reset The receive side
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RDFR;
@@ -1151,6 +1363,7 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 		return -1;
 	}
 	verbose_printk(KERN_INFO"<axi_fifo_isr_reg>:%x\n", *(mod_desc->kernel_reg_read));
+	printk(KERN_INFO"<axi_stream_fifo_init>: Checkpoint 2\n");
 
 	//reset interrupts on CTL interface
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
