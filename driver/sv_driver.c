@@ -1416,6 +1416,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	u64 dma_offset_internal_read;
 	u64 dma_offset_internal_write;
 
+	int wtk;
 	bytes = 0;
 
 	/*this gets the minor number of the calling file so we can map the correct AXI address
@@ -1426,7 +1427,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	bytes = 0;
 	bytes_written = 0;
 
-	//loop here until all data is transferred from the write call into the DMA buffer
+		//loop here until all data is transferred from the write call into the DMA buffer
 	//	while (bytes_written < count)
 	//	{
 	//		partial_count = count - bytes_written;
@@ -1442,8 +1443,10 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	//
 	//		//if memory interface, do a normal blocking write
 	//		{
+
 	//			ret = copy_from_user(mod_desc->dma_write, (buf + bytes_written), partial_count);
 	//			//call write_data() with ring pointer offset as the current file pointer.
+	//			// we don't care if the write will go past the file boundary as the  write_data() will handle it.
 	//				//write_data() is blocking/looping until all passed data is written to the HW
 	//			// update the file pointer
 	//			if (transfer_type == NORMAL_WRITE)
@@ -1458,10 +1461,8 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	//				else if (*f_pos > mod_desc->file_size)
 	//				{
 	//					//perform the pointer wrap around, this is no longer an error. Eventually the ping pong buffer
-	//					//  HW logic will control the data flow into a different buffer in this case.
-	//					//printk(KERN_INFO"<user_peripheral_write>: ERROR! Wrote past the file size. This should not have happened...\n");
-	//					//printk(KERN_INFO"<user_peripheral_write>: Resetting file pointer back to zero...\n");
-	//					//*f_pos = something;
+	//					//  HW logic will control the data flow into a different buffer in this case. (maybe?)
+	//					*f_pos = *f_pos - mod_desc->file_size;
 	//				}
 	//				verbose_printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llx\n", *f_pos);
 	//			}
@@ -1470,10 +1471,24 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	//	
 	//	//else if streaming fifo inferface, use the ring buffer
 	//	ring_buffer_query(mod_desc, partial_count); //blocks until count is able to be copied to the ring buff
-	//	ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), partial_count);
-	//	//atomic_set(wtk, new)
-	//	//wake up write thread
+	//	//if we need to wrap around the ring buffer....
+	// 	wtk = atomic_read(mod_desc->wtk);
+     	//      if(partial_count + wtk > mod_desc->file_size)
+	//	{
+	//      	ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), mod_desc->dma_file_size - wtk);   //write until end of ring buff
+	//      	ret = copy_from_user((mod_desc->dma_write), (buf + bytes_written), partial_count - (mod_desc->dma_file_size -wtk));   //write the remaining
 	//	}
+	//      else
+	//		ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), partial_count); 
+	//
+	//	wtk = get_new_ring_pointer(bytes_written, wtk, (int)mod_desc->file_size);
+        //      atomic_set(mod_desc->wtk, wtk);
+
+	//	//wake up write thread
+	//	mod_desc->thread_q = 1;
+	//	wake_up_interruptible(&thread_q_head);
+	//	}
+	//	return bytes_written;
 
 	verbose_printk(KERN_INFO"\n\n");
 	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n");

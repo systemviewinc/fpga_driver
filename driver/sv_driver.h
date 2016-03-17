@@ -222,5 +222,5 @@ void write_thread(struct mod_desc *mod_desc);
 struct task_struct* create_thread(struct mod_desc *mod_desc);
 int data_to_write(struct mod_desc *mod_desc);
 int write_data(struct mod_desc* mod_desc, int count, u64 ring_pointer_offset);
-int get_new_ring_pointer(int ring_pointer_offset, int bytes_written, struct mod_desc* mod_desc);
+int get_new_ring_pointer(int bytes_written, int ring_pointer_offset, int file_size);
 // ******************************************************************

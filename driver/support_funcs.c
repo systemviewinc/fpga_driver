@@ -246,13 +246,13 @@ size_t query_ring_buff(struct mod_desc* mod_desc, size_t count)
 	return count;
 }
 
-int get_new_ring_pointer(int ring_pointer_offset, int bytes_written, struct mod_desc* mod_desc)
+int get_new_ring_pointer(int bytes_written, int ring_pointer_offset, int file_size)
 {
-	int new_pointer;
-
 	//find new pointer and take wrap around into account
-
-	return new_pointer;
+	if (ring_pointer_offset+bytes_written >= file_size)
+		return file_size - (ring_pointer_offset + bytes_written);
+	else
+		return ring_pointer_offset + bytes_written;
 }
 
 
@@ -299,7 +299,7 @@ void write_thread(struct mod_desc *mod_desc)
 			bytes_written = write_data(mod_desc, d2w, (u64)ring_pointer_offset);
 
 			/*update write pointer*/
-			ring_pointer_offset = get_new_ring_pointer(ring_pointer_offset, bytes_written, mod_desc);
+			ring_pointer_offset = get_new_ring_pointer(bytes_written, ring_pointer_offset, (int)(mod_desc->file_size));
 			atomic_set(mod_desc->wth, ring_pointer_offset);
 
 			/*check for any new data_to_write*/
@@ -860,7 +860,6 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 	//	verbose_printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA_MSB address ('%x') to CDMA at axi address:%llx\n", SA_MSB, axi_dest);
 	//Writing SA_LSB
 	axi_dest = axi_cdma_loc + CDMA_SA;
-	printk(KERN_INFO"	<pci_dma_transfer>:CDMA Checkpoint 1\n");
 	
 	direct_write(axi_dest, (void*)&SA_LSB, 4, NORMAL_WRITE);
 	verbose_printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA_LSB address ('%x') to CDMA at axi address:%llx\n", SA_LSB, axi_dest);
@@ -896,9 +895,7 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 
 	//	cdma_wait_sleep(cdma_num);
 
-	printk(KERN_INFO"	<pci_dma_transfer>:CDMA Checkpoint 2\n");
 	cdma_idle_poll(cdma_num);
-	printk(KERN_INFO"	<pci_dma_transfer>:CDMA Checkpoint 3\n");
 
 	//	iret = wait_event_interruptible(wq, cdma_comp[cdma_num] != 0);
 	//	ret = wait_event_interruptible(wq, atomic_read(&cdma_atom[cdma_num]) != 0);
@@ -968,8 +965,9 @@ void cdma_idle_poll(int cdma_num)
 	while(((u32)status & 0x02) != 0x02)  //this means while CDMA is NOT idle
 	{
 		/* Check the status of the CDMA to see if successful */
+		//msleep(1000);   //experiment....
 		ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
-		printk(KERN_INFO"	<cdma_ack>: CDMA status:%x\n", status);
+		//printk(KERN_INFO"	<cdma_ack>: CDMA status:%x\n", status);
 	}
 	if (status == 0xFFFFFFFF)
 	{
@@ -1331,7 +1329,6 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFR;
 	*(mod_desc->kernel_reg_write) = 0x000000A5;
 	buf = 0x000000A5;
-	printk(KERN_INFO"<axi_stream_fifo_init>: Checkpoint 1\n");
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
 	if (ret > 0)
 	{
@@ -1339,7 +1336,6 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 		return -1;
 	}
 	verbose_printk(KERN_INFO"<axi_fifo_isr_reg>: Reset the  the axi fifo\n");
-	printk(KERN_INFO"<axi_stream_fifo_init>: Checkpoint 2\n");
 
 	//reset The receive side
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RDFR;
