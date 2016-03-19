@@ -58,7 +58,7 @@ u64 axi_cdma_2;
 
 /******************************** Support functions ***************************************/
 
-int write_data(struct mod_desc* mod_desc, int count, u64 ring_pointer_offset)
+int write_data(struct mod_desc* mod_desc, size_t count, u64 ring_pointer_offset)
 {
 
 	size_t partial_count;
@@ -107,13 +107,16 @@ int write_data(struct mod_desc* mod_desc, int count, u64 ring_pointer_offset)
 	while(bytes_written < count)
 	{
 		partial_count = count - bytes_written;
+		
+		printk("<user_peripheral_write> WTH RING pointer offset: %llu \n", ring_pointer_offset);
 
 		/*Check to see if write will go past the boundary*/
 		if((partial_count + ring_pointer_offset) > mod_desc->file_size)
 		{
-			verbose_printk(KERN_INFO"<user_peripheral_write>: End of file overrun!\n");
+			printk(KERN_INFO"<user_peripheral_write>: End of file overrun!\n");
+			printk(KERN_INFO"<user_peripheral_write>: Partial Count value: %zu\n", partial_count);
 			partial_count = (size_t)(mod_desc->file_size - ring_pointer_offset);
-			verbose_printk(KERN_INFO"<user_peripheral_write>: Only writing %zu bytes to end of file!\n", partial_count);
+			printk(KERN_INFO"<user_peripheral_write>: Only writing %zu bytes to end of file!\n", partial_count);
 			//return bytes_written + partial_count;
 		}
 
@@ -191,7 +194,7 @@ int write_data(struct mod_desc* mod_desc, int count, u64 ring_pointer_offset)
 		}
 
 		bytes_written = bytes_written + partial_count;
-		verbose_printk(KERN_INFO"<pci_write>: Wrote %zu bytes in this pass.\n", partial_count);
+		printk(KERN_INFO"<pci_write>: Wrote %zu bytes in this pass.\n", partial_count);
 	}
 	//bytes = bytes_written;
 
@@ -209,13 +212,13 @@ int write_data(struct mod_desc* mod_desc, int count, u64 ring_pointer_offset)
 	verbose_printk(KERN_INFO"\n");
 	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n");
 	verbose_printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION END  **************************\n");
-	verbose_printk(KERN_INFO"<pci_write>: Wrote a total of %zu bytes in write call.\n", bytes_written);
+	printk(KERN_INFO"<pci_write>: Wrote a total of %zu bytes in write call.\n", bytes_written);
 	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n");
 	verbose_printk(KERN_INFO"\n");
 	return bytes_written;
 }
 
-size_t query_ring_buff(struct mod_desc* mod_desc, size_t count)
+	query_ring_buff(struct mod_desc* mod_desc, size_t count)
 {
 	int wth, wtk;
 	wtk = atomic_read(mod_desc->wtk);
@@ -242,15 +245,13 @@ size_t query_ring_buff(struct mod_desc* mod_desc, size_t count)
 		if(max_space < count)
 			schedule();
 	}
-
-	return count;
 }
 
 int get_new_ring_pointer(int bytes_written, int ring_pointer_offset, int file_size)
 {
 	//find new pointer and take wrap around into account
 	if (ring_pointer_offset+bytes_written >= file_size)
-		return file_size - (ring_pointer_offset + bytes_written);
+		return (ring_pointer_offset + bytes_written) - file_size;
 	else
 		return ring_pointer_offset + bytes_written;
 }
@@ -265,13 +266,13 @@ int data_to_write(struct mod_desc *mod_desc)
 	wtk = atomic_read(mod_desc->wtk);
 
 	if(wtk == wth)
-		return 0;
+		return mod_desc->file_size;
 
 	if(wtk > wth)
-		return wtk-wth;
+		return (wtk-1)-wth;
 
 	if(wtk < wth)
-		return wtk+(mod_desc->file_size)-wth;
+		return (wtk)+((mod_desc->file_size)-(wth+1));
 }
 
 void write_thread(struct mod_desc *mod_desc)
@@ -294,12 +295,23 @@ void write_thread(struct mod_desc *mod_desc)
 		d2w = data_to_write(mod_desc);
 		while(d2w>0)
 		{
+			printk("<write_thread> Data to write: %d \n", d2w);
 			/*write the data*/
 			ring_pointer_offset = atomic_read(mod_desc->wth);
-			bytes_written = write_data(mod_desc, d2w, (u64)ring_pointer_offset);
+			
+			//We always start hardware writes from wth + 1
+			//  Because the wtk pointer goes up to wth.
+			if (ring_pointer_offset == (mod_desc->file_size-1))  //handle edge case
+				ring_pointer_offset = 0;
+			else
+				ring_pointer_offset = ring_pointer_offset+1;
+			
+			printk("<write_thread> WTH Ring pointer offset: %d \n", ring_pointer_offset);
+			bytes_written = write_data(mod_desc, (size_t)d2w, (u64)ring_pointer_offset);
 
 			/*update write pointer*/
 			ring_pointer_offset = get_new_ring_pointer(bytes_written, ring_pointer_offset, (int)(mod_desc->file_size));
+			printk("<write_thread> updating WTH as: %d \n", ring_pointer_offset);
 			atomic_set(mod_desc->wth, ring_pointer_offset);
 
 			/*check for any new data_to_write*/

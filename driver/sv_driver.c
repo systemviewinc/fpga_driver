@@ -948,8 +948,8 @@ int pci_open(struct inode *inode, struct file *filep)
 	wth = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
 
 	atomic_set(atomic_poll, 0);
-	atomic_set(wth, 1);
-	atomic_set(wtk, 1);
+	atomic_set(wth, 0);
+	atomic_set(wtk, 0);
 
 	mode_address = kmalloc(sizeof(int), GFP_KERNEL);
 	interrupt_count = kmalloc(sizeof(int), GFP_KERNEL);
@@ -1055,6 +1055,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	int ret;
 	struct statistics * statistics = kmalloc(sizeof(struct statistics), GFP_KERNEL);
 	struct timespec diff;
+	int wth;
 
 	ret = copy_from_user(&arg_loc, argp, sizeof(u64));
 
@@ -1148,6 +1149,11 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		case SET_FILE_SIZE:
 			mod_desc->file_size = ((loff_t)arg_loc & 0xffffffff);
 			verbose_printk(KERN_INFO"<ioctl>: Setting device file size:%llu\n", mod_desc->file_size);
+			
+			//initialize the write to hardware ring buffer at the end of the file
+			atomic_set(mod_desc->wth, ((int)mod_desc->file_size)-1);
+			wth = atomic_read(mod_desc->wth);
+			printk(KERN_INFO"<ioctl>: Setting device wth ring pointer to :%d\n",wth);
 
 			/*initialize the DMA for the file*/
 			ret = dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size);
@@ -1427,69 +1433,82 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	bytes = 0;
 	bytes_written = 0;
 
-		//loop here until all data is transferred from the write call into the DMA buffer
-	//	while (bytes_written < count)
-	//	{
-	//		partial_count = count - bytes_written;
-	//		
-	//		if (partial_count > mod_desc->dma_size) //this is the maximum allowable transfer size to DMA buffer
-	//		{
-	//			remaining_size = count - bytes_written;
-	//			verbose_printk(KERN_INFO"<pci_write>: the current DMA Buffer size of: 0x%x is not large enough for *remaining* transfer size:%zu bytes\n", mod_desc->dma_size, remaining_size);
-	//			partial_count = mod_desc->dma_size;
-	//		}
-	//
-	//		verbose_printk(KERN_INFO"<pci_write>: the amount of bytes being copied to kernel: %zu\n", partial_count);
-	//
-	//		//if memory interface, do a normal blocking write
-	//		{
-
-	//			ret = copy_from_user(mod_desc->dma_write, (buf + bytes_written), partial_count);
-	//			//call write_data() with ring pointer offset as the current file pointer.
-	//			// we don't care if the write will go past the file boundary as the  write_data() will handle it.
-	//				//write_data() is blocking/looping until all passed data is written to the HW
-	//			// update the file pointer
-	//			if (transfer_type == NORMAL_WRITE)
-	//			{
-	//				*f_pos = *f_pos + partial_count;
-	//
-	//				if (*f_pos == mod_desc->file_size)
-	//				{
-	//					*f_pos = 0;
-	//					verbose_printk(KERN_INFO"<user_peripheral_write>: Resetting file pointer back to zero...\n");
-	//				}
-	//				else if (*f_pos > mod_desc->file_size)
-	//				{
-	//					//perform the pointer wrap around, this is no longer an error. Eventually the ping pong buffer
-	//					//  HW logic will control the data flow into a different buffer in this case. (maybe?)
-	//					*f_pos = *f_pos - mod_desc->file_size;
-	//				}
-	//				verbose_printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llx\n", *f_pos);
-	//			}
-	//		}
-	//		
-	//	
-	//	//else if streaming fifo inferface, use the ring buffer
-	//	ring_buffer_query(mod_desc, partial_count); //blocks until count is able to be copied to the ring buff
-	//	//if we need to wrap around the ring buffer....
-	// 	wtk = atomic_read(mod_desc->wtk);
-     	//      if(partial_count + wtk > mod_desc->file_size)
-	//	{
-	//      	ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), mod_desc->dma_file_size - wtk);   //write until end of ring buff
-	//      	ret = copy_from_user((mod_desc->dma_write), (buf + bytes_written), partial_count - (mod_desc->dma_file_size -wtk));   //write the remaining
-	//	}
-	//      else
-	//		ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), partial_count); 
-	//
-	//	wtk = get_new_ring_pointer(bytes_written, wtk, (int)mod_desc->file_size);
-        //      atomic_set(mod_desc->wtk, wtk);
-
-	//	//wake up write thread
-	//	mod_desc->thread_q = 1;
-	//	wake_up_interruptible(&thread_q_head);
-	//	}
-	//	return bytes_written;
-
+//	// Start of ring buffer code ---------------------------------------------------------------------------------------------------------------------------------------------------
+//
+//	//loop here until all data is transferred from the write call into the DMA buffer
+//	while (bytes_written < count)
+//	{
+//		partial_count = count - bytes_written;
+//
+//		if (partial_count > mod_desc->dma_size) //this is the maximum allowable transfer size to DMA buffer
+//		{
+//			remaining_size = count - bytes_written;
+//			verbose_printk(KERN_INFO"<pci_write>: the current DMA Buffer size of: 0x%x is not large enough for *remaining* transfer size:%zu bytes\n", mod_desc->dma_size, remaining_size);
+//			partial_count = mod_desc->dma_size;
+//		}
+//
+//		verbose_printk(KERN_INFO"<pci_write>: the amount of bytes being copied to kernel: %zu\n", partial_count);
+//
+//		//if memory interface, do a normal blocking write
+//		if (*(mod_desc->mode) == SLAVE)    
+//		{
+//
+//			ret = copy_from_user(mod_desc->dma_write, (buf + bytes_written), partial_count);
+//			//call write_data() with ring pointer offset as the current file pointer.
+//			ret = write_data(mod_desc, partial_count, (u64)*f_pos);
+//			// we don't care if the write will go past the file boundary as the  write_data() will handle it.
+//			//write_data() is blocking/looping until all passed data is written to the HW
+//			// update the file pointer
+//			if (transfer_type == NORMAL_WRITE)
+//			{
+//				*f_pos = *f_pos + partial_count;
+//
+//				if (*f_pos == (mod_desc->file_size)-1)
+//				{
+//					*f_pos = 0;
+//					verbose_printk(KERN_INFO"<user_peripheral_write>: Resetting file pointer back to zero...\n");
+//				}
+//				else if (*f_pos >= mod_desc->file_size)
+//				{
+//					//perform the pointer wrap around, this is no longer an error. Eventually the ping pong buffer
+//					//  HW logic will control the data flow into a different buffer in this case. (maybe?)
+//					*f_pos = *f_pos - (mod_desc->file_size)-1;
+//				}
+//				verbose_printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llx\n", *f_pos);
+//			}
+//		}
+//
+//		else
+//		{
+//			//else if streaming fifo inferface, use the ring buffer
+//			printk(KERN_INFO"<pci_write>: just before ring buff query\n");
+//			query_ring_buff(mod_desc, partial_count); //blocks until count is able to be copied to the ring buff
+//			printk(KERN_INFO"<pci_write>: ring buffer has enough storage\n");
+//			//if we need to wrap around the ring buffer....
+//			wtk = atomic_read(mod_desc->wtk);
+//			if(partial_count + wtk > mod_desc->file_size)
+//			{
+//				ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), mod_desc->file_size - wtk);   //write until end of ring buff
+//				ret = copy_from_user((mod_desc->dma_write), (buf + bytes_written), partial_count - (mod_desc->file_size -wtk));   //write the remaining
+//			}
+//			else
+//				ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), partial_count); 
+//
+//			wtk = get_new_ring_pointer(partial_count, wtk, (int)mod_desc->file_size);
+//			printk(KERN_INFO"<pci_write>: new wtk pointer: %d\n", wtk);
+//			atomic_set(mod_desc->wtk, wtk);
+//
+//			//wake up write thread
+//			mod_desc->thread_q = 1;
+//			wake_up_interruptible(&thread_q_head);
+//			printk(KERN_INFO"<pci_write>: waking up write thread\n");
+//		}
+//		bytes_written = bytes_written + partial_count;
+//	}
+//	return bytes_written;
+//
+//	// end of ring buffer code ---------------------------------------------------------------------------------------------------------------------------------------------------
+//
 	verbose_printk(KERN_INFO"\n\n");
 	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n");
 	verbose_printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION BEGIN  **************************\n");

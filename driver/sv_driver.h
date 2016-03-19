@@ -221,6 +221,7 @@ void cdma_idle_poll(int cdma_num);
 void write_thread(struct mod_desc *mod_desc);
 struct task_struct* create_thread(struct mod_desc *mod_desc);
 int data_to_write(struct mod_desc *mod_desc);
-int write_data(struct mod_desc* mod_desc, int count, u64 ring_pointer_offset);
+int write_data(struct mod_desc* mod_desc, size_t count, u64 ring_pointer_offset);
 int get_new_ring_pointer(int bytes_written, int ring_pointer_offset, int file_size);
+void query_ring_buff(struct mod_desc* mod_desc, size_t size); //blocks until count is able to be copied to the ring buff
 // ******************************************************************

@@ -18,9 +18,11 @@
 #define TRANSFER_SIZE_3 1024
 #define TRANSFER_SIZE_4 1024
 
-#define NUM_HLS 4
-#define NUM_ITER 10
-#define NUM_XFER_SIZE_STEPS 3    //(log10(FILE_SIZE_1/1024)/log10(2))-1
+#define NUM_HLS 1   //4
+#define NUM_ITER 1  //10
+#define NUM_XFER_SIZE_STEPS 1 //3    //(log10(FILE_SIZE_1/1024)/log10(2))-1
+
+#define CREATE_FILES 1
 
 int xfer_size_1, xfer_size_2, xfer_size_3, xfer_size_4;
 
@@ -193,7 +195,7 @@ struct statistics * rx_statistics_4;
 
 int main()
 {
-	
+
 	/* Open device file and initialize */
 	//	bram = open(devfilename, O_RDWR);
 	//	if(bram < 0){
@@ -356,7 +358,7 @@ int main()
 	double bw, avg;
 	double bw_arr[NUM_HLS][NUM_XFER_SIZE_STEPS][NUM_ITER];
 	bw = 0.0;
-	int i, j, k, x;
+	int i, j, k, x, idx;
 
 	for(x = 0; x<NUM_HLS; x++)
 	{
@@ -364,14 +366,15 @@ int main()
 
 		k = 0;
 
-		for(j = 4; j<=FILE_SIZE_1/1024; j=j*2)
+		j = 4;   //start at 4k
+		for(idx = 0; idx<NUM_XFER_SIZE_STEPS; idx++)
 		{
 			xfer_size_1 = TRANSFER_SIZE_1*j;
 			xfer_size_2 = TRANSFER_SIZE_1*j;
 			xfer_size_3 = TRANSFER_SIZE_1*j;
 			xfer_size_4 = TRANSFER_SIZE_1*j;
 
-			for(i = 0; i<10; i++)
+			for(i = 0; i<NUM_ITER; i++)
 			{
 				switch(x){
 					case 0:
@@ -403,6 +406,7 @@ int main()
 			printf("\nAverage Bandwidth: %f MB/s\n", avg);
 
 			k++;
+			j = j*2;
 		}
 	}
 	/*write to file*/
@@ -453,8 +457,12 @@ void * tx(void * file_desc)
 	int iter;
 	struct statistics * statistics;
 	struct thread_struct * thread_struct_loc;
+	FILE * fp;
+	char * charp;
 
 	thread_struct_loc = (struct thread_struct*)(file_desc);
+
+	fp=fopen("tx_file.txt","w+");
 
 	//	fd = (int *)file_desc;
 	fd = thread_struct_loc->file_handle;
@@ -469,10 +477,10 @@ void * tx(void * file_desc)
 
 	tx_write_bytes = 0;
 
-		if(ioctl(fd, START_FILE_TIMER, NULL) < 0) {
-			printf("ERROR doing ioctl\n");
-			return -1;
-		}
+	if(ioctl(fd, START_FILE_TIMER, NULL) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
 
 	if (fd == hls_write)
 		iter = 500;
@@ -499,21 +507,29 @@ void * tx(void * file_desc)
 			//		printf("file 2 write!\n");
 			counter++;
 			tx_write_bytes = tx_write_bytes + ret_val;
+
+			if(CREATE_FILES)
+			{		
+				charp = (char*)in;
+				for(i = 0; i<ret_val; i++)
+					fprintf(fp,"%c", charp[i]);
+			}
+
 			//usleep(20);
 			sched_yield();
 		}
 	}
 
-		if(ioctl(fd, STOP_FILE_TIMER, NULL) < 0) {
-			printf("ERROR doing ioctl\n");
-			return -1;
-		}
+	if(ioctl(fd, STOP_FILE_TIMER, NULL) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
 
-		if(ioctl(fd, GET_FILE_STATISTICS, statistics) < 0) {
-			printf("ERROR doing ioctl\n");
-			return -1;
-		}
-		return statistics;
+	if(ioctl(fd, GET_FILE_STATISTICS, statistics) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	return statistics;
 }
 
 /**************RX FIFO Thread**********/
@@ -536,6 +552,8 @@ void *rx(void * file_desc)
 	struct statistics * statistics;
 	int zero_count; 
 	struct thread_struct * thread_struct_loc;
+	FILE * fp;
+	char * charp;
 
 	nice(-5);
 
@@ -548,27 +566,21 @@ void *rx(void * file_desc)
 	statistics = (struct statistics *)statistics_buf;
 
 	/*initialize pollfds*/
-	//	pollfds.fd = *fd;
 	pollfds.fd = fd;
 	pollfds.events = POLLIN;  //wait for data
 
-	//	printf("entered rx thread with file desc: %d\n", *fd);
 
 
 	int policy, s;
 	struct sched_param param;
 
-	//policy = SCHED_BATCH;
-	//pthread_setschedparam(pthread_self(), 2, &param); //1 = FIFO
 
-	//	s = pthread_getschedparam(pthread_self(), &policy, &param);
-	//	printf("Thread Priority for read 1: %x\n", param.sched_priority);		   
-	//	printf("Thread Policy for read 1: %d\n", policy);		   
-
-		if(ioctl(fd, START_FILE_TIMER, NULL) < 0) {
-			printf("ERROR doing ioctl\n");
-			return -1;
+	if(ioctl(fd, START_FILE_TIMER, NULL) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
 	}
+
+	fp=fopen("rx_file.txt","w+");
 
 	total_bytes = 0;
 
@@ -580,7 +592,7 @@ void *rx(void * file_desc)
 			case 0: 
 				printf ("timeout occured, no interrupt detected\n");
 				break;
-	
+
 			case -1:
 				printf("error occured in poll\n");
 				while(1);
@@ -602,13 +614,19 @@ void *rx(void * file_desc)
 					else if (return_val > 0)
 					{
 						total_bytes = total_bytes + return_val;		
-						//						printf("Number of bytes read from file 1:%d\n", return_val);
+
+						if(CREATE_FILES)
+						{
+							charp = (char*)buff;
+							for(i = 0; i<return_val; i++)
+								fprintf(fp,"%c", charp[i]);
+						}
 
 					}
 					else if (return_val == 0)
 					{
 						zero_count = zero_count + 1;
-		//				sched_yield();
+						//				sched_yield();
 					}
 				}
 
@@ -616,15 +634,15 @@ void *rx(void * file_desc)
 		//sched_yield();
 		//	sleep(10);
 	}
-		if(ioctl(fd, STOP_FILE_TIMER, NULL) < 0) {
-			printf("ERROR doing ioctl\n");
-			return -1;
-		}
+	if(ioctl(fd, STOP_FILE_TIMER, NULL) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
 
-		if(ioctl(fd, GET_FILE_STATISTICS, statistics) < 0) {
-			printf("ERROR doing ioctl\n");
-			return -1;
-		}
+	if(ioctl(fd, GET_FILE_STATISTICS, statistics) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
 	return statistics;
 }
 
@@ -690,10 +708,10 @@ double spawn_threads(int file_1, int file_2, int file_3, int file_4)
 	int driver_bytes;
 	double rx_bandwidth, tx_bandwidth, total_bandwidth, driver_bandwidth;
 
-		if(ioctl(hls_read, START_DRIVER_TIMER, NULL) < 0) {
-			printf("ERROR doing ioctl\n");
-			return -1;
-		}
+	if(ioctl(hls_read, START_DRIVER_TIMER, NULL) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
 
 	driver_bandwidth = 0;
 
@@ -852,15 +870,15 @@ double spawn_threads(int file_1, int file_2, int file_3, int file_4)
 		//	printf("thread done\n");
 	}
 
-		if(ioctl(hls_read, STOP_DRIVER_TIMER, NULL) < 0) {
-			printf("ERROR doing ioctl\n");
-			return -1;
-		}
+	if(ioctl(hls_read, STOP_DRIVER_TIMER, NULL) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
 
-		if(ioctl(hls_read, GET_DRIVER_STATISTICS, &driver_statistics) < 0) {
-			printf("ERROR doing ioctl\n");
-			return -1;
-		}
+	if(ioctl(hls_read, GET_DRIVER_STATISTICS, &driver_statistics) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
 
 	printf("****************************************************************************\n");
 	printf("                        TRANSFER STATISTICS                                 \n");
@@ -956,19 +974,19 @@ void create_csv(char *filename, double a[NUM_HLS][NUM_XFER_SIZE_STEPS][NUM_ITER]
 
 			switch(i){
 				case 0: amt = 4;
-						break;
+					break;
 				case 1: amt = 8;
-						break;
+					break;
 				case 2: amt = 16;
-						break;
+					break;
 				case 3: amt = 32;
-						break;
+					break;
 				case 4: amt = 64;
-						break;
+					break;
 				case 5: amt = 128;
-						break;
+					break;
 				case 6: amt = 256;
-						break;
+					break;
 				case 7: amt = 512;
 			}
 
