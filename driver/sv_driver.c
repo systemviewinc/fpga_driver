@@ -729,7 +729,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 		else
 		{
-			verbose_printk(KERN_INFO"<soft_isr>: this interrupt is from a user peripheral\n");
+			printk(KERN_INFO"<soft_isr>: this interrupt is from a user peripheral\n");
 
 			//	if (*(interr_dict[int_num].int_count) < 10)   //set a max here....
 			//	*(interr_dict[int_num].int_count) = (*(interr_dict[int_num].int_count)) + 1;
@@ -737,6 +737,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 			atomic_set(interr_dict[int_num].atomic_poll, 1);
 
 			verbose_printk(KERN_INFO"<soft_isr>: this is after the int count add\n");
+			printk(KERN_INFO"<soft_isr>: setting atomic variable for interrupt number : %d\n", int_num);
 
 			vec_serviced = vec_serviced | num2vec(int_num);
 		}
@@ -783,6 +784,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 		if (vec_serviced >= 0x10)
 		{
 			wake_up(&wq_periph);
+			printk(KERN_INFO"<soft_isr>: Waking up the Poll()\n");
 
 			//	for(i = 4; i<=7; i++)
 			//	{
@@ -804,7 +806,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	verbose_printk(KERN_INFO"<soft_isr>:						Exiting ISR\n");
 	verbose_printk(KERN_INFO"		Exited the Tasklet");
 
-	verbose_printk(KERN_INFO"<pci_isr>:						Exiting the ISR");
+	printk(KERN_INFO"<pci_isr>:						Exiting the ISR");
 
 	return IRQ_HANDLED;
 
@@ -1371,7 +1373,7 @@ int pci_poll(struct file *filep, poll_table * pwait)
 	unsigned int mask = 0;
 
 	has_data = 0;
-	verbose_printk(KERN_INFO"<pci_poll>:User Space has entered Poll()\n");
+	printk(KERN_INFO"<pci_poll>:Poll() has been run!\n");
 	mod_desc = filep->private_data;
 
 	/*Register the poll table with the peripheral wait queue
@@ -1381,7 +1383,7 @@ int pci_poll(struct file *filep, poll_table * pwait)
 	poll_wait(filep, &wq_periph, pwait);
 	//	poll_wait(filep, mod_desc->iwq, pwait);
 
-	verbose_printk(KERN_INFO"<pci_poll>: Peripheral (' %x ') Interrupt Detected!!\n", mod_desc->int_num);
+	//printk(KERN_INFO"<pci_poll>: Peripheral (' %x ') Interrupt Detected!!\n", mod_desc->int_num);
 
 	/*see if the module has triggered an interrupt*/
 	has_data = *(mod_desc->int_count);
@@ -1390,7 +1392,7 @@ int pci_poll(struct file *filep, poll_table * pwait)
 	//	if (has_data > 0)
 	if (atomic_read(mod_desc->atomic_poll))
 	{
-		verbose_printk(KERN_INFO"<pci_poll>: Interrupting Peripheral Matched!\n");
+		printk(KERN_INFO"<pci_poll>: Interrupting Peripheral Matched!\n");
 		/*reset the has_data flag*/
 
 		atomic_set(mod_desc->atomic_poll, 0);
@@ -1399,6 +1401,7 @@ int pci_poll(struct file *filep, poll_table * pwait)
 
 		mask |= POLLIN;
 	}
+	printk(KERN_INFO"<pci_poll>:Leaving Poll()\n");
 
 	return mask;
 
@@ -1433,82 +1436,82 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	bytes = 0;
 	bytes_written = 0;
 
-//	// Start of ring buffer code ---------------------------------------------------------------------------------------------------------------------------------------------------
-//
-//	//loop here until all data is transferred from the write call into the DMA buffer
-//	while (bytes_written < count)
-//	{
-//		partial_count = count - bytes_written;
-//
-//		if (partial_count > mod_desc->dma_size) //this is the maximum allowable transfer size to DMA buffer
-//		{
-//			remaining_size = count - bytes_written;
-//			verbose_printk(KERN_INFO"<pci_write>: the current DMA Buffer size of: 0x%x is not large enough for *remaining* transfer size:%zu bytes\n", mod_desc->dma_size, remaining_size);
-//			partial_count = mod_desc->dma_size;
-//		}
-//
-//		verbose_printk(KERN_INFO"<pci_write>: the amount of bytes being copied to kernel: %zu\n", partial_count);
-//
-//		//if memory interface, do a normal blocking write
-//		if (*(mod_desc->mode) == SLAVE)    
-//		{
-//
-//			ret = copy_from_user(mod_desc->dma_write, (buf + bytes_written), partial_count);
-//			//call write_data() with ring pointer offset as the current file pointer.
-//			ret = write_data(mod_desc, partial_count, (u64)*f_pos);
-//			// we don't care if the write will go past the file boundary as the  write_data() will handle it.
-//			//write_data() is blocking/looping until all passed data is written to the HW
-//			// update the file pointer
-//			if (transfer_type == NORMAL_WRITE)
-//			{
-//				*f_pos = *f_pos + partial_count;
-//
-//				if (*f_pos == (mod_desc->file_size)-1)
-//				{
-//					*f_pos = 0;
-//					verbose_printk(KERN_INFO"<user_peripheral_write>: Resetting file pointer back to zero...\n");
-//				}
-//				else if (*f_pos >= mod_desc->file_size)
-//				{
-//					//perform the pointer wrap around, this is no longer an error. Eventually the ping pong buffer
-//					//  HW logic will control the data flow into a different buffer in this case. (maybe?)
-//					*f_pos = *f_pos - (mod_desc->file_size)-1;
-//				}
-//				verbose_printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llx\n", *f_pos);
-//			}
-//		}
-//
-//		else
-//		{
-//			//else if streaming fifo inferface, use the ring buffer
-//			printk(KERN_INFO"<pci_write>: just before ring buff query\n");
-//			query_ring_buff(mod_desc, partial_count); //blocks until count is able to be copied to the ring buff
-//			printk(KERN_INFO"<pci_write>: ring buffer has enough storage\n");
-//			//if we need to wrap around the ring buffer....
-//			wtk = atomic_read(mod_desc->wtk);
-//			if(partial_count + wtk > mod_desc->file_size)
-//			{
-//				ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), mod_desc->file_size - wtk);   //write until end of ring buff
-//				ret = copy_from_user((mod_desc->dma_write), (buf + bytes_written), partial_count - (mod_desc->file_size -wtk));   //write the remaining
-//			}
-//			else
-//				ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), partial_count); 
-//
-//			wtk = get_new_ring_pointer(partial_count, wtk, (int)mod_desc->file_size);
-//			printk(KERN_INFO"<pci_write>: new wtk pointer: %d\n", wtk);
-//			atomic_set(mod_desc->wtk, wtk);
-//
-//			//wake up write thread
-//			mod_desc->thread_q = 1;
-//			wake_up_interruptible(&thread_q_head);
-//			printk(KERN_INFO"<pci_write>: waking up write thread\n");
-//		}
-//		bytes_written = bytes_written + partial_count;
-//	}
-//	return bytes_written;
-//
-//	// end of ring buffer code ---------------------------------------------------------------------------------------------------------------------------------------------------
-//
+	// Start of ring buffer code ---------------------------------------------------------------------------------------------------------------------------------------------------
+
+	//loop here until all data is transferred from the write call into the DMA buffer
+	while (bytes_written < count)
+	{
+		partial_count = count - bytes_written;
+
+		if (partial_count > mod_desc->dma_size) //this is the maximum allowable transfer size to DMA buffer
+		{
+			remaining_size = count - bytes_written;
+			verbose_printk(KERN_INFO"<pci_write>: the current DMA Buffer size of: 0x%x is not large enough for *remaining* transfer size:%zu bytes\n", mod_desc->dma_size, remaining_size);
+			partial_count = mod_desc->dma_size;
+		}
+
+		verbose_printk(KERN_INFO"<pci_write>: the amount of bytes being copied to kernel: %zu\n", partial_count);
+
+		//if memory interface, do a normal blocking write
+		if (*(mod_desc->mode) == SLAVE)    
+		{
+
+			ret = copy_from_user(mod_desc->dma_write, (buf + bytes_written), partial_count);
+			//call write_data() with ring pointer offset as the current file pointer.
+			ret = write_data(mod_desc, partial_count, (u64)*f_pos);
+			// we don't care if the write will go past the file boundary as the  write_data() will handle it.
+			//write_data() is blocking/looping until all passed data is written to the HW
+			// update the file pointer
+			if (transfer_type == NORMAL_WRITE)
+			{
+				*f_pos = *f_pos + partial_count;
+
+				if (*f_pos == (mod_desc->file_size)-1)
+				{
+					*f_pos = 0;
+					verbose_printk(KERN_INFO"<user_peripheral_write>: Resetting file pointer back to zero...\n");
+				}
+				else if (*f_pos >= mod_desc->file_size)
+				{
+					//perform the pointer wrap around, this is no longer an error. Eventually the ping pong buffer
+					//  HW logic will control the data flow into a different buffer in this case. (maybe?)
+					*f_pos = *f_pos - (mod_desc->file_size)-1;
+				}
+				verbose_printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llx\n", *f_pos);
+			}
+		}
+
+		else
+		{
+			//else if streaming fifo inferface, use the ring buffer
+			printk(KERN_INFO"<pci_write>: just before ring buff query\n");
+			query_ring_buff(mod_desc, partial_count); //blocks until count is able to be copied to the ring buff
+			printk(KERN_INFO"<pci_write>: ring buffer has enough storage\n");
+			//if we need to wrap around the ring buffer....
+			wtk = atomic_read(mod_desc->wtk);
+			if(partial_count + wtk > mod_desc->file_size)
+			{
+				ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), mod_desc->file_size - 1 - wtk);   //write until end of ring buff
+				ret = copy_from_user((mod_desc->dma_write), (buf + bytes_written + mod_desc->file_size -1 - wtk), partial_count - (mod_desc->file_size -wtk - 1));   //write the remaining
+			}
+			else
+				ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), partial_count); 
+
+			wtk = get_new_ring_pointer(partial_count, wtk, (int)mod_desc->file_size);
+			printk(KERN_INFO"<pci_write>:ring_point: WTK : %d\n", wtk);
+			atomic_set(mod_desc->wtk, wtk);
+
+			//wake up write thread
+			mod_desc->thread_q = 1;
+			wake_up_interruptible(&thread_q_head);
+			printk(KERN_INFO"<pci_write>: waking up write thread\n");
+		}
+		bytes_written = bytes_written + partial_count;
+	}
+	return bytes_written;
+
+	// end of ring buffer code ---------------------------------------------------------------------------------------------------------------------------------------------------
+
 	verbose_printk(KERN_INFO"\n\n");
 	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n");
 	verbose_printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION BEGIN  **************************\n");
@@ -1845,9 +1848,10 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 	verbose_printk(KERN_INFO"\n");
 	verbose_printk(KERN_INFO"<pci_read>: ************************************************************************\n");
-	verbose_printk(KERN_INFO"<pci_read>: ******************** READ TRANSACTION END  **************************\n");
-	verbose_printk(KERN_INFO"                                    Bytes read : %d\n", bytes);
-	verbose_printk(KERN_INFO"<pci_read>: ************************************************************************\n");
+	printk(KERN_INFO"<pci_read>: ******************** READ TRANSACTION END  **************************\n");
+	printk(KERN_INFO"                                    Bytes read : %d\n", bytes);
+	printk(KERN_INFO"                                    Total Bytes read : %d\n", mod_desc->rx_bytes);
+	printk(KERN_INFO"<pci_read>: ************************************************************************\n");
 	verbose_printk(KERN_INFO"\n");
 
 	return bytes;

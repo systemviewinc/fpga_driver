@@ -488,7 +488,8 @@ void * tx(void * file_desc)
 		iter = 500;
 
 	//	while(counter < iter)  //this holds number of transfers constant
-	while(tx_write_bytes < (FILE_SIZE_1*512/(2*2)))  //this holds amount of data constant
+//	while(tx_write_bytes < (FILE_SIZE_1*512/(2*2)))  //this holds amount of data constant
+	while(tx_write_bytes < 32768)  //this holds amount of data constant
 	{
 		//		ret_val = write(hls_write_2, tx_buf, sizeof(tx));   
 		ret_val = write(fd, in, thread_struct_loc->transfer_size);   
@@ -584,7 +585,8 @@ void *rx(void * file_desc)
 
 	total_bytes = 0;
 
-	while(total_bytes < (FILE_SIZE_1*512/(2*2)))  //this holds amount of data constant
+//	while(total_bytes < (FILE_SIZE_1*512/(2*2)))  //this holds amount of data constant
+	while(total_bytes < 32768)  //this holds amount of data constant
 	{
 		return_val = 1;
 		result = poll(&pollfds, 1, timeout);
@@ -634,6 +636,8 @@ void *rx(void * file_desc)
 		//sched_yield();
 		//	sleep(10);
 	}
+	printf("Finished Reading!!!!!!!\n");
+	
 	if(ioctl(fd, STOP_FILE_TIMER, NULL) < 0) {
 		printf("ERROR doing ioctl\n");
 		return -1;
