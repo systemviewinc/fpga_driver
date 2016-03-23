@@ -941,6 +941,7 @@ int pci_open(struct inode *inode, struct file *filep)
 	atomic_t * atomic_poll;
 	atomic_t * wth;
 	atomic_t * wtk;
+	atomic_t * ring_buf_pri;
 
 	start_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
 	stop_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
@@ -948,10 +949,12 @@ int pci_open(struct inode *inode, struct file *filep)
 	atomic_poll = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
 	wtk = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
 	wth = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
+	ring_buf_pri = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
 
 	atomic_set(atomic_poll, 0);
 	atomic_set(wth, 0);
 	atomic_set(wtk, 0);
+	atomic_set(ring_buf_pri, 1);
 
 	mode_address = kmalloc(sizeof(int), GFP_KERNEL);
 	interrupt_count = kmalloc(sizeof(int), GFP_KERNEL);
@@ -990,6 +993,7 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->thread_q = 0;
 	s->wth = wth;
 	s->wtk = wtk;
+	s->ring_buf_pri = ring_buf_pri;
 
 	verbose_printk(KERN_INFO"<pci_open>: minor number %d detected\n", s->minor);
 
@@ -1057,7 +1061,6 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	int ret;
 	struct statistics * statistics = kmalloc(sizeof(struct statistics), GFP_KERNEL);
 	struct timespec diff;
-	int wth;
 
 	ret = copy_from_user(&arg_loc, argp, sizeof(u64));
 
@@ -1152,11 +1155,6 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			mod_desc->file_size = ((loff_t)arg_loc & 0xffffffff);
 			verbose_printk(KERN_INFO"<ioctl>: Setting device file size:%llu\n", mod_desc->file_size);
 			
-			//initialize the write to hardware ring buffer at the end of the file
-			atomic_set(mod_desc->wth, ((int)mod_desc->file_size)-1);
-			wth = atomic_read(mod_desc->wth);
-			printk(KERN_INFO"<ioctl>: Setting device wth ring pointer to :%d\n",wth);
-
 			/*initialize the DMA for the file*/
 			ret = dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size);
 			if (ret < 0)
@@ -1317,6 +1315,12 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 						verbose_printk(KERN_INFO"<ioctl_axi_stream_fifo>: current dma kernel offset:%x\n", current_dma_offset_internal);
 						verbose_printk(KERN_INFO"<ioctl_axi_stream_fifo>: kernel R/W register kernel addresses:%llx / %llx\n", (u64)mod_desc->kernel_reg_read, (u64)mod_desc->kernel_reg_write );
 						current_dma_offset_internal = current_dma_offset_internal + 0x08;   // update the current dma buffer status (just added two 32b buffers)
+
+						/*set the ring puff priority to WTK*/
+						atomic_set(mod_desc->ring_buf_pri, 1);
+						/*set the pointer defaults*/
+						atomic_set(mod_desc->wtk, 0);
+						atomic_set(mod_desc->wth, 0);
 
 						ret = axi_stream_fifo_init(mod_desc);
 						if (ret < 0)
@@ -1500,7 +1504,12 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			wtk = get_new_ring_pointer(partial_count, wtk, (int)mod_desc->file_size);
 			printk(KERN_INFO"<pci_write>:ring_point: WTK : %d\n", wtk);
 			atomic_set(mod_desc->wtk, wtk);
+			
+			/*This says that if the WTK pointer has caught up to the WTH pointer, give priority to the WTH*/
+			if(atomic_read(mod_desc->wth) == wtk)
+				atomic_set(mod_desc->ring_buf_pri, 0);
 
+			printk(KERN_INFO"<pci_write>:ring_point: ring buff priority: %d\n", atomic_read(mod_desc->ring_buf_pri));
 			//wake up write thread
 			mod_desc->thread_q = 1;
 			wake_up_interruptible(&thread_q_head);
@@ -1508,6 +1517,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		}
 		bytes_written = bytes_written + partial_count;
 	}
+	printk(KERN_INFO"<pci_write>: Total write to ring buffer in this pass: %d\n", bytes_written);
 	return bytes_written;
 
 	// end of ring buffer code ---------------------------------------------------------------------------------------------------------------------------------------------------

@@ -170,6 +170,7 @@ struct mod_desc
 	int thread_q;
 	atomic_t * wth;    //write to hardware pointer
 	atomic_t * wtk;    //write to kernel pointer
+	atomic_t * ring_buf_pri;    //handshake variable
 };
 
 /*this is the interrupt structure*/
