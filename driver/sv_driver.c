@@ -729,7 +729,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 		else
 		{
-			printk(KERN_INFO"<soft_isr>: this interrupt is from a user peripheral\n");
+			verbose_printk(KERN_INFO"<soft_isr>: this interrupt is from a user peripheral\n");
 
 			//	if (*(interr_dict[int_num].int_count) < 10)   //set a max here....
 			//	*(interr_dict[int_num].int_count) = (*(interr_dict[int_num].int_count)) + 1;
@@ -737,7 +737,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 			atomic_set(interr_dict[int_num].atomic_poll, 1);
 
 			verbose_printk(KERN_INFO"<soft_isr>: this is after the int count add\n");
-			printk(KERN_INFO"<soft_isr>: setting atomic variable for interrupt number : %d\n", int_num);
+			verbose_printk(KERN_INFO"<soft_isr>: setting atomic variable for interrupt number : %d\n", int_num);
 
 			vec_serviced = vec_serviced | num2vec(int_num);
 		}
@@ -784,7 +784,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 		if (vec_serviced >= 0x10)
 		{
 			wake_up(&wq_periph);
-			printk(KERN_INFO"<soft_isr>: Waking up the Poll()\n");
+			verbose_printk(KERN_INFO"<soft_isr>: Waking up the Poll()\n");
 
 			//	for(i = 4; i<=7; i++)
 			//	{
@@ -806,7 +806,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	verbose_printk(KERN_INFO"<soft_isr>:						Exiting ISR\n");
 	verbose_printk(KERN_INFO"		Exited the Tasklet");
 
-	printk(KERN_INFO"<pci_isr>:						Exiting the ISR");
+	verbose_printk(KERN_INFO"<pci_isr>:						Exiting the ISR");
 
 	return IRQ_HANDLED;
 
@@ -1377,7 +1377,7 @@ int pci_poll(struct file *filep, poll_table * pwait)
 	unsigned int mask = 0;
 
 	has_data = 0;
-	printk(KERN_INFO"<pci_poll>:Poll() has been run!\n");
+	verbose_printk(KERN_INFO"<pci_poll>:Poll() has been run!\n");
 	mod_desc = filep->private_data;
 
 	/*Register the poll table with the peripheral wait queue
@@ -1396,7 +1396,7 @@ int pci_poll(struct file *filep, poll_table * pwait)
 	//	if (has_data > 0)
 	if (atomic_read(mod_desc->atomic_poll))
 	{
-		printk(KERN_INFO"<pci_poll>: Interrupting Peripheral Matched!\n");
+		verbose_printk(KERN_INFO"<pci_poll>: Interrupting Peripheral Matched!\n");
 		/*reset the has_data flag*/
 
 		atomic_set(mod_desc->atomic_poll, 0);
@@ -1405,7 +1405,7 @@ int pci_poll(struct file *filep, poll_table * pwait)
 
 		mask |= POLLIN;
 	}
-	printk(KERN_INFO"<pci_poll>:Leaving Poll()\n");
+	verbose_printk(KERN_INFO"<pci_poll>:Leaving Poll()\n");
 
 	return mask;
 
@@ -1488,9 +1488,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		else
 		{
 			//else if streaming fifo inferface, use the ring buffer
-			printk(KERN_INFO"<pci_write>: just before ring buff query\n");
 			query_ring_buff(mod_desc, partial_count); //blocks until count is able to be copied to the ring buff
-			printk(KERN_INFO"<pci_write>: ring buffer has enough storage\n");
 			//if we need to wrap around the ring buffer....
 			wtk = atomic_read(mod_desc->wtk);
 			if(partial_count + wtk > mod_desc->file_size)
@@ -1502,22 +1500,22 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), partial_count); 
 
 			wtk = get_new_ring_pointer(partial_count, wtk, (int)mod_desc->file_size);
-			printk(KERN_INFO"<pci_write>:ring_point: WTK : %d\n", wtk);
+			verbose_printk(KERN_INFO"<pci_write>:ring_point: WTK : %d\n", wtk);
 			atomic_set(mod_desc->wtk, wtk);
 			
 			/*This says that if the WTK pointer has caught up to the WTH pointer, give priority to the WTH*/
 			if(atomic_read(mod_desc->wth) == wtk)
 				atomic_set(mod_desc->ring_buf_pri, 0);
 
-			printk(KERN_INFO"<pci_write>:ring_point: ring buff priority: %d\n", atomic_read(mod_desc->ring_buf_pri));
+			verbose_printk(KERN_INFO"<pci_write>:ring_point: ring buff priority: %d\n", atomic_read(mod_desc->ring_buf_pri));
 			//wake up write thread
 			mod_desc->thread_q = 1;
 			wake_up_interruptible(&thread_q_head);
-			printk(KERN_INFO"<pci_write>: waking up write thread\n");
+			verbose_printk(KERN_INFO"<pci_write>: waking up write thread\n");
 		}
 		bytes_written = bytes_written + partial_count;
 	}
-	printk(KERN_INFO"<pci_write>: Total write to ring buffer in this pass: %d\n", bytes_written);
+	verbose_printk(KERN_INFO"<pci_write>: Total write to ring buffer in this pass: %d\n", bytes_written);
 	return bytes_written;
 
 	// end of ring buffer code ---------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1858,10 +1856,10 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 	verbose_printk(KERN_INFO"\n");
 	verbose_printk(KERN_INFO"<pci_read>: ************************************************************************\n");
-	printk(KERN_INFO"<pci_read>: ******************** READ TRANSACTION END  **************************\n");
-	printk(KERN_INFO"                                    Bytes read : %d\n", bytes);
-	printk(KERN_INFO"                                    Total Bytes read : %d\n", mod_desc->rx_bytes);
-	printk(KERN_INFO"<pci_read>: ************************************************************************\n");
+	verbose_printk(KERN_INFO"<pci_read>: ******************** READ TRANSACTION END  **************************\n");
+	verbose_printk(KERN_INFO"                                    Bytes read : %d\n", bytes);
+	verbose_printk(KERN_INFO"                                    Total Bytes read : %d\n", mod_desc->rx_bytes);
+	verbose_printk(KERN_INFO"<pci_read>: ************************************************************************\n");
 	verbose_printk(KERN_INFO"\n");
 
 	return bytes;

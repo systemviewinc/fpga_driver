@@ -18,11 +18,11 @@
 #define TRANSFER_SIZE_3 1024
 #define TRANSFER_SIZE_4 1024
 
-#define NUM_HLS 1   //4
-#define NUM_ITER 1  //10
-#define NUM_XFER_SIZE_STEPS 1 //3    //(log10(FILE_SIZE_1/1024)/log10(2))-1
+#define NUM_HLS 4   //4
+#define NUM_ITER 10  //10
+#define NUM_XFER_SIZE_STEPS 3 //3    //(log10(FILE_SIZE_1/1024)/log10(2))-1
 
-#define CREATE_FILES 1
+#define CREATE_FILES 0
 
 int xfer_size_1, xfer_size_2, xfer_size_3, xfer_size_4;
 
@@ -488,9 +488,9 @@ void * tx(void * file_desc)
 		iter = 500;
 
 	//	while(counter < iter)  //this holds number of transfers constant
-//	while(tx_write_bytes < (FILE_SIZE_1*512/(2*2)))  //this holds amount of data constant
+	while(tx_write_bytes < (FILE_SIZE_1*512/(2*2)))  //this holds amount of data constant
 //	while(tx_write_bytes < 32768)  //this holds amount of data constant
-	while(tx_write_bytes < 65536)  //this holds amount of data constant
+//	while(tx_write_bytes < 65536)  //this holds amount of data constant
 	{
 		//		ret_val = write(hls_write_2, tx_buf, sizeof(tx));   
 		ret_val = write(fd, in, thread_struct_loc->transfer_size);   
@@ -587,9 +587,9 @@ void *rx(void * file_desc)
 
 	total_bytes = 0;
 
-//	while(total_bytes < (FILE_SIZE_1*512/(2*2)))  //this holds amount of data constant
+	while(total_bytes < (FILE_SIZE_1*512/(2*2)))  //this holds amount of data constant
 //	while(total_bytes < 32768)  //this holds amount of data constant
-	while(total_bytes < 65536)  //this holds amount of data constant
+//	while(total_bytes < 65536)  //this holds amount of data constant
 	{
 		return_val = 1;
 		result = poll(&pollfds, 1, timeout);
