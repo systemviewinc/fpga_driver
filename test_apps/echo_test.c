@@ -4,18 +4,25 @@
 #include <sys/poll.h>
 #include <unistd.h>
 #include <sched.h>
+#include <math.h>
 
 #define AXI_STREAM_FIFO 1
 
-#define FILE_SIZE_1 1024*256
-#define FILE_SIZE_2 1024*256
-#define FILE_SIZE_3 1024*256
-#define FILE_SIZE_4 1024*256
+#define FILE_SIZE_1 1024*16
+#define FILE_SIZE_2 1024*16
+#define FILE_SIZE_3 1024*16
+#define FILE_SIZE_4 1024*16
 
 #define TRANSFER_SIZE_1 1024
 #define TRANSFER_SIZE_2 1024
 #define TRANSFER_SIZE_3 1024
 #define TRANSFER_SIZE_4 1024
+
+#define NUM_HLS 1   //4
+#define NUM_ITER 1  //10
+#define NUM_XFER_SIZE_STEPS 1 //3    //(log10(FILE_SIZE_1/1024)/log10(2))-1
+
+#define CREATE_FILES 1
 
 int xfer_size_1, xfer_size_2, xfer_size_3, xfer_size_4;
 
@@ -39,7 +46,7 @@ void *rx(void * file_handle);
 double calc_BW(double bytes, double secs, double ns);
 int file_init(int file_h, unsigned long axi_addr, unsigned long axi_ctl_addr, unsigned int mode, unsigned int interrupt_vector, unsigned int file_size);
 double spawn_threads(int file_1, int file_2, int file_3, int file_4);
-void create_csv(char *filename, double a[4][7][10],int n,int m, int x);
+void create_csv(char *filename, double a[NUM_HLS][NUM_XFER_SIZE_STEPS][NUM_ITER],int n,int m, int x);
 
 char devname[] = DEV_NAME;
 char devname_2[] = DEV_NAME_2;
@@ -90,42 +97,42 @@ unsigned int in[FILE_SIZE_4/4];
 //unsigned int hls_read_ctl_axi_addr = 0x80002000;
 //unsigned int hls_read_axi_addr = 0x80020000;
 
-//unsigned long hls_read_ctl_axi_addr = 0xC0010000;
-//unsigned long hls_read_axi_addr = 0xC0000000;
-//unsigned long hls_write_ctl_axi_addr = 0x80010000;
-//unsigned long hls_write_axi_addr = 0x80000000;
-//unsigned long hls_read_2_ctl_axi_addr = 0xC0030000;
-//unsigned long hls_read_2_axi_addr = 0xC0020000;
-//unsigned long hls_write_2_ctl_axi_addr = 0x80030000;
-//unsigned long hls_write_2_axi_addr = 0x80020000;
-//unsigned long hls_read_3_ctl_axi_addr = 0xC0050000;
-//unsigned long hls_read_3_axi_addr = 0xC0040000;
-//unsigned long hls_write_3_ctl_axi_addr = 0x80050000;
-//unsigned long hls_write_3_axi_addr = 0x80040000;
-//unsigned long hls_read_4_ctl_axi_addr = 0xC0070000;
-//unsigned long hls_read_4_axi_addr = 0xC0060000;
-//unsigned long hls_write_4_ctl_axi_addr = 0x80070000;
-//unsigned long hls_write_4_axi_addr = 0x80060000;
+unsigned long hls_read_ctl_axi_addr = 0xC0010000;
+unsigned long hls_read_axi_addr = 0xC0000000;
+unsigned long hls_write_ctl_axi_addr = 0x80010000;
+unsigned long hls_write_axi_addr = 0x80000000;
+unsigned long hls_read_2_ctl_axi_addr = 0xC0030000;
+unsigned long hls_read_2_axi_addr = 0xC0020000;
+unsigned long hls_write_2_ctl_axi_addr = 0x80030000;
+unsigned long hls_write_2_axi_addr = 0x80020000;
+unsigned long hls_read_3_ctl_axi_addr = 0xC0050000;
+unsigned long hls_read_3_axi_addr = 0xC0040000;
+unsigned long hls_write_3_ctl_axi_addr = 0x80050000;
+unsigned long hls_write_3_axi_addr = 0x80040000;
+unsigned long hls_read_4_ctl_axi_addr = 0xC0070000;
+unsigned long hls_read_4_axi_addr = 0xC0060000;
+unsigned long hls_write_4_ctl_axi_addr = 0x80070000;
+unsigned long hls_write_4_axi_addr = 0x80060000;
 //unsigned long trace_read_ctl_axi_addr = 0x80020000;
 //unsigned long trace_read_axi_addr = 0x80010000;
 //unsigned long trace_control_axi_addr = 0x80000000;
 
-unsigned long hls_read_ctl_axi_addr = 0x40150000;
-unsigned long hls_read_axi_addr = 0xC0000000;
-unsigned long hls_write_ctl_axi_addr = 0x40110000;
-unsigned long hls_write_axi_addr = 0x80000000;
-unsigned long hls_read_2_ctl_axi_addr = 0x40160000;
-unsigned long hls_read_2_axi_addr = 0xC0020000;
-unsigned long hls_write_2_ctl_axi_addr = 0x40120000;
-unsigned long hls_write_2_axi_addr = 0x80020000;
-unsigned long hls_read_3_ctl_axi_addr = 0x40170000;
-unsigned long hls_read_3_axi_addr = 0xC0040000;
-unsigned long hls_write_3_ctl_axi_addr = 0x40130000;
-unsigned long hls_write_3_axi_addr = 0x80040000;
-unsigned long hls_read_4_ctl_axi_addr = 0x40180000;
-unsigned long hls_read_4_axi_addr = 0xC0060000;
-unsigned long hls_write_4_ctl_axi_addr = 0x40140000;
-unsigned long hls_write_4_axi_addr = 0x80060000;
+//unsigned long hls_read_ctl_axi_addr = 0x40150000;
+//unsigned long hls_read_axi_addr = 0xC0000000;
+//unsigned long hls_write_ctl_axi_addr = 0x40110000;
+//unsigned long hls_write_axi_addr = 0x80000000;
+//unsigned long hls_read_2_ctl_axi_addr = 0x40160000;
+//unsigned long hls_read_2_axi_addr = 0xC0020000;
+//unsigned long hls_write_2_ctl_axi_addr = 0x40120000;
+//unsigned long hls_write_2_axi_addr = 0x80020000;
+//unsigned long hls_read_3_ctl_axi_addr = 0x40170000;
+//unsigned long hls_read_3_axi_addr = 0xC0040000;
+//unsigned long hls_write_3_ctl_axi_addr = 0x40130000;
+//unsigned long hls_write_3_axi_addr = 0x80040000;
+//unsigned long hls_read_4_ctl_axi_addr = 0x40180000;
+//unsigned long hls_read_4_axi_addr = 0xC0060000;
+//unsigned long hls_write_4_ctl_axi_addr = 0x40140000;
+//unsigned long hls_write_4_axi_addr = 0x80060000;
 
 unsigned long hls_fifo_mode = AXI_STREAM_FIFO;
 unsigned long dma_size = 4096;
@@ -188,7 +195,7 @@ struct statistics * rx_statistics_4;
 
 int main()
 {
-	
+
 	/* Open device file and initialize */
 	//	bram = open(devfilename, O_RDWR);
 	//	if(bram < 0){
@@ -342,26 +349,32 @@ int main()
 		//	in[p++] = 0x44444440;
 	}
 
+	//pwrite test
+	//pwrite(hls_write, in, 0, 0x4);
+	//pread(hls_read, in, 0, 0x4);
+	//return 0;
+
 
 	double bw, avg;
-	double bw_arr[4][7][10];
+	double bw_arr[NUM_HLS][NUM_XFER_SIZE_STEPS][NUM_ITER];
 	bw = 0.0;
-	int i, j, k, x;
+	int i, j, k, x, idx;
 
-	for(x = 0; x<4; x++)
+	for(x = 0; x<NUM_HLS; x++)
 	{
 		printf("Number of Threads: %d \n", x+1);
 
 		k = 0;
 
-		for(j = 4; j<=256; j=j*2)
+		j = 4;   //start at 4k
+		for(idx = 0; idx<NUM_XFER_SIZE_STEPS; idx++)
 		{
 			xfer_size_1 = TRANSFER_SIZE_1*j;
 			xfer_size_2 = TRANSFER_SIZE_1*j;
 			xfer_size_3 = TRANSFER_SIZE_1*j;
 			xfer_size_4 = TRANSFER_SIZE_1*j;
 
-			for(i = 0; i<10; i++)
+			for(i = 0; i<NUM_ITER; i++)
 			{
 				switch(x){
 					case 0:
@@ -393,12 +406,13 @@ int main()
 			printf("\nAverage Bandwidth: %f MB/s\n", avg);
 
 			k++;
+			j = j*2;
 		}
 	}
 	/*write to file*/
 	char* filename; 
 	filename = "statistics.csv";
-	create_csv(filename, bw_arr , 10, 7, 4);
+	create_csv(filename, bw_arr , NUM_ITER,NUM_XFER_SIZE_STEPS, NUM_HLS);
 
 	//	bw = spawn_threads(1, 0, 0, 0);
 	//	bw = spawn_threads(0, 1, 0, 0);
@@ -443,8 +457,12 @@ void * tx(void * file_desc)
 	int iter;
 	struct statistics * statistics;
 	struct thread_struct * thread_struct_loc;
+	FILE * fp;
+	char * charp;
 
 	thread_struct_loc = (struct thread_struct*)(file_desc);
+
+	fp=fopen("tx_file.txt","w+");
 
 	//	fd = (int *)file_desc;
 	fd = thread_struct_loc->file_handle;
@@ -459,10 +477,10 @@ void * tx(void * file_desc)
 
 	tx_write_bytes = 0;
 
-		if(ioctl(fd, START_FILE_TIMER, NULL) < 0) {
-			printf("ERROR doing ioctl\n");
-			return -1;
-		}
+	if(ioctl(fd, START_FILE_TIMER, NULL) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
 
 	if (fd == hls_write)
 		iter = 500;
@@ -471,6 +489,8 @@ void * tx(void * file_desc)
 
 	//	while(counter < iter)  //this holds number of transfers constant
 	while(tx_write_bytes < (FILE_SIZE_1*512/(2*2)))  //this holds amount of data constant
+//	while(tx_write_bytes < 32768)  //this holds amount of data constant
+//	while(tx_write_bytes < 65536)  //this holds amount of data constant
 	{
 		//		ret_val = write(hls_write_2, tx_buf, sizeof(tx));   
 		ret_val = write(fd, in, thread_struct_loc->transfer_size);   
@@ -489,21 +509,30 @@ void * tx(void * file_desc)
 			//		printf("file 2 write!\n");
 			counter++;
 			tx_write_bytes = tx_write_bytes + ret_val;
+
+			if(CREATE_FILES)
+			{		
+				charp = (char*)in;
+				for(i = 0; i<ret_val; i++)
+					fprintf(fp,"%c", charp[i]);
+			}
+
 			//usleep(20);
 			sched_yield();
 		}
 	}
+	printf("Finished Writing!!!!!!!\n");
 
-		if(ioctl(fd, STOP_FILE_TIMER, NULL) < 0) {
-			printf("ERROR doing ioctl\n");
-			return -1;
-		}
+	if(ioctl(fd, STOP_FILE_TIMER, NULL) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
 
-		if(ioctl(fd, GET_FILE_STATISTICS, statistics) < 0) {
-			printf("ERROR doing ioctl\n");
-			return -1;
-		}
-		return statistics;
+	if(ioctl(fd, GET_FILE_STATISTICS, statistics) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
+	return statistics;
 }
 
 /**************RX FIFO Thread**********/
@@ -526,6 +555,8 @@ void *rx(void * file_desc)
 	struct statistics * statistics;
 	int zero_count; 
 	struct thread_struct * thread_struct_loc;
+	FILE * fp;
+	char * charp;
 
 	nice(-5);
 
@@ -538,32 +569,27 @@ void *rx(void * file_desc)
 	statistics = (struct statistics *)statistics_buf;
 
 	/*initialize pollfds*/
-	//	pollfds.fd = *fd;
 	pollfds.fd = fd;
 	pollfds.events = POLLIN;  //wait for data
 
-	//	printf("entered rx thread with file desc: %d\n", *fd);
 
 
 	int policy, s;
 	struct sched_param param;
 
-	//policy = SCHED_BATCH;
-	//pthread_setschedparam(pthread_self(), 2, &param); //1 = FIFO
 
-	//	s = pthread_getschedparam(pthread_self(), &policy, &param);
-	//	printf("Thread Priority for read 1: %x\n", param.sched_priority);		   
-	//	printf("Thread Policy for read 1: %d\n", policy);		   
-
-		if(ioctl(fd, START_FILE_TIMER, NULL) < 0) {
-			printf("ERROR doing ioctl\n");
-			return -1;
+	if(ioctl(fd, START_FILE_TIMER, NULL) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
 	}
+
+	fp=fopen("rx_file.txt","w+");
 
 	total_bytes = 0;
 
-	//	while(1)
 	while(total_bytes < (FILE_SIZE_1*512/(2*2)))  //this holds amount of data constant
+//	while(total_bytes < 32768)  //this holds amount of data constant
+//	while(total_bytes < 65536)  //this holds amount of data constant
 	{
 		return_val = 1;
 		result = poll(&pollfds, 1, timeout);
@@ -593,12 +619,19 @@ void *rx(void * file_desc)
 					else if (return_val > 0)
 					{
 						total_bytes = total_bytes + return_val;		
-						//						printf("Number of bytes read from file 1:%d\n", return_val);
+
+						if(CREATE_FILES)
+						{
+							charp = (char*)buff;
+							for(i = 0; i<return_val; i++)
+								fprintf(fp,"%c", charp[i]);
+						}
 
 					}
 					else if (return_val == 0)
 					{
 						zero_count = zero_count + 1;
+						//				sched_yield();
 					}
 				}
 
@@ -606,15 +639,17 @@ void *rx(void * file_desc)
 		//sched_yield();
 		//	sleep(10);
 	}
-		if(ioctl(fd, STOP_FILE_TIMER, NULL) < 0) {
-			printf("ERROR doing ioctl\n");
-			return -1;
-		}
+	printf("Finished Reading!!!!!!!\n");
+	
+	if(ioctl(fd, STOP_FILE_TIMER, NULL) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
 
-		if(ioctl(fd, GET_FILE_STATISTICS, statistics) < 0) {
-			printf("ERROR doing ioctl\n");
-			return -1;
-		}
+	if(ioctl(fd, GET_FILE_STATISTICS, statistics) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
 	return statistics;
 }
 
@@ -680,10 +715,10 @@ double spawn_threads(int file_1, int file_2, int file_3, int file_4)
 	int driver_bytes;
 	double rx_bandwidth, tx_bandwidth, total_bandwidth, driver_bandwidth;
 
-		if(ioctl(hls_read, START_DRIVER_TIMER, NULL) < 0) {
-			printf("ERROR doing ioctl\n");
-			return -1;
-		}
+	if(ioctl(hls_read, START_DRIVER_TIMER, NULL) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
 
 	driver_bandwidth = 0;
 
@@ -842,15 +877,15 @@ double spawn_threads(int file_1, int file_2, int file_3, int file_4)
 		//	printf("thread done\n");
 	}
 
-		if(ioctl(hls_read, STOP_DRIVER_TIMER, NULL) < 0) {
-			printf("ERROR doing ioctl\n");
-			return -1;
-		}
+	if(ioctl(hls_read, STOP_DRIVER_TIMER, NULL) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
 
-		if(ioctl(hls_read, GET_DRIVER_STATISTICS, &driver_statistics) < 0) {
-			printf("ERROR doing ioctl\n");
-			return -1;
-		}
+	if(ioctl(hls_read, GET_DRIVER_STATISTICS, &driver_statistics) < 0) {
+		printf("ERROR doing ioctl\n");
+		return -1;
+	}
 
 	printf("****************************************************************************\n");
 	printf("                        TRANSFER STATISTICS                                 \n");
@@ -927,7 +962,7 @@ double spawn_threads(int file_1, int file_2, int file_3, int file_4)
 	return driver_bandwidth;
 }
 
-void create_csv(char *filename, double a[4][7][10],int n,int m, int x){
+void create_csv(char *filename, double a[NUM_HLS][NUM_XFER_SIZE_STEPS][NUM_ITER],int n,int m, int x){
 
 	printf("\n Creating %s file",filename);
 
@@ -946,19 +981,19 @@ void create_csv(char *filename, double a[4][7][10],int n,int m, int x){
 
 			switch(i){
 				case 0: amt = 4;
-						break;
+					break;
 				case 1: amt = 8;
-						break;
+					break;
 				case 2: amt = 16;
-						break;
+					break;
 				case 3: amt = 32;
-						break;
+					break;
 				case 4: amt = 64;
-						break;
+					break;
 				case 5: amt = 128;
-						break;
+					break;
 				case 6: amt = 256;
-						break;
+					break;
 				case 7: amt = 512;
 			}
 
