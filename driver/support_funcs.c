@@ -293,6 +293,25 @@ int data_to_write(struct mod_desc *mod_desc)
 		return (wtk)+((mod_desc->file_size)-wth);
 }
 
+int max_hw_read(struct mod_desc *mod_desc, int tail, int head, int priority)
+{
+// This function is used to determine the amount of data available to be transfered
+// starting from the tail to the head.
+
+	if(tail == head)
+		if (priority)  // this is a priority variable to solve which side can write (1 = wtk, 0 = wth)
+			return mod_desc->file_size;
+		else
+			return 0;
+
+	if(head > tail)
+		return head-tail;
+
+	if(head < tail)    //wrap around case, we will do another read call to come back and get wrap around data
+		//return (head)+((mod_desc->file_size)-tail);
+		return (mod_desc->file_size)-tail;
+}
+
 void write_thread(struct mod_desc *mod_desc)
 {
 	int d2w = 0;
@@ -351,6 +370,56 @@ void write_thread(struct mod_desc *mod_desc)
 	verbose_printk("Leaving thread\n");
 }
 
+void read_thread(struct mod_desc *mod_desc)
+{
+	int ring_pointer_offset;
+	int read_count;
+	int max_can_read;
+	int rfu;
+	int rfh;
+	int priority;
+	int ret;
+
+	while(!kthread_should_stop()){
+		ret = wait_event_interruptible(thread_q_head, mod_desc->thread_q_read == 1);
+		mod_desc->thread_q_read = 0;
+
+		read_count = 1;
+		while(read_count>0)  //we want to keep reading until all data is read
+		{
+			max_can_read = 0;        
+			while(max_can_read == 0){  //We want to block here until the ring buffer has room
+				rfh = atomic_read(mod_desc->rfh);
+				rfu = atomic_read(mod_desc->rfu);
+				priority = 0;
+				if (atomic_read(mod_desc->ring_buf_pri_read) == 0); //The thread has priority when the atomic variable is 0
+					priority = 1;                            
+				max_can_read = max_hw_read(mod_desc, rfh, rfu, priority);
+			}
+
+			read_count = axi_stream_fifo_read(max_can_read, mod_desc, (u64)rfh);
+
+			if (read_count < 0)
+			{
+				printk(KERN_INFO"<user_peripheral_read>: ERROR reading data from axi stream fifo\n");
+			}
+			if (read_count == 0)
+				break;
+			
+			/*update rfh pointer*/
+			rfh = get_new_ring_pointer(read_count, rfh, (int)(mod_desc->file_size)); 
+			atomic_set(mod_desc->rfh, rfh);
+
+			/*Ths says that if the rfh pointer has caught up to the rfu pointer, then give priority to the rfu.*/
+			if(atomic_read(mod_desc->rfu) == rfh)
+				atomic_set(mod_desc->ring_buf_pri_read, 1);
+ 
+		}
+
+	}
+	verbose_printk("Leaving thread\n");
+}
+
 struct task_struct* create_thread(struct mod_desc *mod_desc)
 {
 	//struct task_struct * kthread_local;
@@ -358,6 +427,24 @@ struct task_struct* create_thread(struct mod_desc *mod_desc)
 	//kthread_heap = (struct task_struct*)kmalloc(sizeof(struct task_struct), GFP_KERNEL);
 	//kthread_local = kthread_create(write_thread,NULL,"vsi_write_thread");
 	kthread_heap = kthread_create(write_thread,(void*)mod_desc,"vsi_write_thread");
+
+	//memcpy(kthread_heap, kthread_local, sizeof(struct task_struct));
+
+	if((kthread_heap))
+	{
+		printk("thread created\n");
+		wake_up_process(kthread_heap);
+	}
+	return kthread_heap;
+}
+
+struct task_struct* create_thread_read(struct mod_desc *mod_desc)
+{
+	//struct task_struct * kthread_local;
+	struct task_struct * kthread_heap;
+	//kthread_heap = (struct task_struct*)kmalloc(sizeof(struct task_struct), GFP_KERNEL);
+	//kthread_local = kthread_create(write_thread,NULL,"vsi_write_thread");
+	kthread_heap = kthread_create(read_thread,(void*)mod_desc,"vsi_read_thread");
 
 	//memcpy(kthread_heap, kthread_local, sizeof(struct task_struct));
 
@@ -1249,7 +1336,7 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_
 	return count;
 }
 
-size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
+size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_pointer_offset)
 {
 	int ret;
 	int keyhole_en;
@@ -1263,7 +1350,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc)
 	u64 dma_offset_internal_write;
 
 	dma_offset_write = (u64)mod_desc->dma_offset_write;
-	dma_offset_read = (u64)mod_desc->dma_offset_read;
+	dma_offset_read = (u64)mod_desc->dma_offset_read + ring_pointer_offset;
 	dma_offset_internal_read = (u64)mod_desc->dma_offset_internal_read;
 	dma_offset_internal_write = (u64)mod_desc->dma_offset_internal_write;
 

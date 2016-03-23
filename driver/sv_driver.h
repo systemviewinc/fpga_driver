@@ -167,10 +167,15 @@ struct mod_desc
 	atomic_t * atomic_poll;
 	int set_dma_flag;
 	struct task_struct * thread_struct_write;
+	struct task_struct * thread_struct_read;
 	int thread_q;
+	int thread_q_read;
 	atomic_t * wth;    //write to hardware pointer
 	atomic_t * wtk;    //write to kernel pointer
 	atomic_t * ring_buf_pri;    //handshake variable
+	atomic_t * rfh;    //write to hardware pointer
+	atomic_t * rfu;    //write to kernel pointer
+	atomic_t * ring_buf_pri_read;    //handshake variable
 };
 
 /*this is the interrupt structure*/
@@ -215,14 +220,17 @@ void int_ctlr_init(u64 axi_address);
 //int dma_file_init(struct mod_desc *mod_desc, int dma_file_size, void *dma_buffer_base, u64 dma_buffer_size);
 int dma_file_init(struct mod_desc *mod_desc, void *dma_buffer_base, u64 dma_buffer_size);
 size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_pointer_offset);
-size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc);
+size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_pointer_offset);
 int axi_stream_fifo_init(struct mod_desc * mod_desc);
 void cdma_wait_sleep(int cdma_num);
 void cdma_idle_poll(int cdma_num);
 void write_thread(struct mod_desc *mod_desc);
+void read_thread(struct mod_desc *mod_desc);
 struct task_struct* create_thread(struct mod_desc *mod_desc);
+struct task_struct* create_thread_read(struct mod_desc *mod_desc);
 int data_to_write(struct mod_desc *mod_desc);
 int write_data(struct mod_desc* mod_desc, size_t count, u64 ring_pointer_offset);
 int get_new_ring_pointer(int bytes_written, int ring_pointer_offset, int file_size);
 void query_ring_buff(struct mod_desc* mod_desc, size_t size); //blocks until count is able to be copied to the ring buff
+int max_hw_read(struct mod_desc *mod_desc, int tail, int head, int priority);
 // ******************************************************************

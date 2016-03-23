@@ -942,6 +942,9 @@ int pci_open(struct inode *inode, struct file *filep)
 	atomic_t * wth;
 	atomic_t * wtk;
 	atomic_t * ring_buf_pri;
+	atomic_t * rfh;
+	atomic_t * rfu;
+	atomic_t * ring_buf_pri_read;
 
 	start_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
 	stop_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
@@ -950,11 +953,17 @@ int pci_open(struct inode *inode, struct file *filep)
 	wtk = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
 	wth = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
 	ring_buf_pri = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
+	rfu = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
+	rfh = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
+	ring_buf_pri_read = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
 
 	atomic_set(atomic_poll, 0);
 	atomic_set(wth, 0);
 	atomic_set(wtk, 0);
 	atomic_set(ring_buf_pri, 1);
+	atomic_set(rfh, 0);
+	atomic_set(rfu, 0);
+	atomic_set(ring_buf_pri_read, 1);
 
 	mode_address = kmalloc(sizeof(int), GFP_KERNEL);
 	interrupt_count = kmalloc(sizeof(int), GFP_KERNEL);
@@ -990,10 +999,13 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->atomic_poll = atomic_poll;
 	s->set_dma_flag = 0;
 	s->thread_struct_write = NULL;
+	s->thread_struct_read = NULL;
 	s->thread_q = 0;
+	s->thread_q_read = 0;
 	s->wth = wth;
 	s->wtk = wtk;
 	s->ring_buf_pri = ring_buf_pri;
+	s->ring_buf_pri_read = ring_buf_pri_read;
 
 	verbose_printk(KERN_INFO"<pci_open>: minor number %d detected\n", s->minor);
 
@@ -1039,6 +1051,15 @@ int pci_release(struct inode *inode, struct file *filep)
 	{
 		schedule();
 		mod_desc->thread_q = 1;
+		wake_up_interruptible(&thread_q_head);
+	}
+
+	mod_desc->thread_q_read = 1;
+	wake_up_interruptible(&thread_q_head);
+	while(kthread_stop(mod_desc->thread_struct_read)<0)
+	{
+		schedule();
+		mod_desc->thread_q_read = 1;
 		wake_up_interruptible(&thread_q_head);
 	}
 
@@ -1329,6 +1350,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 						//spawn write ring buff thread
 						//struct task_struct* kthread;
 						mod_desc->thread_struct_write = create_thread(mod_desc);
+						mod_desc->thread_struct_read = create_thread_read(mod_desc);
 						//msleep(100);
 						//ret = kthread_stop(mod_desc->thread_struct_write);
 						//spawn read ring buff thread
@@ -1704,6 +1726,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	u64 dma_offset_internal_write;
 
 	mod_desc = filep->private_data;
+	int ring_buf_ptr;
 
 	temp = 0;
 
@@ -1748,6 +1771,8 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 		count = (size_t)mod_desc->dma_size;
 	}
 
+	ring_buf_ptr = 0;   //set this to 0 so the non-ring buffer types will still work.
+
 	switch(*(mod_desc->mode)){
 
 		case MASTER:
@@ -1758,11 +1783,40 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 		case AXI_STREAM_FIFO:
 
-			bytes = axi_stream_fifo_read(count, mod_desc);
+//			/* -----------------------------------------------------------------------------------
+//			 *    Ring buffer Code Start  */
+//
+//			/*for the ring buffer case, we just need to determine a pointer location and a size
+//			 * to give to the copy_to_user function */ 
+//
+//			rfh = atomic_read(mod_desc->rfh);
+//			rfu = atomic_read(mod_desc->rfu);
+//			priority = atomic_read(mod_desc->ring_buf_pri_read); //The thread has priority when the atomic variable is 0
+//			max_can_read = max_hw_read(mod_desc, rfu, rfh, priority)
+//			if (count > max_can_read)
+//				count = max_can_read;
+//
+//			ret = copy_to_user(buf, mod_desc->dma_read + rfu, count);
+//			
+//			rfu = get_new_ring_pointer(count, rfu, (int)mod_desc->file_size);
+//			verbose_printk(KERN_INFO"<pci_write>:ring_point: RFU : %d\n", rfu);
+//			atomic_set(mod_desc->rfu, rfu);
+//			
+//			/*This says that if the RFU pointer has caught up to the RFH pointer, give priority to the RFH*/
+//			if(atomic_read(mod_desc->rfh) == rfu)
+//				atomic_set(mod_desc->ring_buf_pri_read, 0);
+//
+//			break;
+//			/*    Ring buffer Code End
+//			* ------------------------------------------------------------------------------------*/
+
+			bytes = axi_stream_fifo_read(count, mod_desc, 0);
 			if (bytes < 0)
 			{
 				verbose_printk(KERN_INFO"<user_peripheral_read>: ERROR reading data from axi stream fifo\n");
 			}
+			
+			ret = copy_to_user(buf, mod_desc->dma_read, count);
 
 			break;
 
@@ -1828,9 +1882,12 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 					printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llu\n", *f_pos);
 					return -1;
 				}
+				
 
 			}
 
+			ret = copy_to_user(buf, mod_desc->dma_read, count);
+			
 			bytes = count;
 
 			break;
@@ -1841,7 +1898,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 	/*eventually this will go away once we add mmap
 	 * for now we copy to the appropriate file buffer*/
-	ret = copy_to_user(buf, mod_desc->dma_read, count);
+	//ret = copy_to_user(buf, mod_desc->dma_read + ring_buf_ptr, count);
 
 	//printk(KERN_INFO"total file rx byes: %d \n", mod_desc->rx_bytes);
 
