@@ -149,6 +149,7 @@ wait_queue_head_t wq;
 wait_queue_head_t wq_periph;
 wait_queue_head_t mutexq;
 wait_queue_head_t thread_q_head;
+wait_queue_head_t thread_q_head_read;
 int cdma_comp[5];
 atomic_t cdma_atom[5];
 int num_int;
@@ -630,6 +631,7 @@ static int __init sv_driver_init(void)
 			init_waitqueue_head(&wq_periph);
 			init_waitqueue_head(&mutexq);
 			init_waitqueue_head(&thread_q_head);
+			init_waitqueue_head(&thread_q_head_read);
 
 			ids[0].vendor =  PCI_VENDOR_ID_XILINX;
 			ids[0].device =  (u32)device_id;
@@ -652,6 +654,7 @@ static int __init sv_driver_init(void)
 			init_waitqueue_head(&wq_periph);
 			init_waitqueue_head(&mutexq);
 			init_waitqueue_head(&thread_q_head);
+			init_waitqueue_head(&thread_q_head_read);
 
 			bar_0_axi_offset = 0x40000000;
 
@@ -783,30 +786,18 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 		if (vec_serviced >= 0x10)
 		{
-			wake_up(&wq_periph);
-			verbose_printk(KERN_INFO"<soft_isr>: Waking up the Poll()\n");
+			//if non ring buff
+			//wake_up(&wq_periph);
+			//verbose_printk(KERN_INFO"<soft_isr>: Waking up the Poll()\n");
 
-			//	for(i = 4; i<=7; i++)
-			//	{
-			//	mutex_lock_interruptible(interr_dict[i].int_count_sem);
-			//		if (interr_dict[i].int_count > 0)
-			//	if (interr[i] > 0)
-			//		{
-			//	    	verbose_printk(KERN_INFO"<soft_isr>: Waking up User Peripheral:%x\n", i);
-			//		mutex_unlock(interr_dict[i].int_count_sem);
-			//	interr_dict[i].int_count = 0;
-			//	interr[i] = 0;
-			//		wake_up(interr_dict[i].iwq);
-			//		}
-			//	}
-			//		verbose_printk(KERN_INFO"<soft_isr>:			Waking up User Peripherals\n");
+			//if ring buffer is used
+			wake_up_interruptible(&thread_q_head_read);
+			verbose_printk(KERN_INFO"<soft_isr>: Waking up the read thread\n");
+
 		}
 	}
 
 	verbose_printk(KERN_INFO"<soft_isr>:						Exiting ISR\n");
-	verbose_printk(KERN_INFO"		Exited the Tasklet");
-
-	verbose_printk(KERN_INFO"<pci_isr>:						Exiting the ISR");
 
 	return IRQ_HANDLED;
 
@@ -939,6 +930,7 @@ int pci_open(struct inode *inode, struct file *filep)
 	struct task_struct * kthread;
 
 	atomic_t * atomic_poll;
+	atomic_t * thread_q_read;
 	atomic_t * wth;
 	atomic_t * wtk;
 	atomic_t * ring_buf_pri;
@@ -950,6 +942,7 @@ int pci_open(struct inode *inode, struct file *filep)
 	stop_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
 
 	atomic_poll = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
+	thread_q_read = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
 	wtk = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
 	wth = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
 	ring_buf_pri = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
@@ -958,6 +951,7 @@ int pci_open(struct inode *inode, struct file *filep)
 	ring_buf_pri_read = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
 
 	atomic_set(atomic_poll, 0);
+	atomic_set(thread_q_read, 0);
 	atomic_set(wth, 0);
 	atomic_set(wtk, 0);
 	atomic_set(ring_buf_pri, 1);
@@ -1001,9 +995,11 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->thread_struct_write = NULL;
 	s->thread_struct_read = NULL;
 	s->thread_q = 0;
-	s->thread_q_read = 0;
+	s->thread_q_read = thread_q_read;
 	s->wth = wth;
 	s->wtk = wtk;
+	s->rfh = rfh;
+	s->rfu = rfu;
 	s->ring_buf_pri = ring_buf_pri;
 	s->ring_buf_pri_read = ring_buf_pri_read;
 
@@ -1054,13 +1050,13 @@ int pci_release(struct inode *inode, struct file *filep)
 		wake_up_interruptible(&thread_q_head);
 	}
 
-	mod_desc->thread_q_read = 1;
-	wake_up_interruptible(&thread_q_head);
+	atomic_set(mod_desc->thread_q_read, 1);
+	wake_up_interruptible(&thread_q_head_read);
 	while(kthread_stop(mod_desc->thread_struct_read)<0)
 	{
 		schedule();
-		mod_desc->thread_q_read = 1;
-		wake_up_interruptible(&thread_q_head);
+		atomic_set(mod_desc->thread_q_read, 1);
+		wake_up_interruptible(&thread_q_head_read);
 	}
 
 	kfree((const void*)filep->private_data);
@@ -1165,10 +1161,11 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			interr_dict[int_num].int_count = mod_desc->int_count;
 			interr_dict[int_num].mode = mod_desc->mode;
 
-			interr_dict[int_num].atomic_poll = mod_desc->atomic_poll;
-			//	interr_dict[int_num].iwq = mod_desc->iwq;
-			//	interr_dict[int_num].int_count_sem = mod_desc->int_count_sem;
-			//	mutex_init(mod_desc->int_count_sem);
+			// if non ring buff
+			//interr_dict[int_num].atomic_poll = mod_desc->atomic_poll;
+
+			//ring buff
+			interr_dict[int_num].atomic_poll = mod_desc->thread_q_read;
 
 			break;
 
@@ -1339,9 +1336,12 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 						/*set the ring puff priority to WTK*/
 						atomic_set(mod_desc->ring_buf_pri, 1);
+						atomic_set(mod_desc->ring_buf_pri_read, 0);
 						/*set the pointer defaults*/
 						atomic_set(mod_desc->wtk, 0);
-						atomic_set(mod_desc->wth, 0);
+						atomic_set(mod_desc->wtk, 0);
+						atomic_set(mod_desc->rfh, 0);
+						atomic_set(mod_desc->rfu, 0);
 
 						ret = axi_stream_fifo_init(mod_desc);
 						if (ret < 0)
@@ -1399,7 +1399,7 @@ int pci_poll(struct file *filep, poll_table * pwait)
 	unsigned int mask = 0;
 
 	has_data = 0;
-	verbose_printk(KERN_INFO"<pci_poll>:Poll() has been run!\n");
+	printk(KERN_INFO"<pci_poll>:Poll() has been entered!\n");
 	mod_desc = filep->private_data;
 
 	/*Register the poll table with the peripheral wait queue
@@ -1418,7 +1418,7 @@ int pci_poll(struct file *filep, poll_table * pwait)
 	//	if (has_data > 0)
 	if (atomic_read(mod_desc->atomic_poll))
 	{
-		verbose_printk(KERN_INFO"<pci_poll>: Interrupting Peripheral Matched!\n");
+		printk(KERN_INFO"<pci_poll>: Interrupting Peripheral Matched!\n");
 		/*reset the has_data flag*/
 
 		atomic_set(mod_desc->atomic_poll, 0);
@@ -1427,7 +1427,7 @@ int pci_poll(struct file *filep, poll_table * pwait)
 
 		mask |= POLLIN;
 	}
-	verbose_printk(KERN_INFO"<pci_poll>:Leaving Poll()\n");
+	printk(KERN_INFO"<pci_poll>:Leaving Poll()\n");
 
 	return mask;
 
@@ -1712,21 +1712,22 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_pos)
 {
-	//	u32 kern_reg;
 	u64 axi_dest;
 	struct mod_desc *mod_desc;
 	int bytes = 0;
 	int transfer_type;
-	//	void * read_buf = NULL;
 	int ret;
 	size_t temp;
 	u64 dma_offset_write;
 	u64 dma_offset_read;
 	u64 dma_offset_internal_read;
 	u64 dma_offset_internal_write;
+	int rfh;
+	int rfu;
+	int max_can_read;
+	int priority;
 
 	mod_desc = filep->private_data;
-	int ring_buf_ptr;
 
 	temp = 0;
 
@@ -1771,7 +1772,6 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 		count = (size_t)mod_desc->dma_size;
 	}
 
-	ring_buf_ptr = 0;   //set this to 0 so the non-ring buffer types will still work.
 
 	switch(*(mod_desc->mode)){
 
@@ -1783,32 +1783,34 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 		case AXI_STREAM_FIFO:
 
-//			/* -----------------------------------------------------------------------------------
-//			 *    Ring buffer Code Start  */
-//
-//			/*for the ring buffer case, we just need to determine a pointer location and a size
-//			 * to give to the copy_to_user function */ 
-//
-//			rfh = atomic_read(mod_desc->rfh);
-//			rfu = atomic_read(mod_desc->rfu);
-//			priority = atomic_read(mod_desc->ring_buf_pri_read); //The thread has priority when the atomic variable is 0
-//			max_can_read = max_hw_read(mod_desc, rfu, rfh, priority)
-//			if (count > max_can_read)
-//				count = max_can_read;
-//
-//			ret = copy_to_user(buf, mod_desc->dma_read + rfu, count);
-//			
-//			rfu = get_new_ring_pointer(count, rfu, (int)mod_desc->file_size);
-//			verbose_printk(KERN_INFO"<pci_write>:ring_point: RFU : %d\n", rfu);
-//			atomic_set(mod_desc->rfu, rfu);
-//			
-//			/*This says that if the RFU pointer has caught up to the RFH pointer, give priority to the RFH*/
-//			if(atomic_read(mod_desc->rfh) == rfu)
-//				atomic_set(mod_desc->ring_buf_pri_read, 0);
-//
-//			break;
-//			/*    Ring buffer Code End
-//			* ------------------------------------------------------------------------------------*/
+			/* -----------------------------------------------------------------------------------
+			 *    Ring buffer Code Start  */
+
+			/*for the ring buffer case, we just need to determine a pointer location and a size
+			 * to give to the copy_to_user function */ 
+
+			rfh = atomic_read(mod_desc->rfh);
+			rfu = atomic_read(mod_desc->rfu);
+			priority = atomic_read(mod_desc->ring_buf_pri_read); //The thread has priority when the atomic variable is 0
+			max_can_read = max_hw_read(mod_desc, rfu, rfh, priority);
+			if (count > max_can_read)
+				count = (size_t)max_can_read;
+
+			ret = copy_to_user(buf, mod_desc->dma_read + rfu, count);
+			
+			rfu = get_new_ring_pointer(count, rfu, (int)mod_desc->file_size);
+			printk(KERN_INFO"<pci_write>:ring_point: RFU : %d\n", rfu);
+			atomic_set(mod_desc->rfu, rfu);
+			
+			/*This says that if the RFU pointer has caught up to the RFH pointer, give priority to the RFH*/
+			if(atomic_read(mod_desc->rfh) == rfu)
+				atomic_set(mod_desc->ring_buf_pri_read, 0);
+
+			bytes = count;
+
+			break;
+			/*    Ring buffer Code End
+			* ------------------------------------------------------------------------------------*/
 
 			bytes = axi_stream_fifo_read(count, mod_desc, 0);
 			if (bytes < 0)

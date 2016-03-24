@@ -381,8 +381,9 @@ void read_thread(struct mod_desc *mod_desc)
 	int ret;
 
 	while(!kthread_should_stop()){
-		ret = wait_event_interruptible(thread_q_head, mod_desc->thread_q_read == 1);
-		mod_desc->thread_q_read = 0;
+		ret = wait_event_interruptible(thread_q_head_read, atomic_read(mod_desc->thread_q_read) == 1);
+		atomic_set(mod_desc->thread_q_read, 0);
+		printk(KERN_INFO"<user_peripheral_read>: woke up the read thread!!\n");
 
 		read_count = 1;
 		while(read_count>0)  //we want to keep reading until all data is read
@@ -392,12 +393,15 @@ void read_thread(struct mod_desc *mod_desc)
 				rfh = atomic_read(mod_desc->rfh);
 				rfu = atomic_read(mod_desc->rfu);
 				priority = 0;
-				if (atomic_read(mod_desc->ring_buf_pri_read) == 0); //The thread has priority when the atomic variable is 0
+				if (atomic_read(mod_desc->ring_buf_pri_read) == 0) //The thread has priority when the atomic variable is 0
 					priority = 1;                            
 				max_can_read = max_hw_read(mod_desc, rfh, rfu, priority);
 			}
+			printk(KERN_INFO"<user_peripheral_read>: maximum read amount: %d\n", max_can_read);
+			read_count = 0;
 
-			read_count = axi_stream_fifo_read(max_can_read, mod_desc, (u64)rfh);
+			read_count = axi_stream_fifo_read((size_t)max_can_read, mod_desc, (u64)rfh);
+			printk("Just read %d bytes from HW\n", read_count);
 
 			if (read_count < 0)
 			{
@@ -409,10 +413,17 @@ void read_thread(struct mod_desc *mod_desc)
 			/*update rfh pointer*/
 			rfh = get_new_ring_pointer(read_count, rfh, (int)(mod_desc->file_size)); 
 			atomic_set(mod_desc->rfh, rfh);
+			printk("ring_point : RFH %d\n", rfh);
 
 			/*Ths says that if the rfh pointer has caught up to the rfu pointer, then give priority to the rfu.*/
 			if(atomic_read(mod_desc->rfu) == rfh)
 				atomic_set(mod_desc->ring_buf_pri_read, 1);
+
+			//send signal to userspace poll()
+			atomic_set(mod_desc->atomic_poll, 1);
+			printk("waking up the poll.....\n");
+			wake_up(&wq_periph);
+
  
 		}
 

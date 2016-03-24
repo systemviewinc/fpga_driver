@@ -110,6 +110,7 @@ extern wait_queue_head_t wq;
 extern wait_queue_head_t wq_periph;
 extern wait_queue_head_t mutexq;
 extern wait_queue_head_t thread_q_head;
+extern wait_queue_head_t thread_q_head_read;
 /*this is the CDMA wait condition variable*/
 extern int cdma_comp[5];
 extern atomic_t cdma_atom[5];
@@ -169,7 +170,7 @@ struct mod_desc
 	struct task_struct * thread_struct_write;
 	struct task_struct * thread_struct_read;
 	int thread_q;
-	int thread_q_read;
+	atomic_t * thread_q_read;
 	atomic_t * wth;    //write to hardware pointer
 	atomic_t * wtk;    //write to kernel pointer
 	atomic_t * ring_buf_pri;    //handshake variable
