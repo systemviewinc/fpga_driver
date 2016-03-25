@@ -1172,7 +1172,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		case SET_FILE_SIZE:
 			mod_desc->file_size = ((loff_t)arg_loc & 0xffffffff);
 			verbose_printk(KERN_INFO"<ioctl>: Setting device file size:%llu\n", mod_desc->file_size);
-			
+
 			/*initialize the DMA for the file*/
 			ret = dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size);
 			if (ret < 0)
@@ -1524,7 +1524,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			wtk = get_new_ring_pointer(partial_count, wtk, (int)mod_desc->file_size);
 			verbose_printk(KERN_INFO"<pci_write>:ring_point: WTK : %d\n", wtk);
 			atomic_set(mod_desc->wtk, wtk);
-			
+
 			/*This says that if the WTK pointer has caught up to the WTH pointer, give priority to the WTH*/
 			if(atomic_read(mod_desc->wth) == wtk)
 				atomic_set(mod_desc->ring_buf_pri, 0);
@@ -1537,7 +1537,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		}
 		bytes_written = bytes_written + partial_count;
 	}
-	verbose_printk(KERN_INFO"<pci_write>: Total write to ring buffer in this pass: %d\n", bytes_written);
+	printk(KERN_INFO"<pci_write>: Total write to ring buffer in this pass: %d\n", bytes_written);
 	return bytes_written;
 
 	// end of ring buffer code ---------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1793,31 +1793,37 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			rfu = atomic_read(mod_desc->rfu);
 			priority = atomic_read(mod_desc->ring_buf_pri_read); //The thread has priority when the atomic variable is 0
 			max_can_read = max_hw_read(mod_desc, rfu, rfh, priority);
-			if (count > max_can_read)
-				count = (size_t)max_can_read;
 
-			ret = copy_to_user(buf, mod_desc->dma_read + rfu, count);
-			
-			rfu = get_new_ring_pointer(count, rfu, (int)mod_desc->file_size);
-			printk(KERN_INFO"<pci_write>:ring_point: RFU : %d\n", rfu);
-			atomic_set(mod_desc->rfu, rfu);
-			
-			/*This says that if the RFU pointer has caught up to the RFH pointer, give priority to the RFH*/
-			if(atomic_read(mod_desc->rfh) == rfu)
-				atomic_set(mod_desc->ring_buf_pri_read, 0);
+			if (max_can_read > 0)
+			{
+				if (count > max_can_read)
+					count = (size_t)max_can_read;
 
-			bytes = count;
+				ret = copy_to_user(buf, mod_desc->dma_read + rfu, count);
+
+				rfu = get_new_ring_pointer(count, rfu, (int)mod_desc->file_size);
+				printk(KERN_INFO"<pci_write>:ring_point: RFU : %d\n", rfu);
+				atomic_set(mod_desc->rfu, rfu);
+
+				/*This says that if the RFU pointer has caught up to the RFH pointer, give priority to the RFH*/
+				if(atomic_read(mod_desc->rfh) == rfu)
+					atomic_set(mod_desc->ring_buf_pri_read, 0);
+
+				bytes = count;
+			}
+
+			else bytes = 0;
 
 			break;
 			/*    Ring buffer Code End
-			* ------------------------------------------------------------------------------------*/
+			 * ------------------------------------------------------------------------------------*/
 
 			bytes = axi_stream_fifo_read(count, mod_desc, 0);
 			if (bytes < 0)
 			{
 				verbose_printk(KERN_INFO"<user_peripheral_read>: ERROR reading data from axi stream fifo\n");
 			}
-			
+
 			ret = copy_to_user(buf, mod_desc->dma_read, count);
 
 			break;
@@ -1884,12 +1890,12 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 					printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llu\n", *f_pos);
 					return -1;
 				}
-				
+
 
 			}
 
 			ret = copy_to_user(buf, mod_desc->dma_read, count);
-			
+
 			bytes = count;
 
 			break;
@@ -1916,8 +1922,8 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	verbose_printk(KERN_INFO"\n");
 	verbose_printk(KERN_INFO"<pci_read>: ************************************************************************\n");
 	verbose_printk(KERN_INFO"<pci_read>: ******************** READ TRANSACTION END  **************************\n");
-	verbose_printk(KERN_INFO"                                    Bytes read : %d\n", bytes);
-	verbose_printk(KERN_INFO"                                    Total Bytes read : %d\n", mod_desc->rx_bytes);
+	printk(KERN_INFO"                                    Bytes read : %d\n", bytes);
+	printk(KERN_INFO"                                    Total Bytes read : %d\n", mod_desc->rx_bytes);
 	verbose_printk(KERN_INFO"<pci_read>: ************************************************************************\n");
 	verbose_printk(KERN_INFO"\n");
 

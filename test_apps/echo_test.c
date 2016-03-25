@@ -411,9 +411,12 @@ int main()
 	}
 	/*write to file*/
 	char* filename; 
-	filename = "statistics.csv";
-	create_csv(filename, bw_arr , NUM_ITER,NUM_XFER_SIZE_STEPS, NUM_HLS);
-
+	
+	if(CREATE_FILES)
+	{
+		filename = "statistics.csv";
+		create_csv(filename, bw_arr , NUM_ITER,NUM_XFER_SIZE_STEPS, NUM_HLS);
+	}
 	//	bw = spawn_threads(1, 0, 0, 0);
 	//	bw = spawn_threads(0, 1, 0, 0);
 	//	bw = spawn_threads(0, 0, 1, 0);
@@ -423,16 +426,20 @@ int main()
 
 	close(hls_write);
 	close(hls_read);
+	printf("closed files for thread 1\n");
 	close(hls_write_2);
 	close(hls_read_2);
+	printf("closed files for thread 2\n");
 	close(hls_write_3);
 	close(hls_read_3);
+	printf("closed files for thread 3\n");
 	close(hls_write_4);
 	close(hls_read_4);
+	printf("closed files for thread 4\n");
 	//	close(trace_read);
 	//	close(trace_control);
 
-	printf("closed files\n");
+	printf("closed all files\n");
 
 	return 0;
 }
@@ -488,8 +495,8 @@ void * tx(void * file_desc)
 		iter = 500;
 
 	//	while(counter < iter)  //this holds number of transfers constant
-	while(tx_write_bytes < (FILE_SIZE_1*512/(2*2)))  //this holds amount of data constant
-//	while(tx_write_bytes < 32768)  //this holds amount of data constant
+//	while(tx_write_bytes < (FILE_SIZE_1*512/(2*2)))  //this holds amount of data constant
+	while(tx_write_bytes < 32768)  //this holds amount of data constant
 //	while(tx_write_bytes < 65536)  //this holds amount of data constant
 	{
 		//		ret_val = write(hls_write_2, tx_buf, sizeof(tx));   
@@ -587,8 +594,8 @@ void *rx(void * file_desc)
 
 	total_bytes = 0;
 
-	while(total_bytes < (FILE_SIZE_1*512/(2*2)))  //this holds amount of data constant
-//	while(total_bytes < 32768)  //this holds amount of data constant
+//	while(total_bytes < (FILE_SIZE_1*512/(2*2)))  //this holds amount of data constant
+	while(total_bytes < 32768)  //this holds amount of data constant
 //	while(total_bytes < 65536)  //this holds amount of data constant
 	{
 		return_val = 1;

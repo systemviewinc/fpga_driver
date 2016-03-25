@@ -213,8 +213,8 @@ int write_data(struct mod_desc* mod_desc, size_t count, u64 ring_pointer_offset)
 	verbose_printk(KERN_INFO"\n");
 	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n");
 	verbose_printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION END  **************************\n");
-	verbose_printk(KERN_INFO"<pci_write>: Wrote a total of %zu bytes in write call.\n", bytes_written);
-	verbose_printk(KERN_INFO"<pci_write>: Total write value: %d.\n", mod_desc->tx_bytes);
+	printk(KERN_INFO"<pci_write>: Wrote a total of %zu bytes in write call.\n", bytes_written);
+	printk(KERN_INFO"<pci_write>: Total write value: %d.\n", mod_desc->tx_bytes);
 	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n");
 	verbose_printk(KERN_INFO"\n");
 	return bytes_written;
@@ -386,6 +386,9 @@ void read_thread(struct mod_desc *mod_desc)
 		printk(KERN_INFO"<user_peripheral_read>: woke up the read thread!!\n");
 
 		read_count = 1;
+		//read_count = axi_stream_fifo_d2r(mod_desc);
+		//printk(KERN_INFO"<read_thread>: The read count is %d\n", read_count);
+
 		while(read_count>0)  //we want to keep reading until all data is read
 		{
 			max_can_read = 0;        
@@ -396,17 +399,27 @@ void read_thread(struct mod_desc *mod_desc)
 				if (atomic_read(mod_desc->ring_buf_pri_read) == 0) //The thread has priority when the atomic variable is 0
 					priority = 1;                            
 				max_can_read = max_hw_read(mod_desc, rfh, rfu, priority);
+				if (max_can_read == 0)
+				{
+					printk(KERN_INFO"<read_thread>: Blocked by no availble room in ring buffer\n");
+					printk(KERN_INFO"<read_thread>: The current priority is %d\n", priority);
+					atomic_set(mod_desc->atomic_poll, 1);
+					printk("waking up the poll.....\n");
+					wake_up(&wq_periph);
+					schedule();
+				}
 			}
 			printk(KERN_INFO"<user_peripheral_read>: maximum read amount: %d\n", max_can_read);
 			read_count = 0;
 
 			read_count = axi_stream_fifo_read((size_t)max_can_read, mod_desc, (u64)rfh);
-			printk("Just read %d bytes from HW\n", read_count);
+			printk("READ_COUNT: Just read %d bytes from HW\n", read_count);
 
 			if (read_count < 0)
 			{
 				printk(KERN_INFO"<user_peripheral_read>: ERROR reading data from axi stream fifo\n");
 			}
+			
 			if (read_count == 0)
 				break;
 			
@@ -1345,6 +1358,32 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_
 	}
 
 	return count;
+}
+
+
+size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc)
+{
+	u32 buf, read_reg;
+	int ret;
+	u64 dma_offset_internal_read;
+	u64 axi_dest;
+	size_t count;
+	
+	dma_offset_internal_read = (u64)mod_desc->dma_offset_internal_read;
+	/*Read FIFO Fill level*/
+	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RLR;
+	buf = 0;
+	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, dma_offset_internal_read);
+	if (ret > 0)
+	{
+		printk(KERN_INFO"<axi_stream_fifo_d2r>: ERROR reading Read FIFO fill level\n");
+		return -1;
+	}
+	//read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+	read_reg = (*(mod_desc->kernel_reg_read));  
+
+	count = read_reg;	
+	return count;  	
 }
 
 size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_pointer_offset)

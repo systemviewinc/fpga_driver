@@ -234,4 +234,5 @@ int write_data(struct mod_desc* mod_desc, size_t count, u64 ring_pointer_offset)
 int get_new_ring_pointer(int bytes_written, int ring_pointer_offset, int file_size);
 void query_ring_buff(struct mod_desc* mod_desc, size_t size); //blocks until count is able to be copied to the ring buff
 int max_hw_read(struct mod_desc *mod_desc, int tail, int head, int priority);
+size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc);
 // ******************************************************************
