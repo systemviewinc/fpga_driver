@@ -18,11 +18,11 @@
 #define TRANSFER_SIZE_3 1024
 #define TRANSFER_SIZE_4 1024
 
-#define NUM_HLS 1   //4
-#define NUM_ITER 1  //10
-#define NUM_XFER_SIZE_STEPS 1 //3    //(log10(FILE_SIZE_1/1024)/log10(2))-1
+#define NUM_HLS 4   //4
+#define NUM_ITER 10  //10
+#define NUM_XFER_SIZE_STEPS 3 //3    //(log10(FILE_SIZE_1/1024)/log10(2))-1
 
-#define CREATE_FILES 1
+#define CREATE_FILES 0
 
 int xfer_size_1, xfer_size_2, xfer_size_3, xfer_size_4;
 

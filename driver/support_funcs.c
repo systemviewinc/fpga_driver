@@ -383,7 +383,7 @@ void read_thread(struct mod_desc *mod_desc)
 	while(!kthread_should_stop()){
 		ret = wait_event_interruptible(thread_q_head_read, atomic_read(mod_desc->thread_q_read) == 1);
 		atomic_set(mod_desc->thread_q_read, 0);
-		printk(KERN_INFO"<user_peripheral_read>: woke up the read thread!!\n");
+		verbose_printk(KERN_INFO"<user_peripheral_read>: woke up the read thread!!\n");
 
 		read_count = 1;
 		//read_count = axi_stream_fifo_d2r(mod_desc);
@@ -401,19 +401,19 @@ void read_thread(struct mod_desc *mod_desc)
 				max_can_read = max_hw_read(mod_desc, rfh, rfu, priority);
 				if (max_can_read == 0)
 				{
-					printk(KERN_INFO"<read_thread>: Blocked by no availble room in ring buffer\n");
-					printk(KERN_INFO"<read_thread>: The current priority is %d\n", priority);
+					verbose_printk(KERN_INFO"<read_thread>: Blocked by no availble room in ring buffer\n");
+					verbose_printk(KERN_INFO"<read_thread>: The current priority is %d\n", priority);
 					atomic_set(mod_desc->atomic_poll, 1);
-					printk("waking up the poll.....\n");
+					verbose_printk("waking up the poll.....\n");
 					wake_up(&wq_periph);
 					schedule();
 				}
 			}
-			printk(KERN_INFO"<user_peripheral_read>: maximum read amount: %d\n", max_can_read);
+			verbose_printk(KERN_INFO"<user_peripheral_read>: maximum read amount: %d\n", max_can_read);
 			read_count = 0;
 
 			read_count = axi_stream_fifo_read((size_t)max_can_read, mod_desc, (u64)rfh);
-			printk("READ_COUNT: Just read %d bytes from HW\n", read_count);
+			verbose_printk("READ_COUNT: Just read %d bytes from HW\n", read_count);
 
 			if (read_count < 0)
 			{
@@ -426,7 +426,7 @@ void read_thread(struct mod_desc *mod_desc)
 			/*update rfh pointer*/
 			rfh = get_new_ring_pointer(read_count, rfh, (int)(mod_desc->file_size)); 
 			atomic_set(mod_desc->rfh, rfh);
-			printk("ring_point : RFH %d\n", rfh);
+			verbose_printk("ring_point : RFH %d\n", rfh);
 
 			/*Ths says that if the rfh pointer has caught up to the rfu pointer, then give priority to the rfu.*/
 			if(atomic_read(mod_desc->rfu) == rfh)
@@ -434,7 +434,7 @@ void read_thread(struct mod_desc *mod_desc)
 
 			//send signal to userspace poll()
 			atomic_set(mod_desc->atomic_poll, 1);
-			printk("waking up the poll.....\n");
+			verbose_printk("waking up the poll.....\n");
 			wake_up(&wq_periph);
 
  
