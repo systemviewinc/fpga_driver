@@ -174,6 +174,7 @@ const u32 INT_CTRL_IAR      = 0x0C;
 
 /*This is an array of interrupt structures to hold up to 8 peripherals*/
 struct interr_struct interr_dict[8] = {{ 0 }};
+struct mod_desc * mod_desc_arr[8] = {{ 0 }};
 
 /*ISR Tasklet */
 void do_isr_tasklet(unsigned long);
@@ -722,7 +723,8 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	{
 		int_num = vec2num(status);
 		verbose_printk(KERN_INFO"<soft_isr>: interrupt number is: ('%d')\n", int_num);
-		device_mode = *(interr_dict[int_num].mode);
+		//device_mode = interr_dict[int_num].mode;
+		device_mode = mod_desc_arr[int_num]->mode;
 
 		if (device_mode == CDMA)
 		{
@@ -734,10 +736,9 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 		{
 			verbose_printk(KERN_INFO"<soft_isr>: this interrupt is from a user peripheral\n");
 
-			//	if (*(interr_dict[int_num].int_count) < 10)   //set a max here....
-			//	*(interr_dict[int_num].int_count) = (*(interr_dict[int_num].int_count)) + 1;
-			*(interr_dict[int_num].int_count) = 1;
-			atomic_set(interr_dict[int_num].atomic_poll, 1);
+			//*(interr_dict[int_num].int_count) = 1;
+			//atomic_set(interr_dict[int_num].atomic_poll, 1);
+			atomic_set(mod_desc_arr[int_num]->thread_q_read, 1);
 
 			verbose_printk(KERN_INFO"<soft_isr>: this is after the int count add\n");
 			verbose_printk(KERN_INFO"<soft_isr>: setting atomic variable for interrupt number : %d\n", int_num);
@@ -832,7 +833,7 @@ void do_isr_tasklet (unsigned long unused)
 	{
 		int_num = vec2num(status);
 		verbose_printk(KERN_INFO"<soft_isr>: interrupt number is: ('%d')\n", int_num);
-		device_mode = *(interr_dict[int_num].mode);
+		device_mode = interr_dict[int_num].mode;
 
 		if (device_mode == CDMA)
 		{
@@ -891,6 +892,8 @@ void do_isr_tasklet (unsigned long unused)
 
 		//	wake_up_interruptible(&wq);
 		//		*(interr_dict[4].int_count) = (*(interr_dict[4].int_count)) + 1;
+			*(interr_dict[int_num].int_count) = 1;
+			*(interr_dict[int_num].int_count) = 1;
 		//		*(interr_dict[5].int_count) = (*(interr_dict[5].int_count)) + 1;
 
 		if (vec_serviced >= 0x10)
@@ -922,7 +925,6 @@ void do_isr_tasklet (unsigned long unused)
 /* -----------------File Operations-------------------------*/
 int pci_open(struct inode *inode, struct file *filep)
 {
-	void * mode_address;
 	void * interrupt_count;
 	struct mod_desc * s;
 	struct timespec * start_time;
@@ -959,15 +961,13 @@ int pci_open(struct inode *inode, struct file *filep)
 	atomic_set(rfu, 0);
 	atomic_set(ring_buf_pri_read, 1);
 
-	mode_address = kmalloc(sizeof(int), GFP_KERNEL);
 	interrupt_count = kmalloc(sizeof(int), GFP_KERNEL);
 
 	s = (struct mod_desc *)kmalloc(sizeof(struct mod_desc), GFP_KERNEL);
 	s->minor = MINOR(inode->i_rdev);
 	s->axi_addr = 0;
 	s->axi_addr_ctl = 0;
-	s->mode = (u32*)mode_address;   //defaults as slave only
-	*(s->mode) = 0;
+	s->mode = 0;
 	s->int_count = (int*)interrupt_count;
 	*(s->int_count) = 0;
 	s->int_num = 100;
@@ -1024,17 +1024,18 @@ int pci_release(struct inode *inode, struct file *filep)
 
 	struct mod_desc* mod_desc;
 	int ret = 0;
+	
+	//printk(KERN_INFO"<pci_release>: Attempting to close file minor number: %d\n", mod_desc->minor);
 
 	mod_desc = filep->private_data;
 
 	/*Query private data to see if it allocated DMA as a Master*/
-	if (*(mod_desc->mode) == MASTER)
+	if (mod_desc->mode == MASTER)
 	{
 		//unallocate DMA
 		pci_free_consistent(pci_dev_struct, 131702, dma_master_buf[mod_desc->master_num], dma_m_addr[mod_desc->master_num]);
 	}
 
-	kfree((const void*)mod_desc->mode);
 
 	kfree((const void*)mod_desc->int_count);
 	kfree((const void*)mod_desc->start_time);
@@ -1048,6 +1049,7 @@ int pci_release(struct inode *inode, struct file *filep)
 		schedule();
 		mod_desc->thread_q = 1;
 		wake_up_interruptible(&thread_q_head);
+		printk(KERN_INFO"<pci_release>: stuck closing tx thread\n");
 	}
 
 	atomic_set(mod_desc->thread_q_read, 1);
@@ -1055,11 +1057,15 @@ int pci_release(struct inode *inode, struct file *filep)
 	while(kthread_stop(mod_desc->thread_struct_read)<0)
 	{
 		schedule();
+		printk(KERN_INFO"<pci_release>: stuck closing rx thread\n");
 		atomic_set(mod_desc->thread_q_read, 1);
+		atomic_set(mod_desc->ring_buf_pri_read, 0);
 		wake_up_interruptible(&thread_q_head_read);
 	}
 
 	kfree((const void*)filep->private_data);
+	
+	//printk(KERN_INFO"<pci_release>: Successfully closed file minor number: %d\n", mod_desc->minor);
 
 	return SUCCESS;
 }
@@ -1160,6 +1166,8 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 			interr_dict[int_num].int_count = mod_desc->int_count;
 			interr_dict[int_num].mode = mod_desc->mode;
+
+			mod_desc_arr[int_num] = mod_desc;
 
 			// if non ring buff
 			//interr_dict[int_num].atomic_poll = mod_desc->atomic_poll;
@@ -1282,7 +1290,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 		case SET_MODE:
 			verbose_printk(KERN_INFO"<ioctl_set_mode>: Setting the mode of the peripheral\n");
-			*(mod_desc->mode) = (u32)arg_loc;
+			mod_desc->mode = (u32)arg_loc;
 
 			switch((u32)arg_loc){
 
@@ -1399,7 +1407,7 @@ int pci_poll(struct file *filep, poll_table * pwait)
 	unsigned int mask = 0;
 
 	has_data = 0;
-	printk(KERN_INFO"<pci_poll>:Poll() has been entered!\n");
+	verbose_printk(KERN_INFO"<pci_poll>:Poll() has been entered!\n");
 	mod_desc = filep->private_data;
 
 	/*Register the poll table with the peripheral wait queue
@@ -1418,7 +1426,7 @@ int pci_poll(struct file *filep, poll_table * pwait)
 	//	if (has_data > 0)
 	if (atomic_read(mod_desc->atomic_poll))
 	{
-		printk(KERN_INFO"<pci_poll>: Interrupting Peripheral Matched!\n");
+		verbose_printk(KERN_INFO"<pci_poll>: Interrupting Peripheral Matched!\n");
 		/*reset the has_data flag*/
 
 		atomic_set(mod_desc->atomic_poll, 0);
@@ -1427,7 +1435,7 @@ int pci_poll(struct file *filep, poll_table * pwait)
 
 		mask |= POLLIN;
 	}
-	printk(KERN_INFO"<pci_poll>:Leaving Poll()\n");
+	verbose_printk(KERN_INFO"<pci_poll>:Leaving Poll()\n");
 
 	return mask;
 
@@ -1479,7 +1487,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 //		verbose_printk(KERN_INFO"<pci_write>: the amount of bytes being copied to kernel: %zu\n", partial_count);
 //
 //		//if memory interface, do a normal blocking write
-//		if (*(mod_desc->mode) == SLAVE)    
+//		if (mod_desc->mode == SLAVE)    
 //		{
 //
 //			ret = copy_from_user(mod_desc->dma_write, (buf + bytes_written), partial_count);
@@ -1602,7 +1610,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 
 
-		if (*(mod_desc->mode) == AXI_STREAM_FIFO)
+		if (mod_desc->mode == AXI_STREAM_FIFO)
 		{
 
 			bytes = axi_stream_fifo_write(partial_count, mod_desc, 0);
@@ -1773,7 +1781,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	}
 
 
-	switch(*(mod_desc->mode)){
+	switch(mod_desc->mode){
 
 		case MASTER:
 			//Transfer buffer from kernel space to user space at the allocated DMA region
@@ -1807,7 +1815,12 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 				/*This says that if the RFU pointer has caught up to the RFH pointer, give priority to the RFH*/
 				if(atomic_read(mod_desc->rfh) == rfu)
+				{
 					atomic_set(mod_desc->ring_buf_pri_read, 0);
+					/*in case thread was asleep waiting for ring buffer*/
+					atomic_set(mod_desc->thread_q_read, 1);
+					wake_up_interruptible(&thread_q_head_read);
+				}
 
 				bytes = count;
 			}

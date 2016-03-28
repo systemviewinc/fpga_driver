@@ -120,7 +120,7 @@ int write_data(struct mod_desc* mod_desc, size_t count, u64 ring_pointer_offset)
 			//return bytes_written + partial_count;
 		}
 
-		if (*(mod_desc->mode) == AXI_STREAM_FIFO)
+		if (mod_desc->mode == AXI_STREAM_FIFO)
 		{
 
 			bytes = axi_stream_fifo_write(partial_count, mod_desc, ring_pointer_offset);
@@ -406,7 +406,9 @@ void read_thread(struct mod_desc *mod_desc)
 					atomic_set(mod_desc->atomic_poll, 1);
 					verbose_printk("waking up the poll.....\n");
 					wake_up(&wq_periph);
-					schedule();
+					//schedule();
+					ret = wait_event_interruptible(thread_q_head_read, atomic_read(mod_desc->thread_q_read) == 1);
+					atomic_set(mod_desc->thread_q_read, 0);
 				}
 			}
 			verbose_printk(KERN_INFO"<user_peripheral_read>: maximum read amount: %d\n", max_can_read);
@@ -601,7 +603,7 @@ int cdma_init(int cdma_num, int cdma_addr, u32 dma_addr_base)
 	u64 axi_dest;
 	u32 cdma_status;
 	u32 dma_addr_loc;
-	int * mode;
+	int mode;
 	int ret;
 	int index;
 	u64 axi_cdma_loc;
@@ -685,8 +687,7 @@ int cdma_init(int cdma_num, int cdma_addr, u32 dma_addr_base)
 	}
 
 	/*update the interr_dict with interrupt number and mode*/
-	mode = (u32*)kmalloc(sizeof(int), GFP_KERNEL);
-	*mode = CDMA;
+	mode = CDMA;
 	index = cdma_num - 1;
 	interr_dict[index].mode = mode;
 

@@ -139,7 +139,7 @@ struct mod_desc
 	int minor;
 	u64 axi_addr;
 	u64 axi_addr_ctl;
-	u32 * mode;
+	u32 mode;
 	int * int_count;
 	int int_num;
 	int master_num;
@@ -180,9 +180,11 @@ struct mod_desc
 };
 
 /*this is the interrupt structure*/
+
+
 struct interr_struct
 {
-	u32 * mode;
+	u32 mode;
 	int * int_count;
 	//	wait_queue_head_t * iwq;
 	struct mutex * int_count_sem;
@@ -191,6 +193,8 @@ struct interr_struct
 };
 
 extern struct interr_struct interr_dict[8];
+
+extern struct mod_desc * mod_desc_arr[8];
 
 struct statistics
 {
