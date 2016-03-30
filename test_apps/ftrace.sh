@@ -10,6 +10,8 @@ echo write_thread >> set_ftrace_filter
 echo query_ring_buff >> set_ftrace_filter
 echo axi_stream_fifo_write >> set_ftrace_filter
 echo axi_stream_fifo_read >> set_ftrace_filter
+echo read_thread >> set_ftrace_filter
+echo read_data >> set_ftrace_filter
 #echo data_transfer >> set_ftrace_filter
 #echo axi_stream_fifo_init >> set_ftrace_filter
 echo 1 > tracing_on

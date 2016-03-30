@@ -89,6 +89,8 @@ extern int cdma_capable;
 /*CDMA Semaphore*/
 extern struct mutex CDMA_sem;
 extern struct mutex CDMA_sem_2;
+extern wait_queue_head_t cdma_q_head;
+extern atomic_t cdma_q;
 
 extern u32 dma_current_offset;
 extern u32 dma_garbage_offset;

@@ -403,7 +403,7 @@ int read_data(struct mod_desc * mod_desc)
 		{
 			if (BACK_PRESSURE)
 			{
-				printk("Needing to backpressure....\n");
+				verbose_printk("Needing to backpressure....\n");
 				return 1;
 			}
 
@@ -511,23 +511,23 @@ void read_thread(struct kfifo* read_fifo)
 					{
 					 	if(mod_desc != mod_desc_temp)
 						{
-							printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
-							printk(KERN_INFO"<read_thread>: minor_1 : %d  minor_2:  %d\n", mod_desc->minor, mod_desc_temp->minor);
+							verbose_printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
+							verbose_printk(KERN_INFO"<read_thread>: minor_1 : %d  minor_2:  %d\n", mod_desc->minor, mod_desc_temp->minor);
 							/*add mod_desc back to the fifo*/
 							kfifo_in_spinlocked(read_fifo, &mod_desc, 1, &fifo_lock);
 							//kfifo_in(read_fifo, &mod_desc, 1);
 						}
 						else
-							printk(KERN_INFO"<read_thread>: identical file struct in fifo, not writing.\n");
+							verbose_printk(KERN_INFO"<read_thread>: identical file struct in fifo, not writing.\n");
 					}
 				
 					else
 					{
-							printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
+							verbose_printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
 							/*add mod_desc back to the fifo*/
 							kfifo_in_spinlocked(read_fifo, &mod_desc, 1, &fifo_lock);
 							//kfifo_in(read_fifo, &mod_desc, 1);
-							printk(KERN_INFO"<read_thread>: The only fifo member is the full ring buffer file, going to sleep.\n");
+							verbose_printk(KERN_INFO"<read_thread>: The only fifo member is the full ring buffer file, going to sleep.\n");
 							break;           // go back and wait for new fifo activity
 	
 					}
@@ -536,6 +536,8 @@ void read_thread(struct kfifo* read_fifo)
 					//	printk(KERN_INFO"<read_thread>: The only fifo member is the full ring buffer file, going to sleep.\n");
 					//	break;           // go back and wait for new fifo activity
 					//}
+
+					//schedule();
 				}
 			}
 		}
@@ -847,7 +849,11 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 		{
 			cdma_num = cdma_query();
 			if (cdma_num == 0)
+			{
+				//atomic_set(&cdma_q, 0);
+				//wait_event_interruptible(cdma_q_head, atomic_read(&cdma_q) == 1);
 				schedule();
+			}
 		}
 
 		//	if (cdma_num == 0)
@@ -899,9 +905,10 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 			default : verbose_printk(KERN_INFO"<data_transfer>: ERROR: unknown cdma number detected.\n");
 				  return(0);
 		}
-
-		//	atomic_set(&mutex_free, 1);  //wait variable for mutex lock
-		//	wake_up_interruptible(&mutexq);
+		
+		/*wake up any sleeping processes waiting on a CDMA */
+		//atomic_set(&cdma_q, 1);
+		//wake_up_interruptible(&cdma_q_head);
 
 	}
 

@@ -131,6 +131,8 @@ int cdma_usage_cnt = 0;
 /*CDMA Semaphores*/
 struct mutex CDMA_sem;
 struct mutex CDMA_sem_2;
+wait_queue_head_t cdma_q_head;
+atomic_t cdma_q = ATOMIC_INIT(0);
 
 /*Other Semaphores*/
 
@@ -673,6 +675,7 @@ static int __init sv_driver_init(void)
 			init_waitqueue_head(&mutexq);
 			init_waitqueue_head(&thread_q_head);
 			init_waitqueue_head(&thread_q_head_read);
+			init_waitqueue_head(&cdma_q_head);
 
 			ids[0].vendor =  PCI_VENDOR_ID_XILINX;
 			ids[0].device =  (u32)device_id;
