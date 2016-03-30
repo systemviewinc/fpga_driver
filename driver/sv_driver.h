@@ -204,7 +204,7 @@ struct interr_struct
 
 extern struct interr_struct interr_dict[12];
 
-extern struct mod_desc * mod_desc_arr[8];
+extern struct mod_desc * mod_desc_arr[12];
 
 struct statistics
 {
