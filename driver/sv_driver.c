@@ -34,6 +34,7 @@
 #include <linux/atomic.h>
 #include <linux/time.h>
 #include <linux/kthread.h>
+#include <linux/kfifo.h>
 #include <linux/spinlock.h>
 #include "sv_driver.h"
 
@@ -161,6 +162,12 @@ atomic_t mutex_free = ATOMIC_INIT(0);
 
 atomic_t thread_q_read = ATOMIC_INIT(0);
 struct task_struct * thread_struct_read;
+DEFINE_KFIFO(read_fifo, struct mod_desc*, 4096);
+spinlock_t fifo_lock;
+//DECLARE_KFIFO(read_fifo, struct mod_desc*, 4096);
+//INIT_KFIFO(read_fifo);
+
+//DEFINE_KFIFO(read_fifo, struct mod_desc*, 4096);
 
 /*Driver Statistics*/
 atomic_t driver_tx_bytes = ATOMIC_INIT(0);
@@ -599,8 +606,20 @@ static void remove(struct pci_dev *dev)
 	pci_disable_msi(pci_dev_struct);
 
 	dma_free_coherent(dev_struct, (size_t)dma_buffer_size, dma_buffer_base, dma_addr_base);
+	
+	/*Destroy the read thread*/
+	atomic_set(&thread_q_read, 1);
+	wake_up_interruptible(&thread_q_head_read);
+	while(kthread_stop(thread_struct_read)<0)
+	{
+		atomic_set(&thread_q_read, 1);
+		wake_up_interruptible(&thread_q_head_read);
+	}
+	printk("Read Thread Destroyed\n");
 
 	unregister_chrdev(major, pci_devName);
+	
+	printk(KERN_INFO"<remove>***********************PCIe DEVICE REMOVED**************************************\n");
 
 }
 
@@ -624,7 +643,7 @@ static int sv_plat_remove(struct platform_device *pdev)
 
 	unregister_chrdev(major, pci_devName);
 
-	verbose_printk(KERN_INFO"<remove>***********************PLATFORM DEVICE REMOVED**************************************\n");
+	printk(KERN_INFO"<remove>***********************PLATFORM DEVICE REMOVED**************************************\n");
 
 	return 0;
 }
@@ -642,7 +661,7 @@ static int __init sv_driver_init(void)
 {
 
 	dma_buffer_size = (u64)dma_system_size;
-	void * dummy;
+	//void * dummy;
 
 	switch(driver_type){
 		case PCI:
@@ -665,8 +684,11 @@ static int __init sv_driver_init(void)
 			//pci_devName_const = pci_devName;
 
 			/*Create Read Thread*/
-			thread_struct_read = create_thread_read(dummy);
-			
+			thread_struct_read = create_thread_read(&read_fifo);
+		
+			/*FIFO init stuff*/
+			spin_lock_init(&fifo_lock);
+				
 			return pci_register_driver(&pci_driver);
 			break;
 
@@ -684,7 +706,10 @@ static int __init sv_driver_init(void)
 			bar_0_axi_offset = 0x40000000;
 
 			/*Create Read Thread*/
-			thread_struct_read = create_thread_read(dummy);
+			thread_struct_read = create_thread_read(&read_fifo);
+			
+			/*FIFO init stuff*/
+			spin_lock_init(&fifo_lock);
 			
 			return platform_driver_register(&sv_plat_driver);
 
@@ -768,7 +793,8 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 			//atomic_set(mod_desc_arr[int_num]->thread_q_read, 1); // the threaded way
 
 			//add mod_desc to FIFO
-
+			//kfifo_in(&read_fifo, &mod_desc_arr[int_num], 1);
+			kfifo_in_spinlocked(&read_fifo, &mod_desc_arr[int_num], 1, &fifo_lock);
 			//read_data(mod_desc_arr[int_num]);   //non blocking way
 
 			vec_serviced = vec_serviced | num2vec(int_num);
@@ -1759,6 +1785,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	int rfu;
 	int max_can_read;
 	int priority;
+	int wake_up_flag;
 	unsigned long flags;
 
 	mod_desc = filep->private_data;
@@ -1836,8 +1863,19 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 				ret = copy_to_user(buf, mod_desc->dma_read + rfu, count);
 
+				/*This check is to see if the ring buffer was full before we started reading.
+				 * if it was, this means that there is a good chance that the read thread
+				 * has this file struct queued in the fifo, so we need to wake up the
+				 * read thread after the RFU is updated.*/
+				wake_up_flag = 0;
+
+				if ((rfu == rfh) & BACK_PRESSURE)
+				{
+					wake_up_flag = 1;	
+				}	
+
 				rfu = get_new_ring_pointer(count, rfu, (int)mod_desc->dma_size);
-				verbose_printk(KERN_INFO"<pci_write>:ring_point: RFU : %d\n", rfu);
+				verbose_printk(KERN_INFO"<pci_read>:ring_point: RFU : %d\n", rfu);
 				
 				atomic_set(mod_desc->rfu, rfu);
 
@@ -1848,6 +1886,15 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 					/*in case thread was asleep waiting for ring buffer*/
 					//atomic_set(mod_desc->thread_q_read, 1);
 					//wake_up_interruptible(&thread_q_head_read);
+				}
+	
+				if (wake_up_flag == 1)
+				{
+					printk(KERN_INFO"<pci_read>: freed up the locked ring buffer, waking up read thread.\n");
+					wake_up_flag = 0;
+					/*wake up read thread*/
+					atomic_set(&thread_q_read, 1);
+					wake_up_interruptible(&thread_q_head_read);
 				}
 
 				bytes = count;

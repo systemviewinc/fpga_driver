@@ -1,5 +1,6 @@
 
 #include <linux/kthread.h>
+#include <linux/kfifo.h>
 
 /*These are the CDMA R/W types */
 #ifndef KEYHOLE_WRITE
@@ -22,6 +23,8 @@
 #define CDMA 3
 #endif
 
+#define BACK_PRESSURE 1
+#define RING_BUFF_SIZE_MULTIPLIER 2
 /********* printk statements *********/
 #ifndef verbose_printk
 #define verbose_printk(...)
@@ -116,6 +119,9 @@ extern int cdma_comp[5];
 extern atomic_t cdma_atom[5];
 
 extern atomic_t thread_q_read;
+//extern struct kfifo read_fifo;
+//DECLARE_KFIFO(read_fifo, struct mod_desc*, 4096);
+extern spinlock_t fifo_lock;
 
 extern int cdma_usage_cnt;
 
@@ -181,7 +187,7 @@ struct mod_desc
 	atomic_t * ring_buf_pri_read;    //handshake variable
 };
 
-/*this is the interrupt structure*/
+//DECLARE_KFIFO(read_fifo, struct mod_desc*, 4096);
 
 
 struct interr_struct
@@ -232,14 +238,14 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc);
 void cdma_wait_sleep(int cdma_num);
 void cdma_idle_poll(int cdma_num);
 void write_thread(struct mod_desc *mod_desc);
-void read_thread(void * dummy);
+void read_thread(struct kfifo* read_fifo);
 struct task_struct* create_thread(struct mod_desc *mod_desc);
-struct task_struct* create_thread_read(void * dummy);
+struct task_struct* create_thread_read(struct kfifo* read_fifo);
 int data_to_write(struct mod_desc *mod_desc);
 int write_data(struct mod_desc* mod_desc, size_t count, u64 ring_pointer_offset);
 int get_new_ring_pointer(int bytes_written, int ring_pointer_offset, int file_size);
 void query_ring_buff(struct mod_desc* mod_desc, size_t size); //blocks until count is able to be copied to the ring buff
 int max_hw_read(struct mod_desc *mod_desc, int tail, int head, int priority);
 size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc);
-void read_data(struct mod_desc * mod_desc);
+int read_data(struct mod_desc * mod_desc);
 // ******************************************************************

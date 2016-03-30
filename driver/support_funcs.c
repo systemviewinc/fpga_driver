@@ -371,7 +371,7 @@ void write_thread(struct mod_desc *mod_desc)
 	verbose_printk("Leaving thread\n");
 }
 
-read_data(struct mod_desc * mod_desc)
+int read_data(struct mod_desc * mod_desc)
 {
 	int ring_pointer_offset;
 	int read_count;
@@ -401,31 +401,41 @@ read_data(struct mod_desc * mod_desc)
 		max_can_read = max_hw_read(mod_desc, rfh, rfu, priority);
 		if (max_can_read == 0)
 		{
-			/*drop data*/
-			
-			/*save the actual ring buffer pointer*/
-			dma_offset_read = mod_desc->dma_offset_read;
-			/*change the file struct buffer to point to our fake drop buffer*/
-			mod_desc->dma_offset_read = dma_garbage_offset;
-			/*read out the data*/
-			drop_count = axi_stream_fifo_read(4096, mod_desc, 0);  //the garbage buffer is 4K
-			printk("DROP_COUNT: Just dropped %d bytes from HW\n", drop_count);
-			/*replace the ring buffer pointer*/
-			mod_desc->dma_offset_read = dma_offset_read;
+			if (BACK_PRESSURE)
+			{
+				printk("Needing to backpressure....\n");
+				return 1;
+			}
 
-			atomic_set(mod_desc->atomic_poll, 1);
-			
-			verbose_printk("waking up the poll.....\n");
-			wake_up(&wq_periph);
-			if (drop_count == 0)
-				break;
+			else {
+				/*drop data*/
+
+				/*save the actual ring buffer pointer*/
+				dma_offset_read = mod_desc->dma_offset_read;
+				/*change the file struct buffer to point to our fake drop buffer*/
+				mod_desc->dma_offset_read = dma_garbage_offset;
+				/*read out the data*/
+				drop_count = axi_stream_fifo_read(4096, mod_desc, 0);  //the garbage buffer is 4K
+				if (drop_count > 0)
+					printk("DROP_COUNT: Just dropped %d bytes from HW\n", drop_count);
+				drop_count = 0;
+				/*replace the ring buffer pointer*/
+				mod_desc->dma_offset_read = dma_offset_read;
+
+				atomic_set(mod_desc->atomic_poll, 1);
+
+				verbose_printk("waking up the poll.....\n");
+				wake_up(&wq_periph);
+				if (drop_count == 0)
+					break;
+			}
 		}
 		else
 		{
 			verbose_printk(KERN_INFO"<user_peripheral_read>: maximum read amount: %d\n", max_can_read);
 
 			read_count = axi_stream_fifo_read((size_t)max_can_read, mod_desc, (u64)rfh);
-			printk("READ_COUNT: Just read %d bytes from HW\n", read_count);
+			//printk("READ_COUNT: Just read %d bytes from HW\n", read_count);
 
 			if (read_count < 0)
 			{
@@ -437,7 +447,7 @@ read_data(struct mod_desc * mod_desc)
 
 			/*update rfh pointer*/
 			rfh = get_new_ring_pointer(read_count, rfh, (int)(mod_desc->dma_size));
-			
+
 			atomic_set(mod_desc->rfh, rfh);
 			verbose_printk("ring_point : RFH %d\n", rfh);
 
@@ -446,19 +456,20 @@ read_data(struct mod_desc * mod_desc)
 				atomic_set(mod_desc->ring_buf_pri_read, 1);
 
 		}
-			//send signal to userspace poll()
+		//send signal to userspace poll()
 
-			atomic_set(mod_desc->atomic_poll, 1);
+		atomic_set(mod_desc->atomic_poll, 1);
 
-			verbose_printk("waking up the poll.....\n");
-			wake_up(&wq_periph);
+		verbose_printk("waking up the poll.....\n");
+		wake_up(&wq_periph);
 
 	}
 
+	return 0;
 }
 
 //void read_thread(struct mod_desc *mod_desc)
-void read_thread(void * dummy)
+void read_thread(struct kfifo* read_fifo)
 {
 	int ring_pointer_offset;
 	int read_count;
@@ -467,6 +478,10 @@ void read_thread(void * dummy)
 	int rfh;
 	int priority;
 	int ret;
+	struct mod_desc * mod_desc;
+	struct mod_desc * mod_desc_temp;
+	int read_incomplete;
+	int d2r;
 
 	while(!kthread_should_stop()){
 		ret = wait_event_interruptible(thread_q_head_read, atomic_read(&thread_q_read) == 1);
@@ -474,9 +489,56 @@ void read_thread(void * dummy)
 		verbose_printk(KERN_INFO"<user_peripheral_read>: woke up the read thread!!\n");
 
 		/*read the fifo*/
-		//while (fifo not empty)
+		while (!kfifo_is_empty(read_fifo))
+		{
+
 			//read fifo
-			//read_data()
+			kfifo_out(read_fifo, &mod_desc, 1);
+
+			/*Check if there is any data to be read*/
+			d2r = axi_stream_fifo_d2r(mod_desc);
+
+			if(d2r != 0)
+			{				
+				read_incomplete = read_data(mod_desc);
+				if (read_incomplete == 1)
+				{
+					
+					/*Lets first peek to see next fifo item, if it is the same file struct
+					 *we dont want to push the same one back on.  This is preventing the 
+					 *endless loop of identical file structs */
+					if(kfifo_out_peek(read_fifo, &mod_desc_temp, 1)) //returns 0 if there was no data to peek    
+					{
+					 	if(mod_desc != mod_desc_temp)
+						{
+							printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
+							printk(KERN_INFO"<read_thread>: minor_1 : %d  minor_2:  %d\n", mod_desc->minor, mod_desc_temp->minor);
+							/*add mod_desc back to the fifo*/
+							kfifo_in_spinlocked(read_fifo, &mod_desc, 1, &fifo_lock);
+							//kfifo_in(read_fifo, &mod_desc, 1);
+						}
+						else
+							printk(KERN_INFO"<read_thread>: identical file struct in fifo, not writing.\n");
+					}
+				
+					else
+					{
+							printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
+							/*add mod_desc back to the fifo*/
+							kfifo_in_spinlocked(read_fifo, &mod_desc, 1, &fifo_lock);
+							//kfifo_in(read_fifo, &mod_desc, 1);
+							printk(KERN_INFO"<read_thread>: The only fifo member is the full ring buffer file, going to sleep.\n");
+							break;           // go back and wait for new fifo activity
+	
+					}
+					//if(kfifo_len(read_fifo) == 1)    //this means this mod_desc is the only file with data
+					//{
+					//	printk(KERN_INFO"<read_thread>: The only fifo member is the full ring buffer file, going to sleep.\n");
+					//	break;           // go back and wait for new fifo activity
+					//}
+				}
+			}
+		}
 	}
 	verbose_printk("Leaving thread\n");
 }
@@ -500,11 +562,11 @@ struct task_struct* create_thread(struct mod_desc *mod_desc)
 }
 
 //struct task_struct* create_thread_read(struct mod_desc *mod_desc)
-struct task_struct* create_thread_read(void * dummy)
+struct task_struct* create_thread_read(struct kfifo* read_fifo)
 {
 	struct task_struct * kthread_heap;
 	//kthread_heap = kthread_create(read_thread,(void*)mod_desc,"vsi_read_thread");
-	kthread_heap = kthread_create(read_thread, dummy, "vsi_read_thread");
+	kthread_heap = kthread_create(read_thread, read_fifo, "vsi_read_thread");
 
 	if((kthread_heap))
 	{
@@ -520,7 +582,7 @@ int dma_file_init(struct mod_desc *mod_desc, void *dma_buffer_base, u64 dma_buff
 {
 
 	int dma_file_size;
-	dma_file_size = (int)(mod_desc->file_size)*2;  //we want the ring buffer to be atleast 2 times the size of the file size (aka fifo size)
+	dma_file_size = (int)(mod_desc->file_size)*RING_BUFF_SIZE_MULTIPLIER;  //we want the ring buffer to be atleast 2 times the size of the file size (aka fifo size)
 
 	verbose_printk(KERN_INFO"<dma_file_init>: Setting Peripheral DMA size:%d\n", dma_file_size);
 	mod_desc->dma_size = (size_t)dma_file_size;
