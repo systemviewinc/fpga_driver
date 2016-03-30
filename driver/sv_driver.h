@@ -1,5 +1,6 @@
 
 #include <linux/kthread.h>
+#include <linux/kfifo.h>
 
 /*These are the CDMA R/W types */
 #ifndef KEYHOLE_WRITE
@@ -22,6 +23,8 @@
 #define CDMA 3
 #endif
 
+#define BACK_PRESSURE 1
+#define RING_BUFF_SIZE_MULTIPLIER 2
 /********* printk statements *********/
 #ifndef verbose_printk
 #define verbose_printk(...)
@@ -86,9 +89,11 @@ extern int cdma_capable;
 /*CDMA Semaphore*/
 extern struct mutex CDMA_sem;
 extern struct mutex CDMA_sem_2;
+extern wait_queue_head_t cdma_q_head;
+extern atomic_t cdma_q;
 
 extern u32 dma_current_offset;
-
+extern u32 dma_garbage_offset;
 /*these are used in the data_transfer function to check for out of range memory r/w */
 extern unsigned long pci_bar_size;
 extern unsigned long pci_bar_1_size;
@@ -110,9 +115,15 @@ extern wait_queue_head_t wq;
 extern wait_queue_head_t wq_periph;
 extern wait_queue_head_t mutexq;
 extern wait_queue_head_t thread_q_head;
+extern wait_queue_head_t thread_q_head_read;
 /*this is the CDMA wait condition variable*/
 extern int cdma_comp[5];
 extern atomic_t cdma_atom[5];
+
+extern atomic_t thread_q_read;
+//extern struct kfifo read_fifo;
+//DECLARE_KFIFO(read_fifo, struct mod_desc*, 4096);
+extern spinlock_t fifo_lock;
 
 extern int cdma_usage_cnt;
 
@@ -138,7 +149,7 @@ struct mod_desc
 	int minor;
 	u64 axi_addr;
 	u64 axi_addr_ctl;
-	u32 * mode;
+	u32 mode;
 	int * int_count;
 	int int_num;
 	int master_num;
@@ -166,10 +177,10 @@ struct mod_desc
 	int ip_not_ready;
 	atomic_t * atomic_poll;
 	int set_dma_flag;
-	struct task_struct * thread_struct_write;
-	struct task_struct * thread_struct_read;
+	//struct task_struct * thread_struct_write;
+	//struct task_struct * thread_struct_read;
 	int thread_q;
-	int thread_q_read;
+	atomic_t * thread_q_read;
 	atomic_t * wth;    //write to hardware pointer
 	atomic_t * wtk;    //write to kernel pointer
 	atomic_t * ring_buf_pri;    //handshake variable
@@ -178,10 +189,12 @@ struct mod_desc
 	atomic_t * ring_buf_pri_read;    //handshake variable
 };
 
-/*this is the interrupt structure*/
+//DECLARE_KFIFO(read_fifo, struct mod_desc*, 4096);
+
+
 struct interr_struct
 {
-	u32 * mode;
+	u32 mode;
 	int * int_count;
 	//	wait_queue_head_t * iwq;
 	struct mutex * int_count_sem;
@@ -190,6 +203,8 @@ struct interr_struct
 };
 
 extern struct interr_struct interr_dict[12];
+
+extern struct mod_desc * mod_desc_arr[8];
 
 struct statistics
 {
@@ -225,12 +240,14 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc);
 void cdma_wait_sleep(int cdma_num);
 void cdma_idle_poll(int cdma_num);
 void write_thread(struct mod_desc *mod_desc);
-void read_thread(struct mod_desc *mod_desc);
+void read_thread(struct kfifo* read_fifo);
 struct task_struct* create_thread(struct mod_desc *mod_desc);
-struct task_struct* create_thread_read(struct mod_desc *mod_desc);
+struct task_struct* create_thread_read(struct kfifo* read_fifo);
 int data_to_write(struct mod_desc *mod_desc);
 int write_data(struct mod_desc* mod_desc, size_t count, u64 ring_pointer_offset);
 int get_new_ring_pointer(int bytes_written, int ring_pointer_offset, int file_size);
 void query_ring_buff(struct mod_desc* mod_desc, size_t size); //blocks until count is able to be copied to the ring buff
 int max_hw_read(struct mod_desc *mod_desc, int tail, int head, int priority);
+size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc);
+int read_data(struct mod_desc * mod_desc);
 // ******************************************************************

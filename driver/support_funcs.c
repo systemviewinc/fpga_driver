@@ -19,6 +19,7 @@
 #include <linux/platform_device.h>
 #include <linux/mutex.h>
 #include <linux/atomic.h>
+#include <linux/spinlock.h>
 #include "sv_driver.h"
 
 /******************************** Xilinx Register Offsets **********************************/
@@ -107,7 +108,7 @@ int write_data(struct mod_desc* mod_desc, size_t count, u64 ring_pointer_offset)
 	while(bytes_written < count)
 	{
 		partial_count = count - bytes_written;
-		
+
 		verbose_printk("<user_peripheral_write> WTH RING pointer offset: %llu \n", ring_pointer_offset);
 
 		/*Check to see if write will go past the boundary*/
@@ -120,7 +121,7 @@ int write_data(struct mod_desc* mod_desc, size_t count, u64 ring_pointer_offset)
 			//return bytes_written + partial_count;
 		}
 
-		if (*(mod_desc->mode) == AXI_STREAM_FIFO)
+		if (mod_desc->mode == AXI_STREAM_FIFO)
 		{
 
 			bytes = axi_stream_fifo_write(partial_count, mod_desc, ring_pointer_offset);
@@ -213,14 +214,14 @@ int write_data(struct mod_desc* mod_desc, size_t count, u64 ring_pointer_offset)
 	verbose_printk(KERN_INFO"\n");
 	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n");
 	verbose_printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION END  **************************\n");
-	verbose_printk(KERN_INFO"<pci_write>: Wrote a total of %zu bytes in write call.\n", bytes_written);
-	verbose_printk(KERN_INFO"<pci_write>: Total write value: %d.\n", mod_desc->tx_bytes);
+	printk(KERN_INFO"<pci_write>: Wrote a total of %zu bytes in write call.\n", bytes_written);
+	printk(KERN_INFO"<pci_write>: Total write value: %d.\n", mod_desc->tx_bytes);
 	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n");
 	verbose_printk(KERN_INFO"\n");
 	return bytes_written;
 }
 
-	query_ring_buff(struct mod_desc* mod_desc, size_t count)
+query_ring_buff(struct mod_desc* mod_desc, size_t count)
 {
 	int wth, wtk;
 	wtk = atomic_read(mod_desc->wtk);
@@ -228,14 +229,14 @@ int write_data(struct mod_desc* mod_desc, size_t count, u64 ring_pointer_offset)
 	static int starter = 1;
 
 	max_space = 0;
-	
+
 	wth = atomic_read(mod_desc->wth);
 	while(max_space < count)
 	{
 		if (wtk == wth)
 		{
 			if (atomic_read(mod_desc->ring_buf_pri) == 1)  // this is a priority variable to solve which side can write (1 = wtk, 0 = wth)
-				max_space = mod_desc->file_size;
+				max_space = mod_desc->dma_size;
 			else
 				max_space = 0;
 		}
@@ -246,9 +247,9 @@ int write_data(struct mod_desc* mod_desc, size_t count, u64 ring_pointer_offset)
 		}
 		else if (wth<wtk)
 		{
-			max_space = (mod_desc->file_size) - wtk + wth; //wrap around case
+			max_space = (mod_desc->dma_size) - wtk + wth; //wrap around case
 		}
-		
+
 		if(max_space < count)
 		{
 			//printk(KERN_INFO"just waiting for ring buff to clear....\n");
@@ -282,7 +283,7 @@ int data_to_write(struct mod_desc *mod_desc)
 
 	if(wtk == wth)
 		if (atomic_read(mod_desc->ring_buf_pri) == 0)  // this is a priority variable to solve which side can write (1 = wtk, 0 = wth)
-			return mod_desc->file_size;
+			return mod_desc->dma_size;
 		else
 			return 0;
 
@@ -290,17 +291,17 @@ int data_to_write(struct mod_desc *mod_desc)
 		return wtk-wth;
 
 	if(wtk < wth)
-		return (wtk)+((mod_desc->file_size)-wth);
+		return (wtk)+((mod_desc->dma_size)-wth);
 }
 
 int max_hw_read(struct mod_desc *mod_desc, int tail, int head, int priority)
 {
-// This function is used to determine the amount of data available to be transfered
-// starting from the tail to the head.
+	// This function is used to determine the amount of data available to be transfered
+	// starting from the tail to the head.
 
 	if(tail == head)
 		if (priority)  // this is a priority variable to solve which side can write (1 = wtk, 0 = wth)
-			return mod_desc->file_size;
+			return mod_desc->dma_size;
 		else
 			return 0;
 
@@ -309,7 +310,7 @@ int max_hw_read(struct mod_desc *mod_desc, int tail, int head, int priority)
 
 	if(head < tail)    //wrap around case, we will do another read call to come back and get wrap around data
 		//return (head)+((mod_desc->file_size)-tail);
-		return (mod_desc->file_size)-tail;
+		return (mod_desc->dma_size)-tail;
 }
 
 void write_thread(struct mod_desc *mod_desc)
@@ -334,14 +335,14 @@ void write_thread(struct mod_desc *mod_desc)
 			verbose_printk("<write_thread>ring_point: WTH Data to write: %d \n", d2w);
 			/*write the data*/
 			ring_pointer_offset = atomic_read(mod_desc->wth);
-			
+
 			//We always start hardware writes from wth + 1
 			//  Because the wtk pointer goes up to wth.
 			//if (ring_pointer_offset == (mod_desc->file_size-1))  //handle edge case
 			//	ring_pointer_offset = 0;
 			//else
 			//	ring_pointer_offset = ring_pointer_offset+1;
-			
+
 			bytes_written = write_data(mod_desc, (size_t)d2w, (u64)ring_pointer_offset);
 			verbose_printk("<write_thread>ring_point: WTH Bytes written: %d \n", bytes_written);
 
@@ -350,15 +351,15 @@ void write_thread(struct mod_desc *mod_desc)
 			//	ring_pointer_offset = ring_pointer_offset-1;
 
 			verbose_printk(KERN_INFO"<pci_write>:ring_point: before updating with the bytes written : %d\n", ring_pointer_offset);
-			
+
 			/*update write pointer*/
-			ring_pointer_offset = get_new_ring_pointer(bytes_written, ring_pointer_offset, (int)(mod_desc->file_size)); 
+			ring_pointer_offset = get_new_ring_pointer(bytes_written, ring_pointer_offset, (int)(mod_desc->dma_size)); 
 			atomic_set(mod_desc->wth, ring_pointer_offset);
 
 			/*Ths says that if the WTH pointer has caught up to the WTK pointer, then give priority to the WTK.*/
 			if(atomic_read(mod_desc->wtk) == ring_pointer_offset)
 				atomic_set(mod_desc->ring_buf_pri, 1);
- 
+
 			verbose_printk(KERN_INFO"<pci_write>:ring_point: ring buff priority: %d\n", atomic_read(mod_desc->ring_buf_pri));
 			verbose_printk(KERN_INFO"<pci_write>:ring_point: WTH : %d\n", ring_pointer_offset);
 
@@ -370,7 +371,105 @@ void write_thread(struct mod_desc *mod_desc)
 	verbose_printk("Leaving thread\n");
 }
 
-void read_thread(struct mod_desc *mod_desc)
+int read_data(struct mod_desc * mod_desc)
+{
+	int ring_pointer_offset;
+	int read_count;
+	int drop_count;
+	int max_can_read;
+	int rfu;
+	int rfh;
+	int priority;
+	int ret;
+	u32 dma_offset_read;
+	unsigned long flags;
+
+	read_count = 1;
+	//read_count = axi_stream_fifo_d2r(mod_desc);
+	//printk(KERN_INFO"<read_thread>: The read count is %d\n", read_count);
+
+	while(read_count>0)  //we want to keep reading until all data is read
+	{
+		max_can_read = 0;        
+		priority = 0;
+
+		rfh = atomic_read(mod_desc->rfh);
+		rfu = atomic_read(mod_desc->rfu);
+		if (atomic_read(mod_desc->ring_buf_pri_read) == 0) //The thread has priority when the atomic variable is 0
+			priority = 1;   
+
+		max_can_read = max_hw_read(mod_desc, rfh, rfu, priority);
+		if (max_can_read == 0)
+		{
+			if (BACK_PRESSURE)
+			{
+				verbose_printk("Needing to backpressure....\n");
+				return 1;
+			}
+
+			else {
+				/*drop data*/
+
+				/*save the actual ring buffer pointer*/
+				dma_offset_read = mod_desc->dma_offset_read;
+				/*change the file struct buffer to point to our fake drop buffer*/
+				mod_desc->dma_offset_read = dma_garbage_offset;
+				/*read out the data*/
+				drop_count = axi_stream_fifo_read(4096, mod_desc, 0);  //the garbage buffer is 4K
+				if (drop_count > 0)
+					printk("DROP_COUNT: Just dropped %d bytes from HW\n", drop_count);
+				drop_count = 0;
+				/*replace the ring buffer pointer*/
+				mod_desc->dma_offset_read = dma_offset_read;
+
+				atomic_set(mod_desc->atomic_poll, 1);
+
+				verbose_printk("waking up the poll.....\n");
+				wake_up(&wq_periph);
+				if (drop_count == 0)
+					break;
+			}
+		}
+		else
+		{
+			verbose_printk(KERN_INFO"<user_peripheral_read>: maximum read amount: %d\n", max_can_read);
+
+			read_count = axi_stream_fifo_read((size_t)max_can_read, mod_desc, (u64)rfh);
+			//printk("READ_COUNT: Just read %d bytes from HW\n", read_count);
+
+			if (read_count < 0)
+			{
+				printk(KERN_INFO"<user_peripheral_read>: ERROR reading data from axi stream fifo\n");
+			}
+
+			if (read_count == 0)
+				break;
+
+			/*update rfh pointer*/
+			rfh = get_new_ring_pointer(read_count, rfh, (int)(mod_desc->dma_size));
+
+			atomic_set(mod_desc->rfh, rfh);
+			verbose_printk("ring_point : RFH %d\n", rfh);
+
+			/*This says that if the rfh pointer has caught up to the rfu pointer, then give priority to the rfu.*/
+			if(atomic_read(mod_desc->rfu) == rfh)
+				atomic_set(mod_desc->ring_buf_pri_read, 1);
+
+		}
+		//send signal to userspace poll()
+
+		atomic_set(mod_desc->atomic_poll, 1);
+
+		verbose_printk("waking up the poll.....\n");
+		wake_up(&wq_periph);
+
+	}
+
+	return 0;
+}
+
+//void read_thread(struct mod_desc *mod_desc)
+void read_thread(struct kfifo* read_fifo)
 {
 	int ring_pointer_offset;
 	int read_count;
@@ -379,43 +478,69 @@ void read_thread(struct mod_desc *mod_desc)
 	int rfh;
 	int priority;
 	int ret;
+	struct mod_desc * mod_desc;
+	struct mod_desc * mod_desc_temp;
+	int read_incomplete;
+	int d2r;
 
 	while(!kthread_should_stop()){
-		ret = wait_event_interruptible(thread_q_head, mod_desc->thread_q_read == 1);
-		mod_desc->thread_q_read = 0;
+		ret = wait_event_interruptible(thread_q_head_read, atomic_read(&thread_q_read) == 1);
+		atomic_set(&thread_q_read, 0); // the threaded way
+		verbose_printk(KERN_INFO"<user_peripheral_read>: woke up the read thread!!\n");
 
-		read_count = 1;
-		while(read_count>0)  //we want to keep reading until all data is read
+		/*read the fifo*/
+		while (!kfifo_is_empty(read_fifo))
 		{
-			max_can_read = 0;        
-			while(max_can_read == 0){  //We want to block here until the ring buffer has room
-				rfh = atomic_read(mod_desc->rfh);
-				rfu = atomic_read(mod_desc->rfu);
-				priority = 0;
-				if (atomic_read(mod_desc->ring_buf_pri_read) == 0); //The thread has priority when the atomic variable is 0
-					priority = 1;                            
-				max_can_read = max_hw_read(mod_desc, rfh, rfu, priority);
+
+			//read fifo
+			kfifo_out(read_fifo, &mod_desc, 1);
+
+			/*Check if there is any data to be read*/
+			d2r = axi_stream_fifo_d2r(mod_desc);
+
+			if(d2r != 0)
+			{				
+				read_incomplete = read_data(mod_desc);
+				if (read_incomplete == 1)
+				{
+					
+					/*Lets first peek to see next fifo item, if it is the same file struct
+					 *we dont want to push the same one back on.  This is preventing the 
+					 *endless loop of identical file structs */
+					if(kfifo_out_peek(read_fifo, &mod_desc_temp, 1)) //returns 0 if there was no data to peek    
+					{
+					 	if(mod_desc != mod_desc_temp)
+						{
+							verbose_printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
+							verbose_printk(KERN_INFO"<read_thread>: minor_1 : %d  minor_2:  %d\n", mod_desc->minor, mod_desc_temp->minor);
+							/*add mod_desc back to the fifo*/
+							kfifo_in_spinlocked(read_fifo, &mod_desc, 1, &fifo_lock);
+							//kfifo_in(read_fifo, &mod_desc, 1);
+						}
+						else
+							verbose_printk(KERN_INFO"<read_thread>: identical file struct in fifo, not writing.\n");
+					}
+				
+					else
+					{
+							verbose_printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
+							/*add mod_desc back to the fifo*/
+							kfifo_in_spinlocked(read_fifo, &mod_desc, 1, &fifo_lock);
+							//kfifo_in(read_fifo, &mod_desc, 1);
+							verbose_printk(KERN_INFO"<read_thread>: The only fifo member is the full ring buffer file, going to sleep.\n");
+							break;           // go back and wait for new fifo activity
+	
+					}
+					//if(kfifo_len(read_fifo) == 1)    //this means this mod_desc is the only file with data
+					//{
+					//	printk(KERN_INFO"<read_thread>: The only fifo member is the full ring buffer file, going to sleep.\n");
+					//	break;           // go back and wait for new fifo activity
+					//}
+
+					//schedule();
+				}
 			}
-
-			read_count = axi_stream_fifo_read(max_can_read, mod_desc, (u64)rfh);
-
-			if (read_count < 0)
-			{
-				printk(KERN_INFO"<user_peripheral_read>: ERROR reading data from axi stream fifo\n");
-			}
-			if (read_count == 0)
-				break;
-			
-			/*update rfh pointer*/
-			rfh = get_new_ring_pointer(read_count, rfh, (int)(mod_desc->file_size)); 
-			atomic_set(mod_desc->rfh, rfh);
-
-			/*Ths says that if the rfh pointer has caught up to the rfu pointer, then give priority to the rfu.*/
-			if(atomic_read(mod_desc->rfu) == rfh)
-				atomic_set(mod_desc->ring_buf_pri_read, 1);
- 
 		}
-
 	}
 	verbose_printk("Leaving thread\n");
 }
@@ -438,19 +563,16 @@ struct task_struct* create_thread(struct mod_desc *mod_desc)
 	return kthread_heap;
 }
 
-struct task_struct* create_thread_read(struct mod_desc *mod_desc)
+//struct task_struct* create_thread_read(struct mod_desc *mod_desc)
+struct task_struct* create_thread_read(struct kfifo* read_fifo)
 {
-	//struct task_struct * kthread_local;
 	struct task_struct * kthread_heap;
-	//kthread_heap = (struct task_struct*)kmalloc(sizeof(struct task_struct), GFP_KERNEL);
-	//kthread_local = kthread_create(write_thread,NULL,"vsi_write_thread");
-	kthread_heap = kthread_create(read_thread,(void*)mod_desc,"vsi_read_thread");
-
-	//memcpy(kthread_heap, kthread_local, sizeof(struct task_struct));
+	//kthread_heap = kthread_create(read_thread,(void*)mod_desc,"vsi_read_thread");
+	kthread_heap = kthread_create(read_thread, read_fifo, "vsi_read_thread");
 
 	if((kthread_heap))
 	{
-		printk("thread created\n");
+		printk("Read Thread Created\n");
 		wake_up_process(kthread_heap);
 	}
 	return kthread_heap;
@@ -462,7 +584,7 @@ int dma_file_init(struct mod_desc *mod_desc, void *dma_buffer_base, u64 dma_buff
 {
 
 	int dma_file_size;
-	dma_file_size = (int)(mod_desc->file_size);
+	dma_file_size = (int)(mod_desc->file_size)*RING_BUFF_SIZE_MULTIPLIER;  //we want the ring buffer to be atleast 2 times the size of the file size (aka fifo size)
 
 	verbose_printk(KERN_INFO"<dma_file_init>: Setting Peripheral DMA size:%d\n", dma_file_size);
 	mod_desc->dma_size = (size_t)dma_file_size;
@@ -577,7 +699,7 @@ int cdma_init(int cdma_num, int cdma_addr, u32 dma_addr_base)
 	u64 axi_dest;
 	u32 cdma_status;
 	u32 dma_addr_loc;
-	int * mode;
+	int mode;
 	int ret;
 	int index;
 	u64 axi_cdma_loc;
@@ -661,8 +783,7 @@ int cdma_init(int cdma_num, int cdma_addr, u32 dma_addr_base)
 	}
 
 	/*update the interr_dict with interrupt number and mode*/
-	mode = (u32*)kmalloc(sizeof(int), GFP_KERNEL);
-	*mode = CDMA;
+	mode = CDMA;
 	index = cdma_num - 1;
 	interr_dict[index].mode = mode;
 
@@ -728,7 +849,11 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 		{
 			cdma_num = cdma_query();
 			if (cdma_num == 0)
+			{
+				//atomic_set(&cdma_q, 0);
+				//wait_event_interruptible(cdma_q_head, atomic_read(&cdma_q) == 1);
 				schedule();
+			}
 		}
 
 		//	if (cdma_num == 0)
@@ -780,9 +905,10 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 			default : verbose_printk(KERN_INFO"<data_transfer>: ERROR: unknown cdma number detected.\n");
 				  return(0);
 		}
-
-		//	atomic_set(&mutex_free, 1);  //wait variable for mutex lock
-		//	wake_up_interruptible(&mutexq);
+		
+		/*wake up any sleeping processes waiting on a CDMA */
+		//atomic_set(&cdma_q, 1);
+		//wake_up_interruptible(&cdma_q_head);
 
 	}
 
@@ -988,7 +1114,7 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 	//	verbose_printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA_MSB address ('%x') to CDMA at axi address:%llx\n", SA_MSB, axi_dest);
 	//Writing SA_LSB
 	axi_dest = axi_cdma_loc + CDMA_SA;
-	
+
 	direct_write(axi_dest, (void*)&SA_LSB, 4, NORMAL_WRITE);
 	verbose_printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA_LSB address ('%x') to CDMA at axi address:%llx\n", SA_LSB, axi_dest);
 	//read the status register
@@ -1334,6 +1460,32 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_
 	}
 
 	return count;
+}
+
+
+size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc)
+{
+	u32 buf, read_reg;
+	int ret;
+	u64 dma_offset_internal_read;
+	u64 axi_dest;
+	size_t count;
+
+	dma_offset_internal_read = (u64)mod_desc->dma_offset_internal_read;
+	/*Read FIFO Fill level*/
+	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RLR;
+	buf = 0;
+	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, dma_offset_internal_read);
+	if (ret > 0)
+	{
+		printk(KERN_INFO"<axi_stream_fifo_d2r>: ERROR reading Read FIFO fill level\n");
+		return -1;
+	}
+	//read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+	read_reg = (*(mod_desc->kernel_reg_read));  
+
+	count = read_reg;	
+	return count;  	
 }
 
 size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_pointer_offset)
