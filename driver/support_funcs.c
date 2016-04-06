@@ -482,6 +482,7 @@ void read_thread(struct kfifo* read_fifo)
 	struct mod_desc * mod_desc_temp;
 	int read_incomplete;
 	int d2r;
+	unsigned long flags;
 
 	while(!kthread_should_stop()){
 		ret = wait_event_interruptible(thread_q_head_read, atomic_read(&thread_q_read) == 1);
@@ -494,6 +495,10 @@ void read_thread(struct kfifo* read_fifo)
 
 			//read fifo
 			kfifo_out(read_fifo, &mod_desc, 1);
+			/*set in fifo flag variable*/
+			spin_lock_irqsave(mod_desc->in_fifo, flags);	
+			mod_desc->in_fifo_flag = 0;
+			spin_unlock_irqrestore(mod_desc->in_fifo, flags);
 
 			/*Check if there is any data to be read*/
 			d2r = axi_stream_fifo_d2r(mod_desc);
@@ -503,40 +508,56 @@ void read_thread(struct kfifo* read_fifo)
 				read_incomplete = read_data(mod_desc);
 				if (read_incomplete == 1)
 				{
-					
+
 					/*Lets first peek to see next fifo item, if it is the same file struct
 					 *we dont want to push the same one back on.  This is preventing the 
 					 *endless loop of identical file structs */
 					if(kfifo_out_peek(read_fifo, &mod_desc_temp, 1)) //returns 0 if there was no data to peek    
 					{
-					 	if(mod_desc != mod_desc_temp)
+						if(mod_desc != mod_desc_temp)
 						{
 							verbose_printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
 							verbose_printk(KERN_INFO"<read_thread>: writing minor : %d  peeked file minor:  %d\n", mod_desc->minor, mod_desc_temp->minor);
 							/*add mod_desc back to the fifo*/
 							if(!kfifo_is_full(read_fifo))
-								kfifo_in_spinlocked(read_fifo, &mod_desc, 1, &fifo_lock);
-								//kfifo_in(read_fifo, &mod_desc, 1);
+							{
+								spin_lock_irqsave(mod_desc->in_fifo, flags);	
+								if(mod_desc->in_fifo_flag == 0);
+								{
+									mod_desc->in_fifo_flag = 1;
+									kfifo_in_spinlocked(read_fifo, &mod_desc, 1, &fifo_lock);
+								}
+								spin_unlock_irqrestore(mod_desc->in_fifo, flags);
+							}
+							//kfifo_in(read_fifo, &mod_desc, 1);
 							else
-								printk(KERN_INFO"<isr>: kfifo is full, not writing mod desc\n");
-						
+								printk(KERN_INFO"<read_thread>: kfifo is full, not writing mod desc\n");
+
 						}
 						else
 							verbose_printk(KERN_INFO"<read_thread>: identical file struct in fifo, not writing.\n");
 					}
-				
+
 					else
 					{
-							verbose_printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
-							/*add mod_desc back to the fifo*/
-							if(!kfifo_is_full(read_fifo))
-								kfifo_in_spinlocked(read_fifo, &mod_desc, 1, &fifo_lock);
-							else
-								printk(KERN_INFO"<isr>: kfifo is full, not writing mod desc\n");
-							
-							verbose_printk(KERN_INFO"<read_thread>: The only fifo member is the full ring buffer file, going to sleep.\n");
-							break;           // go back and wait for new fifo activity
-	
+						verbose_printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
+						/*add mod_desc back to the fifo*/
+						if(!kfifo_is_full(read_fifo))
+						{
+								spin_lock_irqsave(mod_desc->in_fifo, flags);	
+								if(mod_desc->in_fifo_flag == 0);
+								{
+									mod_desc->in_fifo_flag = 1;
+									kfifo_in_spinlocked(read_fifo, &mod_desc, 1, &fifo_lock);
+								}
+								spin_unlock_irqrestore(mod_desc->in_fifo, flags);
+						}
+						else
+							printk(KERN_INFO"<isr>: kfifo is full, not writing mod desc\n");
+
+						verbose_printk(KERN_INFO"<read_thread>: The only fifo member is the full ring buffer file, going to sleep.\n");
+						break;           // go back and wait for new fifo activity
+
 					}
 					//if(kfifo_len(read_fifo) == 1)    //this means this mod_desc is the only file with data
 					//{
@@ -912,7 +933,7 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 			default : verbose_printk(KERN_INFO"<data_transfer>: ERROR: unknown cdma number detected.\n");
 				  return(0);
 		}
-		
+
 		/*wake up any sleeping processes waiting on a CDMA */
 		//atomic_set(&cdma_q, 1);
 		//wake_up_interruptible(&cdma_q_head);
@@ -1430,7 +1451,7 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_
 	{
 		mod_desc->ip_not_ready = mod_desc->ip_not_ready + 1;
 		schedule();
-		
+
 		*(mod_desc->kernel_reg_read) = 0x0;   //set to zero
 		buf = 0x0;
 
@@ -1443,7 +1464,7 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_
 		//read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 		//read_reg = (*(mod_desc->kernel_reg_read));    
 		read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
-		
+
 		//printk(KERN_INFO"<axi_stream_fifo_init>: file size: 0x%x\n", (u32)mod_desc->file_size);
 		//printk(KERN_INFO"<pci_write>: current fifo level: %x\n", read_reg);
 		//printk(KERN_INFO"<pci_write>: The Calculated Fifo Empty level is: %x\n", fifo_empty_level);
@@ -1489,7 +1510,7 @@ size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc)
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RLR;
 	buf = 0;
 	*(mod_desc->kernel_reg_read) = 0x0;   //set to zero
-	
+
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, dma_offset_internal_read);
 	if (ret > 0)
 	{

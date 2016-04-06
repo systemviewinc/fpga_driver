@@ -756,6 +756,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	int ret;
 	u32 vec_serviced;
 	int i;
+	unsigned long flags;
 	// int interr[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
 	verbose_printk(KERN_INFO"<pci_isr>:						Entered the ISR");
@@ -797,15 +798,22 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 			//add mod_desc to FIFO
 			//kfifo_in(&read_fifo, &mod_desc_arr[int_num], 1);
-		
-			if (kfifo_len(&read_fifo) > 500)	
-				printk(KERN_INFO"<isr>: kfifo stored elements: %d\n", kfifo_len(&read_fifo));
+	
+			/*check to see if it is already in the FIFO*/
+			spin_lock_irqsave(mod_desc_arr[int_num]->in_fifo, flags);	
+			if(mod_desc_arr[int_num]->in_fifo_flag == 0)	
+			{
+				if (kfifo_len(&read_fifo) > 4)	
+					printk(KERN_INFO"<isr>: kfifo stored elements: %d\n", kfifo_len(&read_fifo));
 			
-			if(!kfifo_is_full(&read_fifo))
-				kfifo_in_spinlocked(&read_fifo, &mod_desc_arr[int_num], 1, &fifo_lock);
-			else
-				printk(KERN_INFO"<isr>: kfifo is full, not writing mod desc\n");
-				
+				if(!kfifo_is_full(&read_fifo))
+					kfifo_in_spinlocked(&read_fifo, &mod_desc_arr[int_num], 1, &fifo_lock);
+				else
+					printk(KERN_INFO"<isr>: kfifo is full, not writing mod desc\n");
+				mod_desc_arr[int_num]->in_fifo_flag = 1;
+			}
+			spin_unlock_irqrestore(mod_desc_arr[int_num]->in_fifo, flags);
+
 			//read_data(mod_desc_arr[int_num]);   //non blocking way
 
 			vec_serviced = vec_serviced | num2vec(int_num);
@@ -1006,6 +1014,10 @@ int pci_open(struct inode *inode, struct file *filep)
 	atomic_t * rfu;
 	atomic_t * ring_buf_pri_read;
 
+	spinlock_t * in_fifo;
+	in_fifo = (spinlock_t *)kmalloc(sizeof(spinlock_t), GFP_KERNEL);
+	spin_lock_init(in_fifo);
+
 	start_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
 	stop_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
 
@@ -1068,6 +1080,8 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->rfu = rfu;
 	s->ring_buf_pri = ring_buf_pri;
 	s->ring_buf_pri_read = ring_buf_pri_read;
+	s->in_fifo = in_fifo;
+	s->in_fifo_flag = 0;	
 
 	verbose_printk(KERN_INFO"<pci_open>: minor number %d detected\n", s->minor);
 

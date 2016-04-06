@@ -187,6 +187,8 @@ struct mod_desc
 	atomic_t * rfh;    //write to hardware pointer
 	atomic_t * rfu;    //write to kernel pointer
 	atomic_t * ring_buf_pri_read;    //handshake variable
+	spinlock_t * in_fifo;
+	int in_fifo_flag;
 };
 
 //DECLARE_KFIFO(read_fifo, struct mod_desc*, 4096);
