@@ -164,7 +164,7 @@ atomic_t mutex_free = ATOMIC_INIT(0);
 
 atomic_t thread_q_read = ATOMIC_INIT(0);
 struct task_struct * thread_struct_read;
-DEFINE_KFIFO(read_fifo, struct mod_desc*, 4096);
+DEFINE_KFIFO(read_fifo, struct mod_desc*, 8192);
 spinlock_t fifo_lock;
 //DECLARE_KFIFO(read_fifo, struct mod_desc*, 4096);
 //INIT_KFIFO(read_fifo);
@@ -797,7 +797,15 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 			//add mod_desc to FIFO
 			//kfifo_in(&read_fifo, &mod_desc_arr[int_num], 1);
-			kfifo_in_spinlocked(&read_fifo, &mod_desc_arr[int_num], 1, &fifo_lock);
+		
+			if (kfifo_len(&read_fifo) > 500)	
+				printk(KERN_INFO"<isr>: kfifo stored elements: %d\n", kfifo_len(&read_fifo));
+			
+			if(!kfifo_is_full(&read_fifo))
+				kfifo_in_spinlocked(&read_fifo, &mod_desc_arr[int_num], 1, &fifo_lock);
+			else
+				printk(KERN_INFO"<isr>: kfifo is full, not writing mod desc\n");
+				
 			//read_data(mod_desc_arr[int_num]);   //non blocking way
 
 			vec_serviced = vec_serviced | num2vec(int_num);
@@ -1893,7 +1901,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	
 				if (wake_up_flag == 1)
 				{
-					printk(KERN_INFO"<pci_read>: freed up the locked ring buffer, waking up read thread.\n");
+					verbose_printk(KERN_INFO"<pci_read>: freed up the locked ring buffer, waking up read thread.\n");
 					wake_up_flag = 0;
 					/*wake up read thread*/
 					atomic_set(&thread_q_read, 1);

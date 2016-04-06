@@ -512,10 +512,14 @@ void read_thread(struct kfifo* read_fifo)
 					 	if(mod_desc != mod_desc_temp)
 						{
 							verbose_printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
-							verbose_printk(KERN_INFO"<read_thread>: minor_1 : %d  minor_2:  %d\n", mod_desc->minor, mod_desc_temp->minor);
+							verbose_printk(KERN_INFO"<read_thread>: writing minor : %d  peeked file minor:  %d\n", mod_desc->minor, mod_desc_temp->minor);
 							/*add mod_desc back to the fifo*/
-							kfifo_in_spinlocked(read_fifo, &mod_desc, 1, &fifo_lock);
-							//kfifo_in(read_fifo, &mod_desc, 1);
+							if(!kfifo_is_full(read_fifo))
+								kfifo_in_spinlocked(read_fifo, &mod_desc, 1, &fifo_lock);
+								//kfifo_in(read_fifo, &mod_desc, 1);
+							else
+								printk(KERN_INFO"<isr>: kfifo is full, not writing mod desc\n");
+						
 						}
 						else
 							verbose_printk(KERN_INFO"<read_thread>: identical file struct in fifo, not writing.\n");
@@ -525,8 +529,11 @@ void read_thread(struct kfifo* read_fifo)
 					{
 							verbose_printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
 							/*add mod_desc back to the fifo*/
-							kfifo_in_spinlocked(read_fifo, &mod_desc, 1, &fifo_lock);
-							//kfifo_in(read_fifo, &mod_desc, 1);
+							if(!kfifo_is_full(read_fifo))
+								kfifo_in_spinlocked(read_fifo, &mod_desc, 1, &fifo_lock);
+							else
+								printk(KERN_INFO"<isr>: kfifo is full, not writing mod desc\n");
+							
 							verbose_printk(KERN_INFO"<read_thread>: The only fifo member is the full ring buffer file, going to sleep.\n");
 							break;           // go back and wait for new fifo activity
 	
@@ -537,7 +544,7 @@ void read_thread(struct kfifo* read_fifo)
 					//	break;           // go back and wait for new fifo activity
 					//}
 
-					//schedule();
+					schedule();
 				}
 			}
 		}
@@ -1401,7 +1408,8 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_
 		return -1;
 	}
 	//read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
-	read_reg = (*(mod_desc->kernel_reg_read));    
+	//read_reg = (*(mod_desc->kernel_reg_read));    
+	read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 
 	//printk(KERN_INFO"<pci_write>: Initial Transmit Data FIFO Fill Level:%x\n", buf);
 
@@ -1422,6 +1430,9 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_
 	{
 		mod_desc->ip_not_ready = mod_desc->ip_not_ready + 1;
 		schedule();
+		
+		*(mod_desc->kernel_reg_read) = 0x0;   //set to zero
+		buf = 0x0;
 
 		ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, dma_offset_internal_read);
 		if (ret > 0)
@@ -1430,7 +1441,9 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_
 			return -1;
 		}
 		//read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
-		read_reg = (*(mod_desc->kernel_reg_read));    
+		//read_reg = (*(mod_desc->kernel_reg_read));    
+		read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+		
 		//printk(KERN_INFO"<axi_stream_fifo_init>: file size: 0x%x\n", (u32)mod_desc->file_size);
 		//printk(KERN_INFO"<pci_write>: current fifo level: %x\n", read_reg);
 		//printk(KERN_INFO"<pci_write>: The Calculated Fifo Empty level is: %x\n", fifo_empty_level);
@@ -1475,6 +1488,8 @@ size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc)
 	/*Read FIFO Fill level*/
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RLR;
 	buf = 0;
+	*(mod_desc->kernel_reg_read) = 0x0;   //set to zero
+	
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, dma_offset_internal_read);
 	if (ret > 0)
 	{
@@ -1482,7 +1497,8 @@ size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc)
 		return -1;
 	}
 	//read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
-	read_reg = (*(mod_desc->kernel_reg_read));  
+	//read_reg = (*(mod_desc->kernel_reg_read));  
+	read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 
 	count = read_reg;	
 	return count;  	
@@ -1525,6 +1541,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_p
 	/*Read FIFO Fill level*/
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RLR;
 	buf = 0;
+	*(mod_desc->kernel_reg_read) = 0x0;   //set to zero
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, dma_offset_internal_read);
 	if (ret > 0)
 	{
@@ -1532,7 +1549,8 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_p
 		return -1;
 	}
 	//read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
-	read_reg = (*(mod_desc->kernel_reg_read));    
+	//read_reg = (*(mod_desc->kernel_reg_read));    
+	read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 
 	/*we are masking off the 32nd bit because the FIFO is in cut through mode
 	 *and sets the LSB to 1 to indicate a partial packet.*/
@@ -1685,7 +1703,8 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 		return -1;
 	}
 	//read_reg = (*(mod_desc->kernel_reg_read)|buf);    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
-	read_reg = (*(mod_desc->kernel_reg_read));    
+	//read_reg = (*(mod_desc->kernel_reg_read));    
+	read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 
 	/*Check to see if the calculated fifo empty level via the DMA data byte width (aka the axi-s fifo byte width)
 	 * and file size (aka the fifo size) is equal to the actual fifo empty level when read */	
