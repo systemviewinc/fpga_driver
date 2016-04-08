@@ -841,7 +841,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 			if(mod_desc_arr[int_num]->in_fifo_flag == 0)	
 			{
 				if (kfifo_len(&read_fifo) > 4)	
-					printk(KERN_INFO"<isr>: kfifo stored elements: %d\n", kfifo_len(&read_fifo));
+					verbose_printk(KERN_INFO"<isr>: kfifo stored elements: %d\n", kfifo_len(&read_fifo));
 			
 				if(!kfifo_is_full(&read_fifo))
 					kfifo_in_spinlocked(&read_fifo, &mod_desc_arr[int_num], 1, &fifo_lock);
@@ -1060,6 +1060,10 @@ int pci_open(struct inode *inode, struct file *filep)
 	in_fifo_write = (spinlock_t *)kmalloc(sizeof(spinlock_t), GFP_KERNEL);
 	spin_lock_init(in_fifo_write);
 	
+	spinlock_t * ring_pointer_write;
+	ring_pointer_write = (spinlock_t *)kmalloc(sizeof(spinlock_t), GFP_KERNEL);
+	spin_lock_init(ring_pointer_write);
+	
 	start_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
 	stop_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
 
@@ -1124,6 +1128,7 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->rfu = rfu;
 	s->ring_buf_pri = ring_buf_pri;
 	s->ring_buf_pri_read = ring_buf_pri_read;
+	s->ring_pointer_write = ring_pointer_write;
 	s->in_fifo = in_fifo;
 	s->in_fifo_flag = 0;	
 	s->in_fifo_write = in_fifo_write;
@@ -1582,6 +1587,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	u64 dma_offset_internal_read;
 	u64 dma_offset_internal_write;
 	unsigned long flags;
+	int minor;
 
 	int wtk;
 	bytes = 0;
@@ -1589,7 +1595,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	/*this gets the minor number of the calling file so we can map the correct AXI address
 	 *to write to*/
 	mod_desc = filep->private_data;
-
+	minor = mod_desc->minor;
 
 	bytes = 0;
 	bytes_written = 0;
@@ -1722,17 +1728,6 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 		verbose_printk(KERN_INFO"<pci_write>: the amount of bytes being copied to kernel: %zu\n", partial_count);
 
-		/*eventually this will go away once we add mmap
-		 * for now we copy to the appropriate file buffer*/
-		verbose_printk(KERN_INFO"<pci_write>: copying data from user space...\n");
-
-		/*the pointer of data to be transferred is incremented by the amout of bytes
-		 * already written.  This handles the case when a chunk of data larger than
-		 * the dma buffer size is attempted to be written*/
-		ret = copy_from_user(mod_desc->dma_write, (buf + bytes_written), partial_count);
-		//	copy_from_user(mod_desc->dma_write, buf, partial_count);
-
-
 
 		if (mod_desc->mode == AXI_STREAM_FIFO)
 		{
@@ -1760,11 +1755,11 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				wake_up_interruptible(&thread_q_head);
 				verbose_printk(KERN_INFO"<pci_write>: waking up write thread\n");
 				
-				//printk(KERN_INFO"<pci_write>: pci_write is going to sleep ZzZzZzZzZzZzZz\n");
-				//ret = wait_event_interruptible(pci_write_head, atomic_read(mod_desc->pci_write_q) == 1);
-				//atomic_set(mod_desc->pci_write_q, 0);
-				//printk(KERN_INFO"<pci_write>: woke up the sleeping pci_write function!!\n");
-				schedule();
+				verbose_printk(KERN_INFO"<pci_write>: pci_write is going to sleep ZzZzZzZzZzZzZz\n");
+				ret = wait_event_interruptible(pci_write_head, atomic_read(mod_desc->pci_write_q) == 1);
+				atomic_set(mod_desc->pci_write_q, 0);
+				verbose_printk(KERN_INFO"<pci_write>: woke up the sleeping pci_write function!!\n");
+				//schedule();
 			}
 			//if we need to wrap around the ring buffer....
 			wtk = atomic_read(mod_desc->wtk);
@@ -1777,21 +1772,26 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), partial_count); 
 
 			wtk = get_new_ring_pointer(partial_count, wtk, (int)mod_desc->dma_size);
-			printk(KERN_INFO"<pci_write>:ring_point: WTK : %d\n", wtk);
+			verbose_printk(KERN_INFO"<pci_write_%d>:ring_point_%d: WTK : %d\n", minor, minor, wtk);
+		
+			spin_lock_irqsave(mod_desc->ring_pointer_write, flags);
+			// --------------   SPIN LOCKED ------------------------//
 			atomic_set(mod_desc->wtk, wtk);
 
 			/*This says that if the WTK pointer has caught up to the WTH pointer, give priority to the WTH*/
 			if(atomic_read(mod_desc->wth) == wtk)
 				atomic_set(mod_desc->ring_buf_pri, 0);
+			// --------------   SPIN LOCK RELEASE ------------------------//
+			spin_unlock_irqrestore(mod_desc->ring_pointer_write, flags);
 
-			printk(KERN_INFO"<pci_write>:ring_point: ring buff priority: %d\n", atomic_read(mod_desc->ring_buf_pri));
+			verbose_printk(KERN_INFO"<pci_write_%d>:ring_point_%d: ring buff priority: %d\n", minor, minor, atomic_read(mod_desc->ring_buf_pri));
 			
 			/*write the mod_desc to the write FIFO*/
 			spin_lock_irqsave(mod_desc->in_fifo_write, flags);	
 			if(mod_desc->in_fifo_write_flag == 0)	
 			{
 				if (kfifo_len(&write_fifo) > 4)	
-					printk(KERN_INFO"<pci_write>: kfifo write stored elements: %d\n", kfifo_len(&write_fifo));
+					verbose_printk(KERN_INFO"<pci_write>: kfifo write stored elements: %d\n", kfifo_len(&write_fifo));
 			
 				if(!kfifo_is_full(&write_fifo))
 					kfifo_in_spinlocked(&write_fifo, &mod_desc, 1, &fifo_lock_write);
@@ -1804,14 +1804,14 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			//wake up write thread
 			atomic_set(&thread_q, 1);
 			wake_up_interruptible(&thread_q_head);
-			verbose_printk(KERN_INFO"<pci_write>: waking up write thread\n");
+			verbose_printk(KERN_INFO"<pci_write_%d>: waking up write thread\n", minor);
 
 		}
 
 		else
 		{
-			/* Here we will decide whether to do a zero copy DMA, or to write */
-			/* directly to the peripheral */
+			ret = copy_from_user(mod_desc->dma_write, (buf + bytes_written), partial_count);
+			
 			init_write = *((u32*)(mod_desc->dma_write));
 			dma_offset_write = (u64)mod_desc->dma_offset_write;
 			dma_offset_internal_read = (u64)mod_desc->dma_offset_internal_read;
@@ -1884,7 +1884,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	//file statistics
 	mod_desc->tx_bytes = mod_desc->tx_bytes + bytes_written;
 	atomic_add(bytes_written, &driver_tx_bytes);
-	printk(KERN_INFO"total file tx byes: %d \n", mod_desc->tx_bytes);
+	verbose_printk(KERN_INFO"<pci_write_%d>: total file tx byes: %d \n", minor, mod_desc->tx_bytes);
 
 	/*always update the stop_timer*/
 	getnstimeofday(mod_desc->stop_time);

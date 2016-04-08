@@ -8,21 +8,22 @@
 
 #define AXI_STREAM_FIFO 1
 
-#define FILE_SIZE_1 1024*16
-#define FILE_SIZE_2 1024*16
-#define FILE_SIZE_3 1024*16
-#define FILE_SIZE_4 1024*16
+#define FILE_SIZE_1 1024*128
+#define FILE_SIZE_2 1024*128
+#define FILE_SIZE_3 1024*128
+#define FILE_SIZE_4 1024*128
 
 #define TRANSFER_SIZE_1 1024
 #define TRANSFER_SIZE_2 1024
 #define TRANSFER_SIZE_3 1024
 #define TRANSFER_SIZE_4 1024
 
-#define NUM_HLS 4   //4
+#define NUM_HLS 3   //4
 #define NUM_ITER 10  //10
-#define NUM_XFER_SIZE_STEPS 3 //3    //(log10(FILE_SIZE_1/1024)/log10(2))-1
+#define NUM_XFER_SIZE_STEPS 6 //3    //(log10(FILE_SIZE_1/1024)/log10(2))-1
 
-#define CREATE_FILES 0
+#define CREATE_FILES 1
+#define CREATE_FILE_CHECK 0
 
 int xfer_size_1, xfer_size_2, xfer_size_3, xfer_size_4;
 
@@ -192,6 +193,7 @@ struct statistics * rx_statistics_4;
 int main()
 {
 
+	int ret;
 	/* Open device file and initialize */
 	//	bram = open(devfilename, O_RDWR);
 	//	if(bram < 0){
@@ -212,47 +214,106 @@ int main()
 	}
 	printf("hls_read:%d\n", hls_read);
 
-	hls_write_2 = open(devfilename_3, O_RDWR);
-	if(hls_write < 0){
-		printf("ERROR doing ioctl\n");
+	ret = file_init(hls_write, hls_write_axi_addr, hls_write_ctl_axi_addr, hls_fifo_mode, 0, FILE_SIZE_1);
+	if(ret < 0){
+		printf("ERROR doing file init\n");
 		return -1;
 	}
-	printf("hls_write_2:%d\n", hls_write_2);
+	ret = file_init(hls_read, hls_read_axi_addr, hls_read_ctl_axi_addr, hls_fifo_mode, 0x010, FILE_SIZE_1);
+	if(ret < 0){
+		printf("ERROR doing file init\n");
+		return -1;
+	}
 
-	hls_read_2 = open(devfilename_4, O_RDWR);
-	if(hls_read < 0){
+	if(ioctl(hls_read, RESET_DMA_ALLOC, 0) < 0) {
 		printf("ERROR doing ioctl\n");
 		return -1;
 	}
-	printf("hls_read_2:%d\n", hls_read_2);
+	printf("DMA Allocation Reset\n");
 
-	hls_write_3 = open(devfilename_5, O_RDWR);
-	if(hls_write_3 < 0){
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	printf("hls_write_3:%d\n", hls_write_3);
+	if(NUM_HLS > 1)
+	{
+		hls_write_2 = open(devfilename_3, O_RDWR);
+		if(hls_write < 0){
+			printf("ERROR doing ioctl\n");
+			return -1;
+		}
+		printf("hls_write_2:%d\n", hls_write_2);
 
-	hls_read_3 = open(devfilename_6, O_RDWR);
-	if(hls_read_3 < 0){
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	printf("hls_read_3:%d\n", hls_read_3);
+		hls_read_2 = open(devfilename_4, O_RDWR);
+		if(hls_read < 0){
+			printf("ERROR doing ioctl\n");
+			return -1;
+		}
+		printf("hls_read_2:%d\n", hls_read_2);
 
-	hls_write_4 = open(devfilename_7, O_RDWR);
-	if(hls_write_4 < 0){
-		printf("ERROR doing ioctl\n");
-		return -1;
+		ret = file_init(hls_write_2, hls_write_2_axi_addr, hls_write_2_ctl_axi_addr, hls_fifo_mode, 0, FILE_SIZE_2);
+		if(ret < 0){
+			printf("ERROR doing file init\n");
+			return -1;
+		}
+		ret = file_init(hls_read_2, hls_read_2_axi_addr, hls_read_2_ctl_axi_addr, hls_fifo_mode, 0x020, FILE_SIZE_2);
+		if(ret < 0){
+			printf("ERROR doing file init\n");
+			return -1;
+		}
 	}
-	printf("hls_write_4:%d\n", hls_write_4);
 
-	hls_read_4 = open(devfilename_8, O_RDWR);
-	if(hls_read_4 < 0){
-		printf("ERROR doing ioctl\n");
-		return -1;
+	if(NUM_HLS > 2)
+	{
+		hls_write_3 = open(devfilename_5, O_RDWR);
+		if(hls_write_3 < 0){
+			printf("ERROR doing ioctl\n");
+			return -1;
+		}
+		printf("hls_write_3:%d\n", hls_write_3);
+
+		hls_read_3 = open(devfilename_6, O_RDWR);
+		if(hls_read_3 < 0){
+			printf("ERROR doing ioctl\n");
+			return -1;
+		}
+		printf("hls_read_3:%d\n", hls_read_3);
+
+		ret = file_init(hls_write_3, hls_write_3_axi_addr, hls_write_3_ctl_axi_addr, hls_fifo_mode, 0, FILE_SIZE_3);
+		if(ret < 0){
+			printf("ERROR doing file init\n");
+			return -1;
+		}
+		ret = file_init(hls_read_3, hls_read_3_axi_addr, hls_read_3_ctl_axi_addr, hls_fifo_mode, 0x040, FILE_SIZE_3);
+		if(ret < 0){
+			printf("ERROR doing file init\n");
+			return -1;
+		}
 	}
-	printf("hls_read_4:%d\n", hls_read_4);
+
+	if(NUM_HLS > 3)
+	{
+		hls_write_4 = open(devfilename_7, O_RDWR);
+		if(hls_write_4 < 0){
+			printf("ERROR doing ioctl\n");
+			return -1;
+		}
+		printf("hls_write_4:%d\n", hls_write_4);
+
+		hls_read_4 = open(devfilename_8, O_RDWR);
+		if(hls_read_4 < 0){
+			printf("ERROR doing ioctl\n");
+			return -1;
+		}
+		printf("hls_read_4:%d\n", hls_read_4);
+
+		ret = file_init(hls_write_4, hls_write_4_axi_addr, hls_write_4_ctl_axi_addr, hls_fifo_mode, 0, FILE_SIZE_4);
+		if(ret < 0){
+			printf("ERROR doing file init\n");
+			return -1;
+		}
+		ret = file_init(hls_read_4, hls_read_4_axi_addr, hls_read_4_ctl_axi_addr, hls_fifo_mode, 0x080, FILE_SIZE_4);
+		if(ret < 0){
+			printf("ERROR doing file init\n");
+			return -1;
+		}
+	}
 
 	//	trace_read = open(devfilename_3, O_RDWR);
 	//	if(trace_read < 0){
@@ -267,57 +328,51 @@ int main()
 	//	}
 	//	printf("Opened files\n");
 
-	/* Reset DMA allocation*/
-	if(ioctl(hls_read, RESET_DMA_ALLOC, 0) < 0) {
-		printf("ERROR doing ioctl\n");
-		return -1;
-	}
-	printf("DMA Allocation Reset\n");
-	int ret;
+	//	ret = file_init(hls_write, hls_write_axi_addr, hls_write_ctl_axi_addr, hls_fifo_mode, 0, FILE_SIZE_1);
+	//	if(ret < 0){
+	//		printf("ERROR doing file init\n");
+	//		return -1;
+	//	}
+	//	ret = file_init(hls_read, hls_read_axi_addr, hls_read_ctl_axi_addr, hls_fifo_mode, 0x010, FILE_SIZE_1);
+	//	if(ret < 0){
+	//		printf("ERROR doing file init\n");
+	//		return -1;
+	//	}
+	//
+	//	ret = file_init(hls_write_2, hls_write_2_axi_addr, hls_write_2_ctl_axi_addr, hls_fifo_mode, 0, FILE_SIZE_2);
+	//	if(ret < 0){
+	//		printf("ERROR doing file init\n");
+	//		return -1;
+	//	}
+	//	ret = file_init(hls_read_2, hls_read_2_axi_addr, hls_read_2_ctl_axi_addr, hls_fifo_mode, 0x020, FILE_SIZE_2);
+	//	if(ret < 0){
+	//		printf("ERROR doing file init\n");
+	//		return -1;
+	//	}
+	//
+	//	ret = file_init(hls_write_3, hls_write_3_axi_addr, hls_write_3_ctl_axi_addr, hls_fifo_mode, 0, FILE_SIZE_3);
+	//	if(ret < 0){
+	//		printf("ERROR doing file init\n");
+	//		return -1;
+	//	}
+	//	ret = file_init(hls_read_3, hls_read_3_axi_addr, hls_read_3_ctl_axi_addr, hls_fifo_mode, 0x040, FILE_SIZE_3);
+	//	if(ret < 0){
+	//		printf("ERROR doing file init\n");
+	//		return -1;
+	//	}
+	//
+	//	ret = file_init(hls_write_4, hls_write_4_axi_addr, hls_write_4_ctl_axi_addr, hls_fifo_mode, 0, FILE_SIZE_4);
+	//	if(ret < 0){
+	//		printf("ERROR doing file init\n");
+	//		return -1;
+	//	}
+	//	ret = file_init(hls_read_4, hls_read_4_axi_addr, hls_read_4_ctl_axi_addr, hls_fifo_mode, 0x080, FILE_SIZE_4);
+	//	if(ret < 0){
+	//		printf("ERROR doing file init\n");
+	//		return -1;
+	//	}
 
-	ret = file_init(hls_write, hls_write_axi_addr, hls_write_ctl_axi_addr, hls_fifo_mode, 0, FILE_SIZE_1);
-	if(ret < 0){
-		printf("ERROR doing file init\n");
-		return -1;
-	}
-	ret = file_init(hls_read, hls_read_axi_addr, hls_read_ctl_axi_addr, hls_fifo_mode, 0x010, FILE_SIZE_1);
-	if(ret < 0){
-		printf("ERROR doing file init\n");
-		return -1;
-	}
 
-	ret = file_init(hls_write_2, hls_write_2_axi_addr, hls_write_2_ctl_axi_addr, hls_fifo_mode, 0, FILE_SIZE_2);
-	if(ret < 0){
-		printf("ERROR doing file init\n");
-		return -1;
-	}
-	ret = file_init(hls_read_2, hls_read_2_axi_addr, hls_read_2_ctl_axi_addr, hls_fifo_mode, 0x020, FILE_SIZE_2);
-	if(ret < 0){
-		printf("ERROR doing file init\n");
-		return -1;
-	}
-
-	ret = file_init(hls_write_3, hls_write_3_axi_addr, hls_write_3_ctl_axi_addr, hls_fifo_mode, 0, FILE_SIZE_3);
-	if(ret < 0){
-		printf("ERROR doing file init\n");
-		return -1;
-	}
-	ret = file_init(hls_read_3, hls_read_3_axi_addr, hls_read_3_ctl_axi_addr, hls_fifo_mode, 0x040, FILE_SIZE_3);
-	if(ret < 0){
-		printf("ERROR doing file init\n");
-		return -1;
-	}
-
-	ret = file_init(hls_write_4, hls_write_4_axi_addr, hls_write_4_ctl_axi_addr, hls_fifo_mode, 0, FILE_SIZE_4);
-	if(ret < 0){
-		printf("ERROR doing file init\n");
-		return -1;
-	}
-	ret = file_init(hls_read_4, hls_read_4_axi_addr, hls_read_4_ctl_axi_addr, hls_fifo_mode, 0x080, FILE_SIZE_4);
-	if(ret < 0){
-		printf("ERROR doing file init\n");
-		return -1;
-	}
 	/*initialize and reset the trace module counter*/
 	//	unsigned int activate = 3;
 	//	ret_val = write(trace_control, &activate, sizeof(activate));   
@@ -394,7 +449,7 @@ int main()
 			bw = 0;
 			printf("TRANSFER SIZE OF %d B\n", 1024*j);
 
-			for(i = 0; i<10; i++)
+			for(i = 0; i<NUM_ITER; i++)
 			{
 				printf("%f ", bw_arr[x][k][i]);
 			}
@@ -407,7 +462,7 @@ int main()
 	}
 	/*write to file*/
 	char* filename; 
-	
+
 	if(CREATE_FILES)
 	{
 		filename = "statistics.csv";
@@ -423,15 +478,25 @@ int main()
 	close(hls_write);
 	close(hls_read);
 	printf("closed files for thread 1\n");
-	close(hls_write_2);
-	close(hls_read_2);
-	printf("closed files for thread 2\n");
-	close(hls_write_3);
-	close(hls_read_3);
-	printf("closed files for thread 3\n");
-	close(hls_write_4);
-	close(hls_read_4);
-	printf("closed files for thread 4\n");
+
+	if(NUM_HLS > 1)
+	{
+		close(hls_write_2);
+		close(hls_read_2);
+		printf("closed files for thread 2\n");
+	}
+	if(NUM_HLS > 2)
+	{
+		close(hls_write_3);
+		close(hls_read_3);
+		printf("closed files for thread 3\n");
+	}
+	if(NUM_HLS > 3)
+	{
+		close(hls_write_4);
+		close(hls_read_4);
+		printf("closed files for thread 4\n");
+	}
 	//	close(trace_read);
 	//	close(trace_control);
 
@@ -492,8 +557,8 @@ void * tx(void * file_desc)
 
 	//	while(counter < iter)  //this holds number of transfers constant
 	while(tx_write_bytes < (FILE_SIZE_1*512/(2*2)))  //this holds amount of data constant
-//	while(tx_write_bytes < 32768)  //this holds amount of data constant
-//	while(tx_write_bytes < 65536)  //this holds amount of data constant
+		//	while(tx_write_bytes < 32768)  //this holds amount of data constant
+		//	while(tx_write_bytes < 65536)  //this holds amount of data constant
 	{
 		//		ret_val = write(hls_write_2, tx_buf, sizeof(tx));   
 		ret_val = write(fd, in, thread_struct_loc->transfer_size);   
@@ -513,7 +578,7 @@ void * tx(void * file_desc)
 			counter++;
 			tx_write_bytes = tx_write_bytes + ret_val;
 
-			if(CREATE_FILES)
+			if(CREATE_FILE_CHECK)
 			{		
 				charp = (char*)in;
 				for(i = 0; i<ret_val; i++)
@@ -591,8 +656,8 @@ void *rx(void * file_desc)
 	total_bytes = 0;
 
 	while(total_bytes < (FILE_SIZE_1*512/(2*2)))  //this holds amount of data constant
-//	while(total_bytes < 32768)  //this holds amount of data constant
-//	while(total_bytes < 65536)  //this holds amount of data constant
+		//	while(total_bytes < 32768)  //this holds amount of data constant
+		//	while(total_bytes < 65536)  //this holds amount of data constant
 	{
 		return_val = 1;
 		result = poll(&pollfds, 1, timeout);
@@ -623,7 +688,7 @@ void *rx(void * file_desc)
 					{
 						total_bytes = total_bytes + return_val;		
 
-						if(CREATE_FILES)
+						if(CREATE_FILE_CHECK)
 						{
 							charp = (char*)buff;
 							for(i = 0; i<return_val; i++)
@@ -643,7 +708,7 @@ void *rx(void * file_desc)
 		//	sleep(10);
 	}
 	printf("Finished Reading!!!!!!!\n");
-	
+
 	if(ioctl(fd, STOP_FILE_TIMER, NULL) < 0) {
 		printf("ERROR doing ioctl\n");
 		return -1;

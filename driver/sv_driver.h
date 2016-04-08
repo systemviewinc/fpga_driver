@@ -24,7 +24,7 @@
 #endif
 
 #define BACK_PRESSURE 1
-#define RING_BUFF_SIZE_MULTIPLIER 2
+#define RING_BUFF_SIZE_MULTIPLIER 1
 /********* printk statements *********/
 #ifndef verbose_printk
 #define verbose_printk(...)
@@ -190,6 +190,7 @@ struct mod_desc
 	atomic_t * rfh;    //write to hardware pointer
 	atomic_t * rfu;    //write to kernel pointer
 	atomic_t * ring_buf_pri_read;    //handshake variable
+	spinlock_t * ring_pointer_write;
 	atomic_t * pci_write_q;    //handshake variable
 	spinlock_t * in_fifo;
 	spinlock_t * in_fifo_write;
