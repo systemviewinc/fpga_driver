@@ -155,6 +155,7 @@ wait_queue_head_t wq_periph;
 wait_queue_head_t mutexq;
 wait_queue_head_t thread_q_head;
 wait_queue_head_t thread_q_head_read;
+wait_queue_head_t pci_write_head;
 int cdma_comp[5];
 atomic_t cdma_atom[5];
 int num_int;
@@ -166,6 +167,12 @@ atomic_t thread_q_read = ATOMIC_INIT(0);
 struct task_struct * thread_struct_read;
 DEFINE_KFIFO(read_fifo, struct mod_desc*, 8192);
 spinlock_t fifo_lock;
+
+atomic_t thread_q = ATOMIC_INIT(0);
+struct task_struct * thread_struct;
+DEFINE_KFIFO(write_fifo, struct mod_desc*, 8192);
+spinlock_t fifo_lock_write;
+
 //DECLARE_KFIFO(read_fifo, struct mod_desc*, 4096);
 //INIT_KFIFO(read_fifo);
 
@@ -618,6 +625,16 @@ static void remove(struct pci_dev *dev)
 		wake_up_interruptible(&thread_q_head_read);
 	}
 	printk("Read Thread Destroyed\n");
+	
+	/*Destroy the write thread*/
+	atomic_set(&thread_q, 1);
+	wake_up_interruptible(&thread_q_head);
+	while(kthread_stop(thread_struct)<0)
+	{
+		atomic_set(&thread_q, 1);
+		wake_up_interruptible(&thread_q_head);
+	}
+	printk("Write Thread Destroyed\n");
 
 	unregister_chrdev(major, pci_devName);
 	
@@ -642,6 +659,16 @@ static int sv_plat_remove(struct platform_device *pdev)
 		wake_up_interruptible(&thread_q_head_read);
 	}
 	printk("Read Thread Destroyed\n");
+	
+	/*Destroy the write thread*/
+	atomic_set(&thread_q, 1);
+	wake_up_interruptible(&thread_q_head);
+	while(kthread_stop(thread_struct)<0)
+	{
+		atomic_set(&thread_q, 1);
+		wake_up_interruptible(&thread_q_head);
+	}
+	printk("Write Thread Destroyed\n");
 
 	unregister_chrdev(major, pci_devName);
 
@@ -676,6 +703,7 @@ static int __init sv_driver_init(void)
 			init_waitqueue_head(&thread_q_head);
 			init_waitqueue_head(&thread_q_head_read);
 			init_waitqueue_head(&cdma_q_head);
+			init_waitqueue_head(&pci_write_head);
 
 			ids[0].vendor =  PCI_VENDOR_ID_XILINX;
 			ids[0].device =  (u32)device_id;
@@ -688,9 +716,13 @@ static int __init sv_driver_init(void)
 
 			/*Create Read Thread*/
 			thread_struct_read = create_thread_read(&read_fifo);
+			
+			/*Create Write Thread*/
+			thread_struct = create_thread(&write_fifo);
 		
 			/*FIFO init stuff*/
 			spin_lock_init(&fifo_lock);
+			spin_lock_init(&fifo_lock_write);
 				
 			return pci_register_driver(&pci_driver);
 			break;
@@ -705,14 +737,19 @@ static int __init sv_driver_init(void)
 			init_waitqueue_head(&mutexq);
 			init_waitqueue_head(&thread_q_head);
 			init_waitqueue_head(&thread_q_head_read);
+			init_waitqueue_head(&pci_write_head);
 
 			bar_0_axi_offset = 0x40000000;
 
 			/*Create Read Thread*/
 			thread_struct_read = create_thread_read(&read_fifo);
 			
+			/*Create Write Thread*/
+			thread_struct = create_thread(&write_fifo);
+			
 			/*FIFO init stuff*/
 			spin_lock_init(&fifo_lock);
+			spin_lock_init(&fifo_lock_write);
 			
 			return platform_driver_register(&sv_plat_driver);
 
@@ -1013,11 +1050,16 @@ int pci_open(struct inode *inode, struct file *filep)
 	atomic_t * rfh;
 	atomic_t * rfu;
 	atomic_t * ring_buf_pri_read;
+	atomic_t * pci_write_q;
 
 	spinlock_t * in_fifo;
 	in_fifo = (spinlock_t *)kmalloc(sizeof(spinlock_t), GFP_KERNEL);
 	spin_lock_init(in_fifo);
 
+	spinlock_t * in_fifo_write;
+	in_fifo_write = (spinlock_t *)kmalloc(sizeof(spinlock_t), GFP_KERNEL);
+	spin_lock_init(in_fifo_write);
+	
 	start_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
 	stop_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
 
@@ -1029,6 +1071,7 @@ int pci_open(struct inode *inode, struct file *filep)
 	rfu = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
 	rfh = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
 	ring_buf_pri_read = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
+	pci_write_q = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
 
 	atomic_set(atomic_poll, 0);
 	//atomic_set(thread_q_read, 0);
@@ -1038,6 +1081,7 @@ int pci_open(struct inode *inode, struct file *filep)
 	atomic_set(rfh, 0);
 	atomic_set(rfu, 0);
 	atomic_set(ring_buf_pri_read, 1);
+	atomic_set(pci_write_q, 0);
 
 	interrupt_count = kmalloc(sizeof(int), GFP_KERNEL);
 
@@ -1082,6 +1126,9 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->ring_buf_pri_read = ring_buf_pri_read;
 	s->in_fifo = in_fifo;
 	s->in_fifo_flag = 0;	
+	s->in_fifo_write = in_fifo_write;
+	s->in_fifo_write_flag = 0;	
+	s->pci_write_q = pci_write_q;
 
 	verbose_printk(KERN_INFO"<pci_open>: minor number %d detected\n", s->minor);
 
@@ -1421,12 +1468,12 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 						verbose_printk(KERN_INFO"<ioctl_axi_stream_fifo>: kernel R/W register kernel addresses:%llx / %llx\n", (u64)mod_desc->kernel_reg_read, (u64)mod_desc->kernel_reg_write );
 						current_dma_offset_internal = current_dma_offset_internal + 0x08;   // update the current dma buffer status (just added two 32b buffers)
 
-						/*set the ring puff priority to WTK*/
-						//atomic_set(mod_desc->ring_buf_pri, 1);
+						/*set the ring buff priority*/
+						atomic_set(mod_desc->ring_buf_pri, 1);
 						atomic_set(mod_desc->ring_buf_pri_read, 0);
 						/*set the pointer defaults*/
-						//atomic_set(mod_desc->wtk, 0);
-						//atomic_set(mod_desc->wtk, 0);
+						atomic_set(mod_desc->wtk, 0);
+						atomic_set(mod_desc->wtk, 0);
 						atomic_set(mod_desc->rfh, 0);
 						atomic_set(mod_desc->rfu, 0);
 
@@ -1534,6 +1581,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	u64 dma_offset_write;
 	u64 dma_offset_internal_read;
 	u64 dma_offset_internal_write;
+	unsigned long flags;
 
 	int wtk;
 	bytes = 0;
@@ -1689,16 +1737,74 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		if (mod_desc->mode == AXI_STREAM_FIFO)
 		{
 
-			bytes = axi_stream_fifo_write(partial_count, mod_desc, 0);
-			if (bytes < 0)
+//			bytes = axi_stream_fifo_write(partial_count, mod_desc, 0);
+//			if (bytes < 0)
+//			{
+//				printk(KERN_INFO"<pci_write>: Write Error, exiting write routine...\n\n\n");
+//				return -1;
+//			}
+//			if (bytes == 0)
+//			{
+//				return bytes_written;
+//			}
+			
+			//else if streaming fifo inferface, use the ring buffer
+			while(!query_ring_buff(mod_desc, partial_count)) 
 			{
-				printk(KERN_INFO"<pci_write>: Write Error, exiting write routine...\n\n\n");
-				return -1;
+				/*sleep until the write thread signals priority to pci_write
+				 *  (ie there is no more data for the write thread to write)
+				 *  (ie there MUST be room in the ring buffer now)*/
+			
+				//wake up write thread
+				atomic_set(&thread_q, 1);
+				wake_up_interruptible(&thread_q_head);
+				verbose_printk(KERN_INFO"<pci_write>: waking up write thread\n");
+				
+				//printk(KERN_INFO"<pci_write>: pci_write is going to sleep ZzZzZzZzZzZzZz\n");
+				//ret = wait_event_interruptible(pci_write_head, atomic_read(mod_desc->pci_write_q) == 1);
+				//atomic_set(mod_desc->pci_write_q, 0);
+				//printk(KERN_INFO"<pci_write>: woke up the sleeping pci_write function!!\n");
+				schedule();
 			}
-			if (bytes == 0)
+			//if we need to wrap around the ring buffer....
+			wtk = atomic_read(mod_desc->wtk);
+			if(partial_count + wtk > mod_desc->dma_size)
 			{
-				return bytes_written;
+				ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), mod_desc->dma_size - 1 - wtk);   //write until end of ring buff
+				ret = copy_from_user((mod_desc->dma_write), (buf + bytes_written + mod_desc->dma_size -1 - wtk), partial_count - (mod_desc->dma_size -wtk - 1));   //write the remaining
 			}
+			else
+				ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), partial_count); 
+
+			wtk = get_new_ring_pointer(partial_count, wtk, (int)mod_desc->dma_size);
+			printk(KERN_INFO"<pci_write>:ring_point: WTK : %d\n", wtk);
+			atomic_set(mod_desc->wtk, wtk);
+
+			/*This says that if the WTK pointer has caught up to the WTH pointer, give priority to the WTH*/
+			if(atomic_read(mod_desc->wth) == wtk)
+				atomic_set(mod_desc->ring_buf_pri, 0);
+
+			printk(KERN_INFO"<pci_write>:ring_point: ring buff priority: %d\n", atomic_read(mod_desc->ring_buf_pri));
+			
+			/*write the mod_desc to the write FIFO*/
+			spin_lock_irqsave(mod_desc->in_fifo_write, flags);	
+			if(mod_desc->in_fifo_write_flag == 0)	
+			{
+				if (kfifo_len(&write_fifo) > 4)	
+					printk(KERN_INFO"<pci_write>: kfifo write stored elements: %d\n", kfifo_len(&write_fifo));
+			
+				if(!kfifo_is_full(&write_fifo))
+					kfifo_in_spinlocked(&write_fifo, &mod_desc, 1, &fifo_lock_write);
+				else
+					printk(KERN_INFO"<pci_write>: write kfifo is full, not writing mod desc\n");
+				mod_desc->in_fifo_write_flag = 1;
+			}
+			spin_unlock_irqrestore(mod_desc->in_fifo_write, flags);
+
+			//wake up write thread
+			atomic_set(&thread_q, 1);
+			wake_up_interruptible(&thread_q_head);
+			verbose_printk(KERN_INFO"<pci_write>: waking up write thread\n");
 
 		}
 
@@ -1778,7 +1884,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	//file statistics
 	mod_desc->tx_bytes = mod_desc->tx_bytes + bytes_written;
 	atomic_add(bytes_written, &driver_tx_bytes);
-	//printk(KERN_INFO"total file tx byes: %d \n", mod_desc->tx_bytes);
+	printk(KERN_INFO"total file tx byes: %d \n", mod_desc->tx_bytes);
 
 	/*always update the stop_timer*/
 	getnstimeofday(mod_desc->stop_time);
@@ -1879,7 +1985,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			rfu = atomic_read(mod_desc->rfu);
 			priority = atomic_read(mod_desc->ring_buf_pri_read); //The thread has priority when the atomic variable is 0
 			
-			max_can_read = max_hw_read(mod_desc, rfu, rfh, priority);
+			max_can_read = data_to_transfer(mod_desc, rfu, rfh, priority);
 
 			if (max_can_read > 0)
 			{
