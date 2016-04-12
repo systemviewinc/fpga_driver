@@ -453,12 +453,19 @@ int read_data(struct mod_desc * mod_desc)
 			/*update rfh pointer*/
 			rfh = get_new_ring_pointer(read_count, rfh, (int)(mod_desc->dma_size));
 
+			spin_lock_irqsave(mod_desc->ring_pointer_read, flags);
+			//--------------- SPIN LOCKED ---------------------------------------//	
 			atomic_set(mod_desc->rfh, rfh);
 			verbose_printk("ring_point : RFH %d\n", rfh);
 
 			/*This says that if the rfh pointer has caught up to the rfu pointer, then give priority to the rfu.*/
 			if(atomic_read(mod_desc->rfu) == rfh)
+			{
 				atomic_set(mod_desc->ring_buf_pri_read, 1);
+				verbose_printk("ring_point : Read Priority: %d\n", atomic_read(mod_desc->ring_buf_pri_read));
+			}
+			//------------------------------------------------------------------//	
+			spin_unlock_irqrestore(mod_desc->ring_pointer_read, flags);
 
 		}
 		//send signal to userspace poll()
@@ -621,6 +628,7 @@ void write_thread(struct kfifo* write_fifo)
 			if(d2w != 0)
 			{				
 				write_incomplete = write_data(mod_desc);
+				
 				verbose_printk(KERN_INFO"<write_thread>: write incomplete is: %d\n", write_incomplete);
 				if (write_incomplete == 1)
 				{
@@ -729,7 +737,7 @@ int write_data(struct mod_desc * mod_desc)
 				 * is not ready, we must requeue the mod_desc in the write FIFO*/
 				not_rdy_count++;
 				schedule();
-				if(not_rdy_count == 20)
+				if(not_rdy_count == 10)
 				/*Here we still have more data to write to the hardware but the fifo
 				 * is not ready, we must requeue the mod_desc in the write FIFO*/
 				{
@@ -776,7 +784,7 @@ int write_data(struct mod_desc * mod_desc)
 			atomic_set(mod_desc->wth, wth);
 			verbose_printk("ring_point_%d : WTH %d\n", minor, wth);
 
-			/*This says that if the wth pointer has caught up to the wth pointer, then give priority to the wth.*/
+			/*This says that if the wth pointer has caught up to the wtk pointer, then give priority to the wtk.*/
 			wtk = atomic_read(mod_desc->wtk);
 			if(wtk == wth)
 			{

@@ -8,19 +8,19 @@
 
 #define AXI_STREAM_FIFO 1
 
-#define FILE_SIZE_1 1024*128
-#define FILE_SIZE_2 1024*128
-#define FILE_SIZE_3 1024*128
-#define FILE_SIZE_4 1024*128
+#define FILE_SIZE_1 1024*32
+#define FILE_SIZE_2 1024*32
+#define FILE_SIZE_3 1024*32
+#define FILE_SIZE_4 1024*32
 
 #define TRANSFER_SIZE_1 1024
 #define TRANSFER_SIZE_2 1024
 #define TRANSFER_SIZE_3 1024
 #define TRANSFER_SIZE_4 1024
 
-#define NUM_HLS 3   //4
+#define NUM_HLS 4   //4
 #define NUM_ITER 10  //10
-#define NUM_XFER_SIZE_STEPS 6 //3    //(log10(FILE_SIZE_1/1024)/log10(2))-1
+#define NUM_XFER_SIZE_STEPS 4 //3    //(log10(FILE_SIZE_1/1024)/log10(2))-1
 
 #define CREATE_FILES 1
 #define CREATE_FILE_CHECK 0
@@ -586,7 +586,8 @@ void * tx(void * file_desc)
 			}
 
 			//usleep(20);
-			sched_yield();
+		
+			//sched_yield();
 		}
 	}
 	printf("Finished Writing!!!!!!!\n");

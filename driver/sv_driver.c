@@ -1064,6 +1064,10 @@ int pci_open(struct inode *inode, struct file *filep)
 	ring_pointer_write = (spinlock_t *)kmalloc(sizeof(spinlock_t), GFP_KERNEL);
 	spin_lock_init(ring_pointer_write);
 	
+	spinlock_t * ring_pointer_read;
+	ring_pointer_read = (spinlock_t *)kmalloc(sizeof(spinlock_t), GFP_KERNEL);
+	spin_lock_init(ring_pointer_read);
+	
 	start_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
 	stop_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
 
@@ -1129,6 +1133,7 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->ring_buf_pri = ring_buf_pri;
 	s->ring_buf_pri_read = ring_buf_pri_read;
 	s->ring_pointer_write = ring_pointer_write;
+	s->ring_pointer_read = ring_pointer_read;
 	s->in_fifo = in_fifo;
 	s->in_fifo_flag = 0;	
 	s->in_fifo_write = in_fifo_write;
@@ -1754,6 +1759,8 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				atomic_set(&thread_q, 1);
 				wake_up_interruptible(&thread_q_head);
 				verbose_printk(KERN_INFO"<pci_write>: waking up write thread\n");
+
+				//return bytes_written;
 				
 				verbose_printk(KERN_INFO"<pci_write>: pci_write is going to sleep ZzZzZzZzZzZzZz\n");
 				ret = wait_event_interruptible(pci_write_head, atomic_read(mod_desc->pci_write_q) == 1);
@@ -1780,12 +1787,13 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 			/*This says that if the WTK pointer has caught up to the WTH pointer, give priority to the WTH*/
 			if(atomic_read(mod_desc->wth) == wtk)
+			{
 				atomic_set(mod_desc->ring_buf_pri, 0);
+				verbose_printk(KERN_INFO"<pci_write_%d>:ring_point_%d: ring buff priority: %d\n", minor, minor, atomic_read(mod_desc->ring_buf_pri));
+			}
 			// --------------   SPIN LOCK RELEASE ------------------------//
 			spin_unlock_irqrestore(mod_desc->ring_pointer_write, flags);
 
-			verbose_printk(KERN_INFO"<pci_write_%d>:ring_point_%d: ring buff priority: %d\n", minor, minor, atomic_read(mod_desc->ring_buf_pri));
-			
 			/*write the mod_desc to the write FIFO*/
 			spin_lock_irqsave(mod_desc->in_fifo_write, flags);	
 			if(mod_desc->in_fifo_write_flag == 0)	
@@ -1918,8 +1926,10 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	int priority;
 	int wake_up_flag;
 	unsigned long flags;
+	int minor;
 
 	mod_desc = filep->private_data;
+	minor = mod_desc->minor;	
 
 	temp = 0;
 
@@ -2008,16 +2018,24 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 				rfu = get_new_ring_pointer(count, rfu, (int)mod_desc->dma_size);
 				verbose_printk(KERN_INFO"<pci_read>:ring_point: RFU : %d\n", rfu);
 				
+				spin_lock_irqsave(mod_desc->ring_pointer_read, flags);
+				//--------------- SPIN LOCKED ---------------------------------------//	
 				atomic_set(mod_desc->rfu, rfu);
 
 				/*This says that if the RFU pointer has caught up to the RFH pointer, give priority to the RFH*/
 				if(atomic_read(mod_desc->rfh) == rfu)
 				{
 					atomic_set(mod_desc->ring_buf_pri_read, 0);
+					verbose_printk("ring_point : Read Priority: %d\n", atomic_read(mod_desc->ring_buf_pri_read));
+					/*wake up read thread*/
+					atomic_set(&thread_q_read, 1);
+					wake_up_interruptible(&thread_q_head_read);
 					/*in case thread was asleep waiting for ring buffer*/
 					//atomic_set(mod_desc->thread_q_read, 1);
 					//wake_up_interruptible(&thread_q_head_read);
 				}
+				//------------------------------------------------------------------//	
+				spin_unlock_irqrestore(mod_desc->ring_pointer_read, flags);
 	
 				if (wake_up_flag == 1)
 				{
@@ -2142,7 +2160,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	verbose_printk(KERN_INFO"<pci_read>: ************************************************************************\n");
 	verbose_printk(KERN_INFO"<pci_read>: ******************** READ TRANSACTION END  **************************\n");
 	verbose_printk(KERN_INFO"                                    Bytes read : %d\n", bytes);
-	verbose_printk(KERN_INFO"                                    Total Bytes read : %d\n", mod_desc->rx_bytes);
+	verbose_printk(KERN_INFO"<pci_read_%d>:                       Total Bytes read : %d\n", minor, mod_desc->rx_bytes);
 	verbose_printk(KERN_INFO"<pci_read>: ************************************************************************\n");
 	verbose_printk(KERN_INFO"\n");
 

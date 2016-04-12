@@ -191,6 +191,7 @@ struct mod_desc
 	atomic_t * rfu;    //write to kernel pointer
 	atomic_t * ring_buf_pri_read;    //handshake variable
 	spinlock_t * ring_pointer_write;
+	spinlock_t * ring_pointer_read;
 	atomic_t * pci_write_q;    //handshake variable
 	spinlock_t * in_fifo;
 	spinlock_t * in_fifo_write;
