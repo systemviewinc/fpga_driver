@@ -24,7 +24,7 @@
 #endif
 
 #define BACK_PRESSURE 1
-#define RING_BUFF_SIZE_MULTIPLIER 1
+#define RING_BUFF_SIZE_MULTIPLIER 2
 /********* printk statements *********/
 #ifndef verbose_printk
 #define verbose_printk(...)

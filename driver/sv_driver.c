@@ -1593,6 +1593,9 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	u64 dma_offset_internal_write;
 	unsigned long flags;
 	int minor;
+	struct timespec start_time;
+	struct timespec stop_time;
+	struct timespec diff;	
 
 	int wtk;
 	bytes = 0;
@@ -1604,86 +1607,6 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 	bytes = 0;
 	bytes_written = 0;
-
-//	// Start of ring buffer code ---------------------------------------------------------------------------------------------------------------------------------------------------
-//
-//	//loop here until all data is transferred from the write call into the DMA buffer
-//	while (bytes_written < count)
-//	{
-//		partial_count = count - bytes_written;
-//
-//		if (partial_count > mod_desc->dma_size) //this is the maximum allowable transfer size to DMA buffer
-//		{
-//			remaining_size = count - bytes_written;
-//			verbose_printk(KERN_INFO"<pci_write>: the current DMA Buffer size of: 0x%x is not large enough for *remaining* transfer size:%zu bytes\n", mod_desc->dma_size, remaining_size);
-//			partial_count = mod_desc->dma_size;
-//		}
-//
-//		verbose_printk(KERN_INFO"<pci_write>: the amount of bytes being copied to kernel: %zu\n", partial_count);
-//
-//		//if memory interface, do a normal blocking write
-//		if (mod_desc->mode == SLAVE)    
-//		{
-//
-//			ret = copy_from_user(mod_desc->dma_write, (buf + bytes_written), partial_count);
-//			//call write_data() with ring pointer offset as the current file pointer.
-//			ret = write_data(mod_desc, partial_count, (u64)*f_pos);
-//			// we don't care if the write will go past the file boundary as the  write_data() will handle it.
-//			//write_data() is blocking/looping until all passed data is written to the HW
-//			// update the file pointer
-//			if (transfer_type == NORMAL_WRITE)
-//			{
-//				*f_pos = *f_pos + partial_count;
-//
-//				if (*f_pos == (mod_desc->file_size)-1)
-//				{
-//					*f_pos = 0;
-//					verbose_printk(KERN_INFO"<user_peripheral_write>: Resetting file pointer back to zero...\n");
-//				}
-//				else if (*f_pos >= mod_desc->file_size)
-//				{
-//					//perform the pointer wrap around, this is no longer an error. Eventually the ping pong buffer
-//					//  HW logic will control the data flow into a different buffer in this case. (maybe?)
-//					*f_pos = *f_pos - (mod_desc->file_size)-1;
-//				}
-//				verbose_printk(KERN_INFO"<user_peripheral_write>: updated file offset is: %llx\n", *f_pos);
-//			}
-//		}
-//
-//		else
-//		{
-//			//else if streaming fifo inferface, use the ring buffer
-//			query_ring_buff(mod_desc, partial_count); //blocks until count is able to be copied to the ring buff
-//			//if we need to wrap around the ring buffer....
-//			wtk = atomic_read(mod_desc->wtk);
-//			if(partial_count + wtk > mod_desc->file_size)
-//			{
-//				ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), mod_desc->file_size - 1 - wtk);   //write until end of ring buff
-//				ret = copy_from_user((mod_desc->dma_write), (buf + bytes_written + mod_desc->file_size -1 - wtk), partial_count - (mod_desc->file_size -wtk - 1));   //write the remaining
-//			}
-//			else
-//				ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), partial_count); 
-//
-//			wtk = get_new_ring_pointer(partial_count, wtk, (int)mod_desc->file_size);
-//			verbose_printk(KERN_INFO"<pci_write>:ring_point: WTK : %d\n", wtk);
-//			atomic_set(mod_desc->wtk, wtk);
-//
-//			/*This says that if the WTK pointer has caught up to the WTH pointer, give priority to the WTH*/
-//			if(atomic_read(mod_desc->wth) == wtk)
-//				atomic_set(mod_desc->ring_buf_pri, 0);
-//
-//			verbose_printk(KERN_INFO"<pci_write>:ring_point: ring buff priority: %d\n", atomic_read(mod_desc->ring_buf_pri));
-//			//wake up write thread
-//			mod_desc->thread_q = 1;
-//			wake_up_interruptible(&thread_q_head);
-//			verbose_printk(KERN_INFO"<pci_write>: waking up write thread\n");
-//		}
-//		bytes_written = bytes_written + partial_count;
-//	}
-//	printk(KERN_INFO"<pci_write>: Total write to ring buffer in this pass: %d\n", bytes_written);
-//	return bytes_written;
-//
-//	// end of ring buffer code ---------------------------------------------------------------------------------------------------------------------------------------------------
 
 	verbose_printk(KERN_INFO"\n\n");
 	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n");
@@ -1737,18 +1660,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		if (mod_desc->mode == AXI_STREAM_FIFO)
 		{
 
-//			bytes = axi_stream_fifo_write(partial_count, mod_desc, 0);
-//			if (bytes < 0)
-//			{
-//				printk(KERN_INFO"<pci_write>: Write Error, exiting write routine...\n\n\n");
-//				return -1;
-//			}
-//			if (bytes == 0)
-//			{
-//				return bytes_written;
-//			}
-			
-			//else if streaming fifo inferface, use the ring buffer
+			//getnstimeofday(&start_time);
 			while(!query_ring_buff(mod_desc, partial_count)) 
 			{
 				/*sleep until the write thread signals priority to pci_write
@@ -1768,8 +1680,16 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				verbose_printk(KERN_INFO"<pci_write>: woke up the sleeping pci_write function!!\n");
 				//schedule();
 			}
+			//getnstimeofday(&stop_time);
+			//diff = timespec_sub((stop_time), (start_time));
+			//if(diff.tv_nsec > 1000000)
+			//	printk("<pci_write> ring buffer sleep wait time: %lunS\n", diff.tv_nsec);			
+			
 			//if we need to wrap around the ring buffer....
 			wtk = atomic_read(mod_desc->wtk);
+			
+			//getnstimeofday(&start_time);
+			
 			if(partial_count + wtk > mod_desc->dma_size)
 			{
 				ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), mod_desc->dma_size - 1 - wtk);   //write until end of ring buff
@@ -1778,6 +1698,11 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			else
 				ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), partial_count); 
 
+			//getnstimeofday(&stop_time);
+			//diff = timespec_sub((stop_time), (start_time));
+			//if(diff.tv_nsec > 1000000)
+			//	printk("<pci_write> Copy_from_user time: %lunS\n", diff.tv_nsec);			
+	
 			wtk = get_new_ring_pointer(partial_count, wtk, (int)mod_desc->dma_size);
 			verbose_printk(KERN_INFO"<pci_write_%d>:ring_point_%d: WTK : %d\n", minor, minor, wtk);
 		

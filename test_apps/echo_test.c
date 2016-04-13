@@ -20,7 +20,7 @@
 
 #define NUM_HLS 4   //4
 #define NUM_ITER 10  //10
-#define NUM_XFER_SIZE_STEPS 4 //3    //(log10(FILE_SIZE_1/1024)/log10(2))-1
+#define NUM_XFER_SIZE_STEPS 5 //3    //(log10(FILE_SIZE_1/1024)/log10(2))-1
 
 #define CREATE_FILES 1
 #define CREATE_FILE_CHECK 0
@@ -89,7 +89,9 @@ char * devfilename_8 = devname_8;
 //unsigned int cdma_addr = 0x40001000;
 //unsigned int pcie_m_addr = 0x40010000;
 //unsigned int axi_int_addr = 0x40004000;
-unsigned int in[FILE_SIZE_4/4];
+
+//unsigned int in[FILE_SIZE_4/4];
+unsigned int in[FILE_SIZE_4];
 
 /* User Peripheral AXI Addresses */
 
@@ -420,6 +422,11 @@ int main()
 		j = 4;   //start at 4k
 		for(idx = 0; idx<NUM_XFER_SIZE_STEPS; idx++)
 		{
+			//xfer_size_1 = TRANSFER_SIZE_1*j;
+			//xfer_size_2 = TRANSFER_SIZE_1*j;
+			//xfer_size_3 = TRANSFER_SIZE_1*j;
+			//xfer_size_4 = TRANSFER_SIZE_1*j;
+			
 			xfer_size_1 = TRANSFER_SIZE_1*j;
 			xfer_size_2 = TRANSFER_SIZE_1*j;
 			xfer_size_3 = TRANSFER_SIZE_1*j;
@@ -587,7 +594,7 @@ void * tx(void * file_desc)
 
 			//usleep(20);
 		
-			//sched_yield();
+			sched_yield();
 		}
 	}
 	printf("Finished Writing!!!!!!!\n");
@@ -614,7 +621,8 @@ void *rx(void * file_desc)
 	int timeout = 1000;    //in ms
 	int result;
 	unsigned int buff2[1];
-	unsigned int buff[FILE_SIZE_4/3];  //50 32b data words
+	//unsigned int buff[FILE_SIZE_4/3];  //50 32b data words
+	unsigned int buff[FILE_SIZE_4];  
 	unsigned long long trace_buff[256];  //long long is 64bit on ARM
 	int i;
 	int total_bytes;
@@ -700,12 +708,12 @@ void *rx(void * file_desc)
 					else if (return_val == 0)
 					{
 						zero_count = zero_count + 1;
-						//				sched_yield();
+						//sched_yield();
 					}
 				}
 
 		}
-		//sched_yield();
+		//	sched_yield();
 		//	sleep(10);
 	}
 	printf("Finished Reading!!!!!!!\n");

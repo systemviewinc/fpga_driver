@@ -829,9 +829,9 @@ int write_fifo_ready(struct mod_desc* mod_desc)
 		printk(KERN_INFO"<pci_write>: ERROR reading from AXI Streaming FIFO control interface\n");
 		return -1;
 	}
-	//read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+	read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 	//read_reg = (*(mod_desc->kernel_reg_read));    
-	read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+	//read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 
 	verbose_printk(KERN_INFO"<write_fifo_ready>: Initial Transmit Data FIFO Fill Level:%x\n", buf);
 
@@ -1524,9 +1524,8 @@ void cdma_idle_poll(int cdma_num)
 	while(((u32)status & 0x02) != 0x02)  //this means while CDMA is NOT idle
 	{
 		/* Check the status of the CDMA to see if successful */
-		//msleep(1000);   //experiment....
 		ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
-		verbose_printk(KERN_INFO"	<cdma_ack>: CDMA status:%x\n", status);
+		verbose_printk(KERN_INFO"	<cdma_idle_poll>: CDMA status:%x\n", status);
 		schedule();
 	}
 	if (status == 0xFFFFFFFF)
@@ -1706,9 +1705,9 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_
 		printk(KERN_INFO"<pci_write>: ERROR reading from AXI Streaming FIFO control interface\n");
 		return -1;
 	}
-	//read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+	read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 	//read_reg = (*(mod_desc->kernel_reg_read));    
-	read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+	//read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 
 	//printk(KERN_INFO"<pci_write>: Initial Transmit Data FIFO Fill Level:%x\n", buf);
 
@@ -1741,9 +1740,9 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_
 			printk(KERN_INFO"<pci_write>: ERROR reading from AXI Streaming FIFO control interface\n");
 			return -1;
 		}
-		//read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+		read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 		//read_reg = (*(mod_desc->kernel_reg_read));    
-		read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+		//read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 
 		//printk(KERN_INFO"<axi_stream_fifo_init>: file size: 0x%x\n", (u32)mod_desc->file_size);
 		//printk(KERN_INFO"<pci_write>: current fifo level: %x\n", read_reg);
@@ -1801,9 +1800,9 @@ size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc)
 		printk(KERN_INFO"<axi_stream_fifo_d2r>: ERROR reading Read FIFO fill level\n");
 		return -1;
 	}
-	//read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+	read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 	//read_reg = (*(mod_desc->kernel_reg_read));  
-	read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+	//read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 
 	count = read_reg;	
 	return count;  	
@@ -1853,9 +1852,9 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_p
 		printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Read FIFO fill level\n");
 		return -1;
 	}
-	//read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+	read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 	//read_reg = (*(mod_desc->kernel_reg_read));    
-	read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+	//read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 
 	/*we are masking off the 32nd bit because the FIFO is in cut through mode
 	 *and sets the LSB to 1 to indicate a partial packet.*/
@@ -2007,9 +2006,9 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 		printk(KERN_INFO"<axi_stream_fifo_init>: ERROR\n");
 		return -1;
 	}
-	//read_reg = (*(mod_desc->kernel_reg_read)|buf);    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+	read_reg = (*(mod_desc->kernel_reg_read)|buf);    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 	//read_reg = (*(mod_desc->kernel_reg_read));    
-	read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+	//read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 
 	/*Check to see if the calculated fifo empty level via the DMA data byte width (aka the axi-s fifo byte width)
 	 * and file size (aka the fifo size) is equal to the actual fifo empty level when read */	
