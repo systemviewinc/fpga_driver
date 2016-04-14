@@ -1085,11 +1085,6 @@ int cdma_init(int cdma_num, int cdma_addr, u32 dma_addr_base)
 
 	}
 
-	/*update the interr_dict with interrupt number and mode*/
-	mode = CDMA;
-	index = cdma_num - 1;
-	interr_dict[index].mode = mode;
-
 	return 0;
 }
 

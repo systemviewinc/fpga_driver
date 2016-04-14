@@ -195,12 +195,11 @@ const u32 INT_CTRL_IAR      = 0x0C;
 
 
 /*This is an array of interrupt structures to hold up to 8 peripherals*/
-struct interr_struct interr_dict[12] = {{ 0 }};
 struct mod_desc * mod_desc_arr[12] = {{ 0 }};
 
 /*ISR Tasklet */
-void do_isr_tasklet(unsigned long);
-DECLARE_TASKLET(isr_tasklet, do_isr_tasklet, 0);
+//void do_isr_tasklet(unsigned long);
+//DECLARE_TASKLET(isr_tasklet, do_isr_tasklet, 0);
 
 /* ************************* file operations *************************** */
 long pci_unlocked_ioctl(struct file * filep, unsigned int cmd, unsigned long arg);
@@ -615,7 +614,7 @@ static void remove(struct pci_dev *dev)
 	pci_disable_msi(pci_dev_struct);
 
 	dma_free_coherent(dev_struct, (size_t)dma_buffer_size, dma_buffer_base, dma_addr_base);
-	
+
 	/*Destroy the read thread*/
 	atomic_set(&thread_q_read, 1);
 	wake_up_interruptible(&thread_q_head_read);
@@ -625,7 +624,7 @@ static void remove(struct pci_dev *dev)
 		wake_up_interruptible(&thread_q_head_read);
 	}
 	printk("Read Thread Destroyed\n");
-	
+
 	/*Destroy the write thread*/
 	atomic_set(&thread_q, 1);
 	wake_up_interruptible(&thread_q_head);
@@ -637,7 +636,7 @@ static void remove(struct pci_dev *dev)
 	printk("Write Thread Destroyed\n");
 
 	unregister_chrdev(major, pci_devName);
-	
+
 	printk(KERN_INFO"<remove>***********************PCIe DEVICE REMOVED**************************************\n");
 
 }
@@ -649,7 +648,7 @@ static int sv_plat_remove(struct platform_device *pdev)
 	free_irq(irq_num, platform_dev_struct);
 
 	dma_free_coherent(dev_struct, (size_t)dma_buffer_size, dma_buffer_base, dma_addr_base);
-	
+
 	/*Destroy the read thread*/
 	atomic_set(&thread_q_read, 1);
 	wake_up_interruptible(&thread_q_head_read);
@@ -659,7 +658,7 @@ static int sv_plat_remove(struct platform_device *pdev)
 		wake_up_interruptible(&thread_q_head_read);
 	}
 	printk("Read Thread Destroyed\n");
-	
+
 	/*Destroy the write thread*/
 	atomic_set(&thread_q, 1);
 	wake_up_interruptible(&thread_q_head);
@@ -716,14 +715,14 @@ static int __init sv_driver_init(void)
 
 			/*Create Read Thread*/
 			thread_struct_read = create_thread_read(&read_fifo);
-			
+
 			/*Create Write Thread*/
 			thread_struct = create_thread(&write_fifo);
-		
+
 			/*FIFO init stuff*/
 			spin_lock_init(&fifo_lock);
 			spin_lock_init(&fifo_lock_write);
-				
+
 			return pci_register_driver(&pci_driver);
 			break;
 
@@ -743,14 +742,14 @@ static int __init sv_driver_init(void)
 
 			/*Create Read Thread*/
 			thread_struct_read = create_thread_read(&read_fifo);
-			
+
 			/*Create Write Thread*/
 			thread_struct = create_thread(&write_fifo);
-			
+
 			/*FIFO init stuff*/
 			spin_lock_init(&fifo_lock);
 			spin_lock_init(&fifo_lock_write);
-			
+
 			return platform_driver_register(&sv_plat_driver);
 
 			break;
@@ -794,12 +793,10 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	u32 vec_serviced;
 	int i;
 	unsigned long flags;
-	// int interr[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
 	verbose_printk(KERN_INFO"<pci_isr>:						Entered the ISR");
 
 	//	tasklet_schedule(&isr_tasklet);
-	verbose_printk(KERN_INFO"		Entered the Tasklet");
 
 	vec_serviced = 0;
 	i = 0;
@@ -817,7 +814,6 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	{
 		int_num = vec2num(status);
 		verbose_printk(KERN_INFO"<soft_isr>: interrupt number is: ('%d')\n", int_num);
-		//device_mode = interr_dict[int_num].mode;
 		device_mode = mod_desc_arr[int_num]->mode;
 
 		if (device_mode == CDMA)
@@ -826,23 +822,19 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 			vec_serviced = vec_serviced | num2vec(int_num);
 		}
 
-		else
+		else if (device_mode == AXI_STREAM_FIFO)
 		{
 			verbose_printk(KERN_INFO"<soft_isr>: this interrupt is from a user peripheral\n");
 
-			//atomic_set(interr_dict[int_num].atomic_poll, 1);  //non threaded way
-			//atomic_set(mod_desc_arr[int_num]->thread_q_read, 1); // the threaded way
-
-			//add mod_desc to FIFO
-			//kfifo_in(&read_fifo, &mod_desc_arr[int_num], 1);
-	
+			/*If is it a streaming peripheral, we want to write to the FIFO and use the
+			  write thread and ring buffer*/
 			/*check to see if it is already in the FIFO*/
 			spin_lock_irqsave(mod_desc_arr[int_num]->in_fifo, flags);	
 			if(mod_desc_arr[int_num]->in_fifo_flag == 0)	
 			{
 				if (kfifo_len(&read_fifo) > 4)	
 					verbose_printk(KERN_INFO"<isr>: kfifo stored elements: %d\n", kfifo_len(&read_fifo));
-			
+
 				if(!kfifo_is_full(&read_fifo))
 					kfifo_in_spinlocked(&read_fifo, &mod_desc_arr[int_num], 1, &fifo_lock);
 				else
@@ -851,10 +843,20 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 			}
 			spin_unlock_irqrestore(mod_desc_arr[int_num]->in_fifo, flags);
 
-			//read_data(mod_desc_arr[int_num]);   //non blocking way
-
-			vec_serviced = vec_serviced | num2vec(int_num);
+			//for ring buffer peripherals (axi streaming)
+			atomic_set(&thread_q_read, 1); // the threaded way
+			wake_up_interruptible(&thread_q_head_read);
+			verbose_printk(KERN_INFO"<soft_isr>: Waking up the read thread\n");
 		}
+		else
+		{
+			atomic_set(mod_desc_arr[int_num]->atomic_poll, 1);  //non threaded way
+			//for non ring buffer peripherals (memory)
+			wake_up(&wq_periph);
+			verbose_printk(KERN_INFO"<soft_isr>: Waking up the Poll()\n");
+		}
+
+		vec_serviced = vec_serviced | num2vec(int_num);
 
 		/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
 		axi_dest = axi_interr_ctrl + INT_CTRL_IAR;
@@ -897,14 +899,14 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 		if (vec_serviced >= 0x10)
 		{
-			//if non ring buff
-			//wake_up(&wq_periph);
-			//verbose_printk(KERN_INFO"<soft_isr>: Waking up the Poll()\n");
+			//for non ring buffer peripherals (memory)
+		//	wake_up(&wq_periph);
+		//	verbose_printk(KERN_INFO"<soft_isr>: Waking up the Poll()\n");
 
-			//if ring buffer is used
-			atomic_set(&thread_q_read, 1); // the threaded way
-			wake_up_interruptible(&thread_q_head_read);
-			verbose_printk(KERN_INFO"<soft_isr>: Waking up the read thread\n");
+			//for ring buffer peripherals (axi streaming)
+		//	atomic_set(&thread_q_read, 1); // the threaded way
+		//	wake_up_interruptible(&thread_q_head_read);
+		//	verbose_printk(KERN_INFO"<soft_isr>: Waking up the read thread\n");
 
 		}
 	}
@@ -912,124 +914,6 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	verbose_printk(KERN_INFO"<soft_isr>:						Exiting ISR\n");
 
 	return IRQ_HANDLED;
-
-}
-
-void do_isr_tasklet (unsigned long unused)
-{
-	u32 status;
-	u64 axi_dest;
-	int int_num;
-	u32 device_mode;
-	int ret;
-	u32 vec_serviced;
-	int i;
-	// int interr[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-
-	verbose_printk(KERN_INFO"		Entered the Tasklet");
-
-	vec_serviced = 0;
-	i = 0;
-	/*Here we need to find out who triggered the interrupt*
-	 *Since we only allow one MSI vector, we need to query the
-	 *Interrupt controller to find out. */
-
-	/*This is the interrupt status register*/
-	axi_dest = axi_interr_ctrl + INT_CTRL_ISR;
-	ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
-	verbose_printk(KERN_INFO"<soft_isr>: interrupt status register vector is: ('%x')\n", status);
-
-
-	while(status > 0)
-	{
-		int_num = vec2num(status);
-		verbose_printk(KERN_INFO"<soft_isr>: interrupt number is: ('%d')\n", int_num);
-		device_mode = interr_dict[int_num].mode;
-
-		if (device_mode == CDMA)
-		{
-			verbose_printk(KERN_INFO"<soft_isr>: this interrupt is from the CDMA\n");
-			vec_serviced = vec_serviced | num2vec(int_num);
-		}
-
-		else
-		{
-			verbose_printk(KERN_INFO"<soft_isr>: this interrupt is from a user peripheral\n");
-
-			//	if (*(interr_dict[int_num].int_count) < 10)   //set a max here....
-			//	*(interr_dict[int_num].int_count) = (*(interr_dict[int_num].int_count)) + 1;
-			*(interr_dict[int_num].int_count) = 1;
-			atomic_set(interr_dict[int_num].atomic_poll, 1);
-
-			verbose_printk(KERN_INFO"<soft_isr>: this is after the int count add\n");
-
-			vec_serviced = vec_serviced | num2vec(int_num);
-		}
-
-		/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
-		axi_dest = axi_interr_ctrl + INT_CTRL_IAR;
-		status = num2vec(int_num);
-		ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE, 0);
-
-		/*This is the interrupt status register*/
-		axi_dest = axi_interr_ctrl + INT_CTRL_ISR;
-		verbose_printk(KERN_INFO"<soft_isr>: Checking the ISR vector for any additional vectors....\n");
-		ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
-
-
-	}
-
-
-	verbose_printk(KERN_INFO"<soft_isr>: All interrupts serviced. The following Vector is acknowledged: %x\n", vec_serviced);
-
-	if (vec_serviced > 0)
-	{
-		/* The CDMA vectors (1 and 2) */
-		if ((vec_serviced & 0x01) == 0x01)
-		{
-			cdma_comp[1] = 1;      //condition for wake_up
-			//	atomic_set(&cdma_atom[1], 1);
-			verbose_printk(KERN_INFO"<soft_isr>: Waking up CDMA 1\n");
-			wake_up_interruptible(&wq);
-		}
-
-		if ((vec_serviced & 0x02) == 0x02)
-		{
-			cdma_comp[2] = 1;      //condition for wake_up
-			//	atomic_set(&cdma_atom[2], 1);
-			verbose_printk(KERN_INFO"<soft_isr>: Waking up CDMA 2\n");
-			wake_up_interruptible(&wq);
-		}
-
-		//	wake_up_interruptible(&wq);
-		//		*(interr_dict[4].int_count) = (*(interr_dict[4].int_count)) + 1;
-			*(interr_dict[int_num].int_count) = 1;
-			*(interr_dict[int_num].int_count) = 1;
-		//		*(interr_dict[5].int_count) = (*(interr_dict[5].int_count)) + 1;
-
-		if (vec_serviced >= 0x10)
-		{
-			wake_up(&wq_periph);
-
-			//	for(i = 4; i<=7; i++)
-			//	{
-			//	mutex_lock_interruptible(interr_dict[i].int_count_sem);
-			//		if (interr_dict[i].int_count > 0)
-			//	if (interr[i] > 0)
-			//		{
-			//	    	verbose_printk(KERN_INFO"<soft_isr>: Waking up User Peripheral:%x\n", i);
-			//		mutex_unlock(interr_dict[i].int_count_sem);
-			//	interr_dict[i].int_count = 0;
-			//	interr[i] = 0;
-			//		wake_up(interr_dict[i].iwq);
-			//		}
-			//	}
-			//		verbose_printk(KERN_INFO"<soft_isr>:			Waking up User Peripherals\n");
-		}
-	}
-
-	verbose_printk(KERN_INFO"<soft_isr>:						Exiting ISR\n");
-	verbose_printk(KERN_INFO"		Exited the Tasklet");
 
 }
 
@@ -1059,15 +943,15 @@ int pci_open(struct inode *inode, struct file *filep)
 	spinlock_t * in_fifo_write;
 	in_fifo_write = (spinlock_t *)kmalloc(sizeof(spinlock_t), GFP_KERNEL);
 	spin_lock_init(in_fifo_write);
-	
+
 	spinlock_t * ring_pointer_write;
 	ring_pointer_write = (spinlock_t *)kmalloc(sizeof(spinlock_t), GFP_KERNEL);
 	spin_lock_init(ring_pointer_write);
-	
+
 	spinlock_t * ring_pointer_read;
 	ring_pointer_read = (spinlock_t *)kmalloc(sizeof(spinlock_t), GFP_KERNEL);
 	spin_lock_init(ring_pointer_read);
-	
+
 	start_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
 	stop_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
 
@@ -1122,10 +1006,10 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->ip_not_ready = 0;
 	s->atomic_poll = atomic_poll;
 	s->set_dma_flag = 0;
-//	s->thread_struct_write = NULL;
-//	s->thread_struct_read = NULL;
-//	s->thread_q = 0;
-//	s->thread_q_read = thread_q_read;
+	//	s->thread_struct_write = NULL;
+	//	s->thread_struct_read = NULL;
+	//	s->thread_q = 0;
+	//	s->thread_q_read = thread_q_read;
 	s->wth = wth;
 	s->wtk = wtk;
 	s->rfh = rfh;
@@ -1161,7 +1045,7 @@ int pci_release(struct inode *inode, struct file *filep)
 
 	struct mod_desc* mod_desc;
 	int ret = 0;
-	
+
 	//printk(KERN_INFO"<pci_release>: Attempting to close file minor number: %d\n", mod_desc->minor);
 
 	mod_desc = filep->private_data;
@@ -1178,29 +1062,29 @@ int pci_release(struct inode *inode, struct file *filep)
 	kfree((const void*)mod_desc->start_time);
 	kfree((const void*)mod_desc->stop_time);
 
-//	mod_desc->thread_q = 1;
-//	wake_up_interruptible(&thread_q_head);
-//	while(kthread_stop(mod_desc->thread_struct_write)<0)
-//	{
-//		schedule();
-//		mod_desc->thread_q = 1;
-//		wake_up_interruptible(&thread_q_head);
-//		printk(KERN_INFO"<pci_release>: stuck closing tx thread\n");
-//	}
-//
-//	atomic_set(mod_desc->thread_q_read, 1);
-//	wake_up_interruptible(&thread_q_head_read);
-//	while(kthread_stop(mod_desc->thread_struct_read)<0)
-//	{
-//		schedule();
-//		printk(KERN_INFO"<pci_release>: stuck closing rx thread\n");
-//		atomic_set(mod_desc->thread_q_read, 1);
-//		atomic_set(mod_desc->ring_buf_pri_read, 0);
-//		wake_up_interruptible(&thread_q_head_read);
-//	}
-//
-//	kfree((const void*)filep->private_data);
-	
+	//	mod_desc->thread_q = 1;
+	//	wake_up_interruptible(&thread_q_head);
+	//	while(kthread_stop(mod_desc->thread_struct_write)<0)
+	//	{
+	//		schedule();
+	//		mod_desc->thread_q = 1;
+	//		wake_up_interruptible(&thread_q_head);
+	//		printk(KERN_INFO"<pci_release>: stuck closing tx thread\n");
+	//	}
+	//
+	//	atomic_set(mod_desc->thread_q_read, 1);
+	//	wake_up_interruptible(&thread_q_head_read);
+	//	while(kthread_stop(mod_desc->thread_struct_read)<0)
+	//	{
+	//		schedule();
+	//		printk(KERN_INFO"<pci_release>: stuck closing rx thread\n");
+	//		atomic_set(mod_desc->thread_q_read, 1);
+	//		atomic_set(mod_desc->ring_buf_pri_read, 0);
+	//		wake_up_interruptible(&thread_q_head_read);
+	//	}
+	//
+	//	kfree((const void*)filep->private_data);
+
 	//printk(KERN_INFO"<pci_release>: Successfully closed file minor number: %d\n", mod_desc->minor);
 
 	return SUCCESS;
@@ -1300,16 +1184,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			mod_desc->int_num = int_num;
 			verbose_printk(KERN_INFO"<ioctl>: Interrupt Number:%d\n", int_num);
 
-			interr_dict[int_num].int_count = mod_desc->int_count;
-			interr_dict[int_num].mode = mod_desc->mode;
-
 			mod_desc_arr[int_num] = mod_desc;
-
-			// if non ring buff
-			//interr_dict[int_num].atomic_poll = mod_desc->atomic_poll;
-
-			//ring buff
-			//interr_dict[int_num].atomic_poll = mod_desc->thread_q_read;
 
 			break;
 
@@ -1490,7 +1365,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 						ret = axi_stream_fifo_init(mod_desc);
 						if (ret < 0)
 							return ERROR;
-					
+
 						/*Create Threads */
 						//mod_desc->thread_struct_write = create_thread(mod_desc);
 						//mod_desc->thread_struct_read = create_thread_read(mod_desc);
@@ -1567,7 +1442,7 @@ int pci_poll(struct file *filep, poll_table * pwait)
 
 		mask |= POLLIN;
 	}
-	
+
 	verbose_printk(KERN_INFO"<pci_poll>:Leaving Poll()\n");
 
 	return mask;
@@ -1666,14 +1541,14 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				/*sleep until the write thread signals priority to pci_write
 				 *  (ie there is no more data for the write thread to write)
 				 *  (ie there MUST be room in the ring buffer now)*/
-			
+
 				//wake up write thread
 				atomic_set(&thread_q, 1);
 				wake_up_interruptible(&thread_q_head);
 				verbose_printk(KERN_INFO"<pci_write>: waking up write thread\n");
 
 				//return bytes_written;
-				
+
 				verbose_printk(KERN_INFO"<pci_write>: pci_write is going to sleep ZzZzZzZzZzZzZz\n");
 				ret = wait_event_interruptible(pci_write_head, atomic_read(mod_desc->pci_write_q) == 1);
 				atomic_set(mod_desc->pci_write_q, 0);
@@ -1684,12 +1559,12 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			//diff = timespec_sub((stop_time), (start_time));
 			//if(diff.tv_nsec > 1000000)
 			//	printk("<pci_write> ring buffer sleep wait time: %lunS\n", diff.tv_nsec);			
-			
+
 			//if we need to wrap around the ring buffer....
 			wtk = atomic_read(mod_desc->wtk);
-			
+
 			//getnstimeofday(&start_time);
-			
+
 			if(partial_count + wtk > mod_desc->dma_size)
 			{
 				ret = copy_from_user((mod_desc->dma_write)+wtk, (buf + bytes_written), mod_desc->dma_size - 1 - wtk);   //write until end of ring buff
@@ -1702,10 +1577,10 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			//diff = timespec_sub((stop_time), (start_time));
 			//if(diff.tv_nsec > 1000000)
 			//	printk("<pci_write> Copy_from_user time: %lunS\n", diff.tv_nsec);			
-	
+
 			wtk = get_new_ring_pointer(partial_count, wtk, (int)mod_desc->dma_size);
 			verbose_printk(KERN_INFO"<pci_write_%d>:ring_point_%d: WTK : %d\n", minor, minor, wtk);
-		
+
 			spin_lock_irqsave(mod_desc->ring_pointer_write, flags);
 			// --------------   SPIN LOCKED ------------------------//
 			atomic_set(mod_desc->wtk, wtk);
@@ -1725,7 +1600,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			{
 				if (kfifo_len(&write_fifo) > 4)	
 					verbose_printk(KERN_INFO"<pci_write>: kfifo write stored elements: %d\n", kfifo_len(&write_fifo));
-			
+
 				if(!kfifo_is_full(&write_fifo))
 					kfifo_in_spinlocked(&write_fifo, &mod_desc, 1, &fifo_lock_write);
 				else
@@ -1744,7 +1619,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		else
 		{
 			ret = copy_from_user(mod_desc->dma_write, (buf + bytes_written), partial_count);
-			
+
 			init_write = *((u32*)(mod_desc->dma_write));
 			dma_offset_write = (u64)mod_desc->dma_offset_write;
 			dma_offset_internal_read = (u64)mod_desc->dma_offset_internal_read;
@@ -1919,7 +1794,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			rfh = atomic_read(mod_desc->rfh);
 			rfu = atomic_read(mod_desc->rfu);
 			priority = atomic_read(mod_desc->ring_buf_pri_read); //The thread has priority when the atomic variable is 0
-			
+
 			max_can_read = data_to_transfer(mod_desc, rfu, rfh, priority);
 
 			if (max_can_read > 0)
@@ -1942,7 +1817,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 				rfu = get_new_ring_pointer(count, rfu, (int)mod_desc->dma_size);
 				verbose_printk(KERN_INFO"<pci_read>:ring_point: RFU : %d\n", rfu);
-				
+
 				spin_lock_irqsave(mod_desc->ring_pointer_read, flags);
 				//--------------- SPIN LOCKED ---------------------------------------//	
 				atomic_set(mod_desc->rfu, rfu);
@@ -1961,7 +1836,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 				}
 				//------------------------------------------------------------------//	
 				spin_unlock_irqrestore(mod_desc->ring_pointer_read, flags);
-	
+
 				if (wake_up_flag == 1)
 				{
 					verbose_printk(KERN_INFO"<pci_read>: freed up the locked ring buffer, waking up read thread.\n");

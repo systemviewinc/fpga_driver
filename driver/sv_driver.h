@@ -202,18 +202,6 @@ struct mod_desc
 //DECLARE_KFIFO(read_fifo, struct mod_desc*, 4096);
 
 
-struct interr_struct
-{
-	u32 mode;
-	int * int_count;
-	//	wait_queue_head_t * iwq;
-	struct mutex * int_count_sem;
-	atomic_t * atomic_poll;
-
-};
-
-extern struct interr_struct interr_dict[12];
-
 extern struct mod_desc * mod_desc_arr[12];
 
 struct statistics
