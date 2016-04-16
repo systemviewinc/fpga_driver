@@ -1118,6 +1118,8 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 	int cdma_num = 0;
 	u64 dma_axi_address = 0;
 	//	void * dma_p;
+	
+	printk("<data_transfer>: writing/reading to base address 0x%llx \n", axi_address);
 
 	/*determine if the axi range is in direct accessible memory space*/
 	if ((axi_address + (u64)count) < (bar_0_axi_offset + pci_bar_size))
@@ -1929,7 +1931,7 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
 	if (ret > 0)
 	{
-		printk(KERN_INFO"<axi_stream_fifo_init>: ERROR\n");
+		printk(KERN_INFO"<axi_stream_fifo_init>: ERROR setting minor number: %d\n", mod_desc->minor);
 		return -1;
 	}
 	verbose_printk(KERN_INFO"<axi_fifo_isr_reg>: Reset the  the axi fifo\n");

@@ -484,7 +484,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 	//get the base memory size
 	pci_bar_size = resource_1->end - resource_1->start;
-	verbose_printk(KERN_INFO"<probe>pci bar size is:%lu\n", pci_bar_size);
+	printk(KERN_INFO"<probe>platform bar size is:%lu\n", pci_bar_size);
 
 	//map the hardware space to virtual space
 	pci_bar_vir_addr = devm_ioremap_resource(&pdev->dev, resource_1);
@@ -1114,13 +1114,13 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	switch(cmd){
 
 		case SET_AXI_DEVICE:
-			verbose_printk(KERN_INFO"<ioctl>: Setting Peripheral Axi Address:%llx\n", arg_loc);
-			mod_desc->axi_addr = arg_loc;
+			verbose_printk(KERN_INFO"<ioctl>: Setting Peripheral Axi Address: 0x%x for minor:%d\n", arg_loc, mod_desc->minor);
+			mod_desc->axi_addr = arg_loc&(0x00000000FFFFFFFF);
 			break;
 
 		case SET_AXI_CTL_DEVICE:
-			verbose_printk(KERN_INFO"<ioctl>: Setting Peripheral CTL AXI Address:%llx\n", arg_loc);
-			mod_desc->axi_addr_ctl = arg_loc;
+			printk(KERN_INFO"<ioctl>: Setting Peripheral CTL AXI Address: 0x%x for minor:%d\n", arg_loc, mod_desc->minor);
+			mod_desc->axi_addr_ctl = arg_loc&(0x00000000FFFFFFFF);
 			break;
 
 
@@ -1471,6 +1471,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	struct timespec start_time;
 	struct timespec stop_time;
 	struct timespec diff;	
+	void* buffer;
 
 	int wtk;
 	bytes = 0;
@@ -1619,6 +1620,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		else
 		{
 			ret = copy_from_user(mod_desc->dma_write, (buf + bytes_written), partial_count);
+			buffer = mod_desc->dma_write;
 
 			init_write = *((u32*)(mod_desc->dma_write));
 			dma_offset_write = (u64)mod_desc->dma_offset_write;
@@ -1637,9 +1639,9 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			else
 				transfer_type = NORMAL_WRITE;
 
-			verbose_printk(KERN_INFO"<pci_write>: writing peripheral using a transfer_type: %x\n", transfer_type);
+			printk(KERN_INFO"<pci_write>: writing peripheral using a transfer_type: %x\n", transfer_type);
 
-			verbose_printk(KERN_INFO"<user_peripheral_write>: current file offset is: %llx\n", *f_pos);
+			printk(KERN_INFO"<user_peripheral_write>: current file offset is: %llx\n", *f_pos);
 
 			if (transfer_type == NORMAL_WRITE)
 			{
@@ -1653,7 +1655,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				}
 			}
 
-			ret = data_transfer(axi_dest, 0, partial_count, transfer_type, dma_offset_write);
+			ret = data_transfer(axi_dest, buffer, partial_count, transfer_type, dma_offset_write);
 			if (ret > 0)
 			{
 				printk(KERN_INFO"<pci_write>: ERROR writing to User Peripheral\n");
@@ -1727,9 +1729,11 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	int wake_up_flag;
 	unsigned long flags;
 	int minor;
+	void* buffer;
 
 	mod_desc = filep->private_data;
 	minor = mod_desc->minor;	
+	buffer = mod_desc->dma_read;
 
 	temp = 0;
 
@@ -1882,9 +1886,9 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 				transfer_type = NORMAL_READ;
 
 
-			verbose_printk(KERN_INFO"<user_peripheral_read>: reading peripheral using a transfer_type: %x\n", transfer_type);
+			printk(KERN_INFO"<user_peripheral_read>: reading peripheral using a transfer_type: %x\n", transfer_type);
 
-			verbose_printk(KERN_INFO"<user_peripheral_write>: current file offset is: %llu\n", *f_pos);
+			printk(KERN_INFO"<user_peripheral_read>: current file offset is: %llu\n", *f_pos);
 
 			temp = count + *f_pos;
 
@@ -1898,7 +1902,8 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 			}
 
-			ret = data_transfer(axi_dest, 0, count, transfer_type, dma_offset_read);
+		
+			ret = data_transfer(axi_dest, buffer, count, transfer_type, dma_offset_read);
 			if (ret > 0)
 			{
 				printk(KERN_INFO"<user_peripheral_read>: ERROR reading data from User Peripheral\n");
