@@ -37,7 +37,7 @@
 #define CDMA 3
 #endif
 
-#define BACK_PRESSURE 1
+//#define BACK_PRESSURE 1
 #define RING_BUFF_SIZE_MULTIPLIER 2
 /********* printk statements *********/
 #ifndef verbose_printk
@@ -99,6 +99,7 @@ extern u8 cdma_set[5];
 extern u8 pcie_ctl_set;
 
 extern int cdma_capable;
+extern int back_pressure;
 
 /*CDMA Semaphore*/
 extern struct mutex CDMA_sem;

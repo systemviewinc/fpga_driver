@@ -50,9 +50,10 @@ int pcie_ctl_address = 0xFFFFFFFF;
 int pcie_m_address = 0xFFFFFFFF;
 int int_ctlr_address = 0xFFFFFFFF;
 int driver_type = PCI;
-int dma_system_size = 1048576;
+int dma_system_size = 4194304;
 int dma_file_size = 4096;
 int dma_byte_width = 8;   //64b data width
+int back_pressure = 1;
 static char buffer[128];
 static char  *pci_devName = &buffer[0];
 //const char * pci_devName_const;
@@ -95,6 +96,9 @@ MODULE_PARM_DESC(dma_file_size, "DMAFileSize");
 
 module_param(dma_byte_width, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(dma_byte_width, "DMAByteWidth");
+
+module_param(back_pressure, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(back_pressure, "BackPressure");
 /*****************************************************************************/
 
 //const char pci_devName[] = "vsi_driver"; //name of the device
@@ -271,7 +275,6 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	int ret;
 	int pcie_m_set;
 	int int_ctrl_set;
-	int dynamic_major;
 	/* Do probing type stuff here.
 	 * 	 * Like calling request_region();
 	 * 	 	 */
@@ -921,10 +924,8 @@ int pci_open(struct inode *inode, struct file *filep)
 	struct mod_desc * s;
 	struct timespec * start_time;
 	struct timespec * stop_time;
-	//struct task_struct * kthread;
 
 	atomic_t * atomic_poll;
-	//atomic_t * thread_q_read;
 	atomic_t * wth;
 	atomic_t * wtk;
 	atomic_t * ring_buf_pri;
@@ -934,18 +935,19 @@ int pci_open(struct inode *inode, struct file *filep)
 	atomic_t * pci_write_q;
 
 	spinlock_t * in_fifo;
+	spinlock_t * in_fifo_write;
+	spinlock_t * ring_pointer_write;
+	spinlock_t * ring_pointer_read;
+	
 	in_fifo = (spinlock_t *)kmalloc(sizeof(spinlock_t), GFP_KERNEL);
 	spin_lock_init(in_fifo);
 
-	spinlock_t * in_fifo_write;
 	in_fifo_write = (spinlock_t *)kmalloc(sizeof(spinlock_t), GFP_KERNEL);
 	spin_lock_init(in_fifo_write);
 
-	spinlock_t * ring_pointer_write;
 	ring_pointer_write = (spinlock_t *)kmalloc(sizeof(spinlock_t), GFP_KERNEL);
 	spin_lock_init(ring_pointer_write);
 
-	spinlock_t * ring_pointer_read;
 	ring_pointer_read = (spinlock_t *)kmalloc(sizeof(spinlock_t), GFP_KERNEL);
 	spin_lock_init(ring_pointer_read);
 
@@ -1039,7 +1041,6 @@ int pci_release(struct inode *inode, struct file *filep)
 	 * only be open once. */
 
 	struct mod_desc* mod_desc;
-	int ret = 0;
 
 	//printk(KERN_INFO"<pci_release>: Attempting to close file minor number: %d\n", mod_desc->minor);
 
@@ -1406,7 +1407,7 @@ int pci_poll(struct file *filep, poll_table * pwait)
 	struct mod_desc * mod_desc;
 	int has_data;
 	unsigned int mask = 0;
-	unsigned long flags;
+	//unsigned long flags;
 
 	has_data = 0;
 	verbose_printk(KERN_INFO"<pci_poll>:Poll() has been entered!\n");
@@ -1442,7 +1443,6 @@ int pci_poll(struct file *filep, poll_table * pwait)
 
 ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff_t *f_pos)
 {
-	//	void * kern_buf = NULL;
 	u64 axi_dest;
 	struct mod_desc * mod_desc;
 	size_t bytes;
@@ -1450,7 +1450,6 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	size_t bytes_written;
 	size_t remaining_size;
 	int transfer_type;
-	//	u32 kern_reg;
 	int ret;
 	u32 init_write;
 	u64 dma_offset_write;
@@ -1458,10 +1457,10 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	u64 dma_offset_internal_write;
 	unsigned long flags;
 	int minor;
-	struct timespec start_time;
-	struct timespec stop_time;
-	struct timespec diff;	
 	void* buffer;
+//	struct timespec start_time;
+//	struct timespec stop_time;
+//	struct timespec diff;	
 
 	int wtk;
 	bytes = 0;
@@ -1804,7 +1803,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 				 * read thread after the RFU is updated.*/
 				wake_up_flag = 0;
 
-				if ((rfu == rfh) & BACK_PRESSURE)
+				if ((rfu == rfh) & back_pressure)
 				{
 					wake_up_flag = 1;	
 				}	

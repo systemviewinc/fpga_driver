@@ -139,10 +139,12 @@ int data_to_transfer(struct mod_desc *mod_desc, int tail, int head, int priority
 	// starting from the tail to the head.
 
 	if(tail == head)
+	{
 		if (priority)  // this is a priority variable to solve which side can write (1 = wtk, 0 = wth)
 			return mod_desc->dma_size;
 		else
 			return 0;
+	}
 
 	if(head > tail)
 		return head-tail;
@@ -150,19 +152,19 @@ int data_to_transfer(struct mod_desc *mod_desc, int tail, int head, int priority
 	if(head < tail)    //wrap around case, we will do another read call to come back and get wrap around data
 		//return (head)+((mod_desc->file_size)-tail);
 		return (mod_desc->dma_size)-tail;
+
+	return 0;
 }
 
 
 int read_data(struct mod_desc * mod_desc)
 {
-	int ring_pointer_offset;
 	int read_count;
 	int drop_count;
 	int max_can_read;
 	int rfu;
 	int rfh;
 	int priority;
-	int ret;
 	u32 dma_offset_read;
 	unsigned long flags;
 
@@ -183,7 +185,7 @@ int read_data(struct mod_desc * mod_desc)
 		max_can_read = data_to_transfer(mod_desc, rfh, rfu, priority);
 		if (max_can_read == 0)
 		{
-			if (BACK_PRESSURE)
+			if (back_pressure)
 			{
 				verbose_printk("Needing to backpressure....\n");
 				return 1;
@@ -260,12 +262,6 @@ int read_data(struct mod_desc * mod_desc)
 //void read_thread(struct mod_desc *mod_desc)
 void read_thread(struct kfifo* read_fifo)
 {
-	int ring_pointer_offset;
-	int read_count;
-	int max_can_read;
-	int rfu;
-	int rfh;
-	int priority;
 	int ret;
 	struct mod_desc * mod_desc;
 	struct mod_desc * mod_desc_temp;
@@ -475,12 +471,10 @@ void write_thread(struct kfifo* write_fifo)
 
 int write_data(struct mod_desc * mod_desc)
 {
-	int ring_pointer_offset;
 	int write_count;
 	int wtk;
 	int wth;
 	int priority;
-	int ret;
 	int d2w;
 	unsigned long flags;
 	int minor;
@@ -779,9 +773,7 @@ int cdma_init(int cdma_num, int cdma_addr, u32 dma_addr_base)
 	u64 axi_dest;
 	u32 cdma_status;
 	u32 dma_addr_loc;
-	int mode;
 	int ret;
-	int index;
 	u64 axi_cdma_loc;
 
 	switch(cdma_num)
