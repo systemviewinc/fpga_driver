@@ -888,7 +888,7 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 	u64 dma_axi_address = 0;
 	//	void * dma_p;
 	
-	printk("<data_transfer>: writing/reading to base address 0x%llx \n", axi_address);
+	//printk("<data_transfer>: writing/reading to base address 0x%llx \n", axi_address);
 
 	/*determine if the axi range is in direct accessible memory space*/
 	if ((axi_address + (u64)count) < (bar_0_axi_offset + pci_bar_size))
