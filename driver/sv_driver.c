@@ -1,16 +1,17 @@
-/*************************************************************
+/**
  * System View Device Driver
 
- * Date: 11/10/2015
+ * @date     11/10/2015
 
- * Author:   System View Inc.
+ * @author   System View Inc.
+ 
+ * @file     sv_driver.c
 
- * Description:   This driver is to be used to control the
- *                Xilinx interface IP created by System View
- *                Inc. This driver can be set to operate as
- *                a PCIe Device Driver or as a Platform Device
- *                Driver depending on the input parameter.
- ************************************************************/
+ * @brief         This file contains all the kernel char driver initialization/
+ *				  exit routines as well as file operations such as read,write,ioctl
+ *				  and interrupt service routine 
+ ***********************************************************
+ */
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -445,7 +446,7 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 	if (pcie_m_address != 0xFFFFFFFF)
 	{
-		pcie_m_init(1);
+		//pcie_m_init(1);
 		pcie_m_set = 1;
 	}
 
@@ -575,7 +576,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 	if (pcie_m_address != 0xFFFFFFFF)
 	{
-		pcie_m_init(1);
+		//pcie_m_init(1);
 		pcie_m_set = 1;
 	}
 
@@ -893,10 +894,6 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 			wake_up_interruptible(&wq);
 		}
 
-		//	wake_up_interruptible(&wq);
-		//		*(interr_dict[4].int_count) = (*(interr_dict[4].int_count)) + 1;
-		//		*(interr_dict[5].int_count) = (*(interr_dict[5].int_count)) + 1;
-
 		if (vec_serviced >= 0x10)
 		{
 			//for non ring buffer peripherals (memory)
@@ -982,8 +979,6 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->axi_addr = 0;
 	s->axi_addr_ctl = 0;
 	s->mode = 0;
-	s->int_count = (int*)interrupt_count;
-	*(s->int_count) = 0;
 	s->int_num = 100;
 	s->master_num = 0;
 	s->interrupt_vec = 0;
@@ -1058,7 +1053,6 @@ int pci_release(struct inode *inode, struct file *filep)
 	}
 
 
-	kfree((const void*)mod_desc->int_count);
 	kfree((const void*)mod_desc->start_time);
 	kfree((const void*)mod_desc->stop_time);
 
@@ -1427,18 +1421,14 @@ int pci_poll(struct file *filep, poll_table * pwait)
 
 	//printk(KERN_INFO"<pci_poll>: Peripheral (' %x ') Interrupt Detected!!\n", mod_desc->int_num);
 
-	/*see if the module has triggered an interrupt*/
-	has_data = *(mod_desc->int_count);
 	//	verbose_printk(KERN_INFO"<pci_poll>: Interrupt count of polling peripheral:%x\n", has_data);
 
-	//	if (has_data > 0)
 	if (atomic_read(mod_desc->atomic_poll))
 	{
 		verbose_printk(KERN_INFO"<pci_poll>: Interrupting Peripheral Matched!\n");
 		/*reset the has_data flag*/
 
 		atomic_set(mod_desc->atomic_poll, 0);
-		//*(mod_desc->int_count) = 0;
 
 		mask |= POLLIN;
 	}

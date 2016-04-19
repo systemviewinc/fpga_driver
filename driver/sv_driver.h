@@ -1,4 +1,18 @@
 
+/**
+ * System View Device Driver
+
+ * @date 11/10/2015
+
+ * @author   System View Inc.
+ 
+ * @file  sv_driver.h
+
+ * @brief         This driver is to be used to control the
+ *                Xilinx interface IP created by System View Inc.
+ ***********************************************************
+ */
+	
 #include <linux/kthread.h>
 #include <linux/kfifo.h>
 
@@ -149,54 +163,47 @@ extern u64 dma_buffer_size;
 
 struct mod_desc
 {
-	int minor;
-	u64 axi_addr;
-	u64 axi_addr_ctl;
-	u32 mode;
-	int * int_count;
-	int int_num;
-	int master_num;
-	int keyhole_config;
-	u32 interrupt_vec;
-	u32 dma_offset_read;
-	u32 dma_offset_write;
-	size_t dma_size;
-	void * dma_write;
-	void * dma_read;
-	u32 * kernel_reg_write;
-	u32 * kernel_reg_read;
-	u32 dma_offset_internal_read;
-	u32 dma_offset_internal_write;
-	loff_t file_size;
-	//	wait_queue_head_t * iwq;
-	struct mutex * int_count_sem;
-	int tx_bytes;
-	int rx_bytes;
-	struct timespec * start_time;
-	struct timespec * stop_time;
-	int start_flag;
-	int stop_flag;
-	int cdma_attempt;
-	int ip_not_ready;
-	atomic_t * atomic_poll;
-	int set_dma_flag;
-	//struct task_struct * thread_struct_write;
-	//struct task_struct * thread_struct_read;
-	int thread_q;
-	atomic_t * thread_q_read;
-	atomic_t * wth;    //write to hardware pointer
-	atomic_t * wtk;    //write to kernel pointer
-	atomic_t * ring_buf_pri;    //handshake variable
-	atomic_t * rfh;    //write to hardware pointer
-	atomic_t * rfu;    //write to kernel pointer
-	atomic_t * ring_buf_pri_read;    //handshake variable
-	spinlock_t * ring_pointer_write;
-	spinlock_t * ring_pointer_read;
-	atomic_t * pci_write_q;    //handshake variable
-	spinlock_t * in_fifo;
-	spinlock_t * in_fifo_write;
-	int in_fifo_flag;
-	int in_fifo_write_flag;
+	int minor;				    /**< The minor number of file node (mainly used for debug msgs */
+	u64 axi_addr;				/**< The axi address of the file node's associated IP */
+	u64 axi_addr_ctl;			/**< The axi control address for axi-streaming IPs */
+	u32 mode;                   /**< The mode of the IP which defines it as axi-streaming or memory interface */
+	int int_num;                /**< The Interrupt Number of the associated IP */
+	int master_num;             /**< For future master peripherals, currently UNUSED */
+	int keyhole_config;         /**< The Keyhole R/W configuration for associated IP */
+	u32 interrupt_vec;          /**< The Interrupt Vector */
+	u32 dma_offset_read;        /**< The Offset byte of the allocated DMA buffer for READ */
+	u32 dma_offset_write;		/**< The Offset byte of the allocated DMA buffer for WRITE */
+	size_t dma_size;            /**< The size of allocated DMA buffer */
+	void * dma_write;			/**< This is the pointer to the start of DMA buffer for WRITE */
+	void * dma_read;			/**< This is the pointer to the start of DMA buffer for READ */
+	u32 * kernel_reg_write;     /**< This is the pointer to the  DMA accessible 32b buffer for register WRITEs */
+	u32 * kernel_reg_read;      /**< This is the pointer to the  DMA accessible 32b buffer for register READs */
+	u32 dma_offset_internal_read; /**< The Offset byte of the DMA accessible buffer for register READs */
+	u32 dma_offset_internal_write; /**< The Offset byte of the DMA accessible buffer for register WRITEs */
+	loff_t file_size;   /**< This is the size of the axi_streaming FIFO for streaming peripherals or size of ram for memory peripherals */
+	int tx_bytes;				/**< This is the TX byte count for statistics generation */   
+	int rx_bytes;				/**< This is the RX byte count for statistics generation */
+	struct timespec * start_time;   /**< This holds the start time for statistics generation */
+	struct timespec * stop_time;    /**< This holds the stop time for statistics generation */
+	int start_flag;             /**< This is used internally by the driver for starting the timer */
+	int stop_flag;				/**< This is used internally by the driver for stopping the timer */
+	int cdma_attempt;		    /**< This is a statictic collected to count number of failed cdma semaphore lock attempts */
+	int ip_not_ready;           /**< This is a statistic collected to count the number of times the IP was not ready to accept new data */
+	atomic_t * atomic_poll;     /**< this atomic variable is used in the Poll() function to note if the peripheral is ready to be read */
+	int set_dma_flag;			/**< This flag is set by the driver to indicate that a DMA region has been allocated */
+	atomic_t * wth;				/**< Write to Hardware pointer for WRITE Ring Buffer */
+	atomic_t * wtk;				/**< Write to Kernel pointer for WRITE Ring Buffer */
+	atomic_t * ring_buf_pri;    /**< Handshake variable for priority on WRITE Ring Buffer when wth == wtk */
+	atomic_t * rfh;				/**< Read from Hardware pointer for READ Ring Buffer */
+	atomic_t * rfu;				/**< Read from User pointer for READ Ring Buffer */
+	atomic_t * ring_buf_pri_read;    /**< Handshake variable for priority on READ Ring Buffer when rfu == rfh */
+	spinlock_t * ring_pointer_write;  /**< Spinlock variable to lock code section for updating ring pointer variables */
+	spinlock_t * ring_pointer_read;   /**< Spinlock variable to lock code section for updating ring pointer variables */
+	atomic_t * pci_write_q;     /**< Used as a wait variable to wake up a sleeping pci_write function */
+	spinlock_t * in_fifo;		/**< Spinlock variable to proect code for writing in_fifo flag*/
+	spinlock_t * in_fifo_write; /**< Spinlock variable to protect code for writing in_fifo flag */
+	int in_fifo_flag;			/**< Flag variable to tell if it already exists in the READ FIFO */
+	int in_fifo_write_flag;     /**< Flag variable to tell if it already exists in the WRITE FIFO */
 };
 
 //DECLARE_KFIFO(read_fifo, struct mod_desc*, 4096);
@@ -217,16 +224,59 @@ struct statistics
 
 
 // ********************** support functions **************************
+
+/**
+ * @brief This function is used to initiate a CDMA Transfer. It requires
+ * a locked CDMA resource an AXI Start Address, AXI Destination Address, 
+ * and a Keyhole setting.
+*/
 int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num);
+/**
+ * @brief This function is used to acknowledge a CDMA transaction. It will check
+ * for any failures.
+*/
 int cdma_ack(int cdma_num);
+/**
+ * @brief This asserts or deasserts hte keyhole setting in the CDMA register.
+*/
 int cdma_config_set(u32 bit_vec, int set_unset, int cdma_num);
+/**
+ * @brief This function issues a read from the host to the desired axi address.
+*/
 int direct_read(u64 axi_address, void *buf, size_t count, int transfer_type);
+/**
+ * @brief This function issues a write from the host to the desired axi address.
+*/
 int direct_write(u64 axi_address, void *buf, size_t count, int transfer_type);
+/**
+ * @brief This function determines whether the axi peripheral can be read from/written to
+ * directly or if it needs to use the DMAs. Once it decides it calls the apporpiate functions
+ * to transfer data.
+*/
 int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u64 dma_offset);
+/**
+ * @brief This function is used for interrupt processing. it returns the integer value of the 
+ * least significant set bit position.
+*/
 int vec2num(u32 vec);
+/**
+ * @brief This function determines if a CDMA is available. if it is, it locks the semaphore and returns
+ * the CDMA number.
+*/
 int cdma_query(void);
+/**
+ * @brief This function is used for interrupt processing. it returns the one-hot vector value 
+ * of the input num as a position.
+*/
 u32 num2vec(int num);
+/**
+ * @brief This function initializes the CDMA.
+*/
 int cdma_init(int cdma_num, int cdma_address, u32 dma_addr_base);
+/**
+ * @brief This function writes the translation address (The DMA Hardware base address) to the
+ * PCIe control register. 
+*/
 int pcie_ctl_init(u64 axi_address, u32 dma_addr_base);
 void pcie_m_init(int cdma_num);
 void int_ctlr_init(u64 axi_address);

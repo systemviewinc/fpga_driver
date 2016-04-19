@@ -1,4 +1,18 @@
 
+/**
+ * System View Device Driver
+
+ * @date      11/10/2015
+
+ * @author    System View Inc.
+ 
+ * @file       support_funcs.c
+
+ * @brief         This file contains all the non char driver specific code. It contains all
+ *				  the data movement code and xilinx specific IP controllers such as CDMA.
+ ***********************************************************
+ */
+
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/pci.h>
@@ -59,167 +73,6 @@ u64 axi_cdma_2;
 
 /******************************** Support functions ***************************************/
 
-//int write_data(struct mod_desc* mod_desc, size_t count, u64 ring_pointer_offset)
-//{
-//
-//	size_t partial_count;
-//	int bytes_written;
-//	u64 dma_offset_write;
-//	u64 dma_offset_internal_read;
-//	u64 dma_offset_internal_write;
-//	int bytes, ret;
-//	u64 axi_dest;
-//	int transfer_type;
-//
-//	verbose_printk(KERN_INFO"\n\n");
-//	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n");
-//	verbose_printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION BEGIN  **************************\n");
-//	verbose_printk(KERN_INFO"<pci_write>:                  Attempting to transfer %zu bytes\n", count);
-//	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n\n");
-//
-//	if(mod_desc->set_dma_flag == 0)
-//	{
-//		ret = dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size);
-//		if (ret < 0)
-//		{
-//			printk(KERN_INFO"<pci_write>:!!!! DMA init FAILURE!!!!.\n");
-//			return ERROR;
-//		}
-//		printk(KERN_INFO"<pci_write>: Warning - Set the DMA file size to default value %d. IOCTL SET_FILE_SIZE was never called for file minor: %d.\n", (int)mod_desc->file_size, (int)mod_desc->minor);
-//		mod_desc->set_dma_flag = 1;
-//	}
-//
-//	/*Start timers for statistics*/
-//	if (mod_desc->start_flag == 1)
-//	{
-//		getnstimeofday(mod_desc->start_time);
-//		mod_desc->start_flag = 0;
-//	}
-//
-//	if (atomic_read(&driver_start_flag) == 1)
-//	{
-//		getnstimeofday(&driver_start_time);
-//		atomic_set(&driver_start_flag, 0);
-//	}
-//
-//	bytes_written = 0;
-//	bytes = 0;
-//
-//	while(bytes_written < count)
-//	{
-//		partial_count = count - bytes_written;
-//
-//		verbose_printk("<user_peripheral_write> WTH RING pointer offset: %llu \n", ring_pointer_offset);
-//
-//		/*Check to see if write will go past the boundary*/
-//		if((partial_count + ring_pointer_offset) > (mod_desc->file_size))
-//		{
-//			verbose_printk(KERN_INFO"<user_peripheral_write>: End of file overrun!\n");
-//			verbose_printk(KERN_INFO"<user_peripheral_write>: Partial Count value: %zu\n", partial_count);
-//			partial_count = (size_t)((mod_desc->file_size) - ring_pointer_offset);
-//			verbose_printk(KERN_INFO"<user_peripheral_write>: Only writing %zu bytes to end of file!\n", partial_count);
-//			//return bytes_written + partial_count;
-//		}
-//
-//		if (mod_desc->mode == AXI_STREAM_FIFO)
-//		{
-//
-//			bytes = axi_stream_fifo_write(partial_count, mod_desc, ring_pointer_offset);
-//			if (bytes < 0)
-//			{
-//				printk(KERN_INFO"<pci_write>: Write Error, exiting write routine...\n\n\n");
-//				return -1;
-//			}
-//			if (bytes == 0)
-//			{
-//				return count;   //why would this happen?
-//			}
-//
-//		}
-//
-//		else
-//		{
-//			dma_offset_write = ((u64)mod_desc->dma_offset_write);
-//			dma_offset_internal_read = (u64)mod_desc->dma_offset_internal_read;
-//			dma_offset_internal_write = (u64)mod_desc->dma_offset_internal_write;
-//
-//			verbose_printk(KERN_INFO"<pci_write>: DMA offset write value: %llx\n", dma_offset_write);
-//			verbose_printk(KERN_INFO"<pci_write>: DMA internal offset write value: %llx\n", dma_offset_internal_write);
-//			verbose_printk(KERN_INFO"<pci_write>: DMA internal offset read value: %llx\n", dma_offset_internal_read);
-//
-//			axi_dest = mod_desc->axi_addr + ring_pointer_offset;
-//
-//			if (mod_desc->keyhole_config & 0x1)
-//				transfer_type = KEYHOLE_WRITE;
-//			else
-//				transfer_type = NORMAL_WRITE;
-//
-//			verbose_printk(KERN_INFO"<pci_write>: writing peripheral using a transfer_type: %x\n", transfer_type);
-//
-//			verbose_printk(KERN_INFO"<user_peripheral_write>: current file offset is: %llx\n", ring_pointer_offset);
-//
-//			if (transfer_type == NORMAL_WRITE)
-//			{
-//				/*Check to see if write will go past the boundary*/
-//				if((partial_count + ring_pointer_offset) > mod_desc->file_size)
-//				{
-//					verbose_printk(KERN_INFO"<user_peripheral_write>: End of file overrun!\n");
-//					partial_count = (size_t)(mod_desc->file_size - ring_pointer_offset);
-//					verbose_printk(KERN_INFO"<user_peripheral_write>: Only writing %zu bytes to end of file!\n", partial_count);
-//					//return bytes_written + partial_count;
-//				}
-//			}
-//
-//			ret = data_transfer(axi_dest, 0, partial_count, transfer_type, dma_offset_write);
-//			if (ret > 0)
-//			{
-//				printk(KERN_INFO"<pci_write>: ERROR writing to User Peripheral\n");
-//				return -1;
-//			}
-//
-//
-//		}
-//
-//		ring_pointer_offset = ring_pointer_offset + partial_count;
-//
-//		if (ring_pointer_offset == (mod_desc->file_size))
-//		{
-//			ring_pointer_offset = 0;
-//			verbose_printk(KERN_INFO"<user_peripheral_write>: Resetting file pointer back to zero...\n");
-//		}
-//		else if (ring_pointer_offset > mod_desc->file_size)
-//		{
-//			printk(KERN_INFO"<user_peripheral_write>: ERROR! Wrote past the file size. This should not have happened...\n");
-//			printk(KERN_INFO"<user_peripheral_write>: Resetting file pointer back to zero...\n");
-//			printk(KERN_INFO"<pci_write>:ring_point: ERROR : WTH wrote past file end : %d\n", (int)ring_pointer_offset);
-//			return -1;
-//		}
-//
-//		bytes_written = bytes_written + partial_count;
-//		verbose_printk(KERN_INFO"<pci_write>: Wrote %zu bytes in this pass.\n", partial_count);
-//	}
-//	//bytes = bytes_written;
-//
-//	//msleep(5000);   //experiment....
-//
-//	//file statistics
-//	mod_desc->tx_bytes = mod_desc->tx_bytes + bytes_written;
-//	atomic_add(bytes_written, &driver_tx_bytes);
-//	//printk(KERN_INFO"total file tx byes: %d \n", mod_desc->tx_bytes);
-//
-//	/*always update the stop_timer*/
-//	getnstimeofday(mod_desc->stop_time);
-//	getnstimeofday(&driver_stop_time);
-//
-//	verbose_printk(KERN_INFO"\n");
-//	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n");
-//	verbose_printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION END  **************************\n");
-//	printk(KERN_INFO"<pci_write>: Wrote a total of %zu bytes in write call.\n", bytes_written);
-//	printk(KERN_INFO"<pci_write>: Total write value: %d.\n", mod_desc->tx_bytes);
-//	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n");
-//	verbose_printk(KERN_INFO"\n");
-//	return bytes_written;
-//}
 
 int query_ring_buff(struct mod_desc* mod_desc, size_t count)
 {
@@ -280,28 +133,6 @@ int get_new_ring_pointer(int bytes_written, int ring_pointer_offset, int file_si
 		return ring_pointer_offset + bytes_written;
 }
 
-
-
-//int data_to_write(struct mod_desc *mod_desc)
-//{
-//	int wth, wtk;
-//
-//	wth = atomic_read(mod_desc->wth);
-//	wtk = atomic_read(mod_desc->wtk);
-//
-//	if(wtk == wth)
-//		if (atomic_read(mod_desc->ring_buf_pri) == 0)  // this is a priority variable to solve which side can write (1 = wtk, 0 = wth)
-//			return mod_desc->dma_size;
-//		else
-//			return 0;
-//
-//	if(wtk > wth)
-//		return wtk-wth;
-//
-//	if(wtk < wth)
-//		return (wtk)+((mod_desc->dma_size)-wth);
-//}
-
 int data_to_transfer(struct mod_desc *mod_desc, int tail, int head, int priority)
 {
 	// This function is used to determine the amount of data available to be transfered
@@ -321,60 +152,6 @@ int data_to_transfer(struct mod_desc *mod_desc, int tail, int head, int priority
 		return (mod_desc->dma_size)-tail;
 }
 
-//void write_thread(struct mod_desc *mod_desc)
-//{
-//	int d2w = 0;
-//	int ret = 0;
-//	int ring_pointer_offset;
-//	int bytes_written;
-//
-//
-//	while(!kthread_should_stop()){
-//		ret = wait_event_interruptible(thread_q_head, mod_desc->thread_q == 1);
-//		mod_desc->thread_q = 0;
-//
-//		/*Determine amount of data to write*/
-//		d2w = data_to_write(mod_desc);
-//		while(d2w>0)
-//		{
-//			verbose_printk("<write_thread>ring_point: WTH Data to write: %d \n", d2w);
-//			/*write the data*/
-//			ring_pointer_offset = atomic_read(mod_desc->wth);
-//
-//			//We always start hardware writes from wth + 1
-//			//  Because the wtk pointer goes up to wth.
-//			//if (ring_pointer_offset == (mod_desc->file_size-1))  //handle edge case
-//			//	ring_pointer_offset = 0;
-//			//else
-//			//	ring_pointer_offset = ring_pointer_offset+1;
-//
-//			bytes_written = write_data(mod_desc, (size_t)d2w, (u64)ring_pointer_offset);
-//			verbose_printk("<write_thread>ring_point: WTH Bytes written: %d \n", bytes_written);
-//
-//			/*bring the ring pointer back 1 unit since it was increased before write_data*/
-//			//if (ring_pointer_offset != 0)
-//			//	ring_pointer_offset = ring_pointer_offset-1;
-//
-//			verbose_printk(KERN_INFO"<pci_write>:ring_point: before updating with the bytes written : %d\n", ring_pointer_offset);
-//
-//			/*update write pointer*/
-//			ring_pointer_offset = get_new_ring_pointer(bytes_written, ring_pointer_offset, (int)(mod_desc->dma_size)); 
-//			atomic_set(mod_desc->wth, ring_pointer_offset);
-//
-//			/*Ths says that if the WTH pointer has caught up to the WTK pointer, then give priority to the WTK.*/
-//			if(atomic_read(mod_desc->wtk) == ring_pointer_offset)
-//				atomic_set(mod_desc->ring_buf_pri, 1);
-//
-//			verbose_printk(KERN_INFO"<pci_write>:ring_point: ring buff priority: %d\n", atomic_read(mod_desc->ring_buf_pri));
-//			verbose_printk(KERN_INFO"<pci_write>:ring_point: WTH : %d\n", ring_pointer_offset);
-//
-//			/*check for any new data_to_write*/
-//			d2w = data_to_write(mod_desc);
-//		}
-//
-//	}
-//	verbose_printk("Leaving thread\n");
-//}
 
 int read_data(struct mod_desc * mod_desc)
 {
@@ -951,11 +728,11 @@ void int_ctlr_init(u64 axi_address)
 	ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE, 0);
 }
 
-void pcie_m_init(cdma_num)
-{
-	verbose_printk(KERN_INFO"<pcie_m_init>: Setting PCIe Master Axi Address\n");
-	axi_pcie_m = pcie_m_address;
-}
+//void pcie_m_init(cdma_num)
+//{
+//	verbose_printk(KERN_INFO"<pcie_m_init>: Setting PCIe Master Axi Address\n");
+//	axi_pcie_m = pcie_m_address;
+//}
 
 int pcie_ctl_init(u64 axi_address, u32 dma_addr_base)
 {
