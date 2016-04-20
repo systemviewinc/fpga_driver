@@ -46,38 +46,37 @@
 /******************************/
 
 /*IOCTLS */
-#define SET_AXI_DEVICE 50
-#define SET_AXI_CDMA  51
-#define SET_AXI_PCIE_CTL 52
-#define SET_AXI_PCIE_M 53
-#define SET_AXI_INT_CTRL 54
-#define SET_AXI_DEV_SI 55
-#define SET_AXI_DEV_M 56
-#define CLEAR_AXI_INTERRUPT_CTLR 60
-#define SET_CDMA_KEYHOLE_WRITE 58
-#define SET_CDMA_KEYHOLE_READ 59
-#define SET_MODE 62
-#define SET_INTERRUPT 61
-#define SET_AXI_CTL_DEVICE 63
-#define SET_DMA_SIZE 64
-#define RESET_DMA_ALLOC 65
-#define SET_FILE_SIZE 66
-#define GET_FILE_STATISTICS 67
-#define GET_DRIVER_STATISTICS 70
-#define START_FILE_TIMER 68
-#define STOP_FILE_TIMER 69
-#define START_DRIVER_TIMER 71
-#define STOP_DRIVER_TIMER 72
+#define SET_AXI_DEVICE 50	/**< IOCTL Magic Number */
+#define SET_AXI_CDMA  51	/**< IOCTL Magic Number */
+#define SET_AXI_PCIE_CTL 52	/**< IOCTL Magic Number */
+#define SET_AXI_PCIE_M 53	/**< IOCTL Magic Number */
+#define SET_AXI_INT_CTRL 54 /**< IOCTL Magic Number */
+#define SET_AXI_DEV_SI 55   /**< IOCTL Magic Number */
+#define SET_AXI_DEV_M 56	/**< IOCTL Magic Number */
+#define CLEAR_AXI_INTERRUPT_CTLR 60	/**< IOCTL Magic Number */
+#define SET_CDMA_KEYHOLE_WRITE 58	/**< IOCTL Magic Number */
+#define SET_CDMA_KEYHOLE_READ 59	/**< IOCTL Magic Number */
+#define SET_MODE 62			/**< IOCTL Magic Number */
+#define SET_INTERRUPT 61	/**< IOCTL Magic Number */
+#define SET_AXI_CTL_DEVICE 63		/**< IOCTL Magic Number */
+#define SET_DMA_SIZE 64		/**< IOCTL Magic Number */
+#define RESET_DMA_ALLOC 65	/**< IOCTL Magic Number */
+#define SET_FILE_SIZE 66	/**< IOCTL Magic Number */
+#define GET_FILE_STATISTICS 67		/**< IOCTL Magic Number */
+#define GET_DRIVER_STATISTICS 70	/**< IOCTL Magic Number */
+#define START_FILE_TIMER 68	/**< IOCTL Magic Number */
+#define STOP_FILE_TIMER 69	/**< IOCTL Magic Number */
+#define START_DRIVER_TIMER 71		/**< IOCTL Magic Number */
+#define STOP_DRIVER_TIMER 72		/**< IOCTL Magic Number */
 
 #define ERROR   -1
 #define SUCCESS 0
 
 /* MODE Types */
-#define SLAVE 0
-#define AXI_STREAM_FIFO 1
-#define MASTER 2
-#define CDMA 3
-
+#define SLAVE 0				/**< Mode Type : This is standard memory interface */
+#define AXI_STREAM_FIFO 1   /**< Mode Type : This is for axi streaming peripherals */
+#define MASTER 2			/**< Mode Type : This is for AXI Master devices (currently not supported) */ 
+//#define CDMA 3			 
 
 
 #define MAX_NUM_MASTERS 2
@@ -85,21 +84,21 @@
 #define MAX_NUM_INT MAX_NUM_MASTERS + MAX_NUM_SLI
 
 /*These are the Driver types that are matched through insmod parameter "driver_type" */
-#define PCI 1
-#define PLATFORM 2
+#define PCI 1     /**< Driver Type */
+#define PLATFORM 2 /**< Driver Type */
 
 /* Shared Global Variables */
 
-extern u64 axi_pcie_ctl;
-extern u64 axi_interr_ctrl;
+extern u64 axi_pcie_ctl;   /**< This variable is set at insmod to hold the PCIe control port AXI Address */
+extern u64 axi_interr_ctrl; /**< This variable is set at insmod to hold the Interrupt Controller AXI Address */
 extern u64 axi_pcie_m;
 extern int dma_byte_width;
 
 extern u8 cdma_set[5];
 extern u8 pcie_ctl_set;
 
-extern int cdma_capable;
-extern int back_pressure;
+extern int cdma_capable;    /**< This variable is set by the driver if a CDMA is initialized and available for use */
+extern int back_pressure;   /**< This variable is set at insmod that tells whether the read ring buffers should backpressure to HW or overwrite */
 
 /*CDMA Semaphore*/
 extern struct mutex CDMA_sem;
@@ -138,8 +137,6 @@ extern atomic_t cdma_atom[5];
 
 extern atomic_t thread_q_read;
 extern atomic_t thread_q;
-//extern struct kfifo read_fifo;
-//DECLARE_KFIFO(read_fifo, struct mod_desc*, 4096);
 extern spinlock_t fifo_lock;
 extern spinlock_t fifo_lock_write;
 
@@ -160,8 +157,15 @@ extern struct timespec driver_stop_time;
 extern void * dma_buffer_base;
 extern u32 dma_current_offset;
 extern u64 dma_buffer_size;
-/*this is the module description struct*/
 
+
+
+/** Module Description Struct
+ *	@brief This is the data structure that is stored inside the private section of each file
+ *	struct that is created for this driver.  Since each file pertains to an IP within the FPGA
+ *	design, it contains characteristics of the IP suxk as AXI address, mode types, interrupt
+ *	numbers, etc.
+ */
 struct mod_desc
 {
 	int minor;				    /**< The minor number of file node (mainly used for debug msgs */
@@ -211,6 +215,11 @@ struct mod_desc
 
 
 extern struct mod_desc * mod_desc_arr[12];
+
+/** File Statistics Struct
+ *	@brief This is a data structure that contains fields for calculating bandwidth of R/W to a
+ *	particular file (IP on the FPGA).
+ */
 
 struct statistics
 {
@@ -279,25 +288,81 @@ int cdma_init(int cdma_num, int cdma_address, u32 dma_addr_base);
  * PCIe control register. 
 */
 int pcie_ctl_init(u64 axi_address, u32 dma_addr_base);
-void pcie_m_init(int cdma_num);
+//void pcie_m_init(int cdma_num);
+/**
+ * @brief This function initialized the interrupt controller in the FPGA. 
+*/
 void int_ctlr_init(u64 axi_address);
-//int dma_file_init(struct mod_desc *mod_desc, int dma_file_size, void *dma_buffer_base, u64 dma_buffer_size);
+/**
+ * @brief This function allocates the DMA regions for the peripheral. 
+*/
 int dma_file_init(struct mod_desc *mod_desc, void *dma_buffer_base, u64 dma_buffer_size);
+/**
+ * @brief This function performs calls appropriate functions for writing to the AXI Streaming FIFO. 
+*/
 size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_pointer_offset);
+/**
+ * @brief This function performs calls appropriate functions for Reading from the AXI Streaming FIFO. 
+*/
 size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_pointer_offset);
+/**
+ * @brief This function initializes the AXI Streaming FIFO. 
+*/
 int axi_stream_fifo_init(struct mod_desc * mod_desc);
+/**
+ * @brief This function causes the process to block (sleep) until CDMA completion interrupt is 
+ * received.  It is currently not being uses because we found polling operates much faster. 
+*/
 void cdma_wait_sleep(int cdma_num);
+/**
+ * @brief This function continuously polls the CDMA until the completion bit is read. 
+*/
 void cdma_idle_poll(int cdma_num);
+/**
+ * @brief This function operates on it's own thread after insmod. It is used to handle all AXI-Streaming
+ * write transfers.  It reads from the write ring buffers and writes the data to hardware. 
+*/
 void write_thread(struct kfifo* write_fifo);
+/**
+ * @brief This function operates on it's own thread after insmod. It is used to handle all AXI-Streaming
+ * read transfers.  It reads from the hardware and stores data in the Read Ring Buffer. It wakes up the 
+ * poll method for the file upon receiving new data. 
+*/
 void read_thread(struct kfifo* read_fifo);
+/**
+ * @brief This function is called by the driver to create the write thread. 
+*/
 struct task_struct* create_thread(struct mod_desc *mod_desc);
+/**
+ * @brief This function is called by the driver to create the read thread. 
+*/
 struct task_struct* create_thread_read(struct kfifo* read_fifo);
-//int data_to_write(struct mod_desc *mod_desc);
+/**
+ * @brief This function is called by the write thread to write data to the FPGA. 
+*/
 int write_data(struct mod_desc* mod_desc);
+/**
+ * @brief This function is will update a ring pointer given the amount of bytes written or read. 
+*/
 int get_new_ring_pointer(int bytes_written, int ring_pointer_offset, int file_size);
+/**
+ * @brief This function will determine if the data size has room in the ring buffer 
+*/
 int query_ring_buff(struct mod_desc* mod_desc, size_t size); 
+/**
+ * @brief This function returns the amount of data available in the ring buffer 
+*/
 int data_to_transfer(struct mod_desc *mod_desc, int tail, int head, int priority);
+/**
+ * @brief This function checks if there is any available data to be read from an axi stream fifo. 
+*/
 size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc);
+/**
+ * @brief This function is called by the read thread to read data from the FPGA. 
+*/
 int read_data(struct mod_desc * mod_desc);
+/**
+ * @brief This function checks to see if the axi streaming fifo is empty. 
+*/
 int write_fifo_ready(struct mod_desc* mod_desc);
 // ******************************************************************

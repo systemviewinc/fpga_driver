@@ -1110,7 +1110,7 @@ int cdma_query(void)
 	}
 	else
 	{
-		if (mutex_lock_interruptible(&CDMA_sem))
+		if (mutex_lock_interruptible(&  /**< The atomic conditional variable for CDMA (if not polling) */CDMA_sem))
 		{
 			verbose_printk(KERN_INFO"User interrupted while waiting for CDMA semaphore.\n");
 			return -ERESTARTSYS;
@@ -1215,24 +1215,17 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 
 	verbose_printk(KERN_INFO"	<pci_dma_transfer>: ********* CDMA TRANSFER INITIALIZED *************\n");
 
-	/*Go to sleep and wait for interrupt*/
-	verbose_printk(KERN_INFO"	<pci_dma_transfer>: waiting on isr to set cdma num:%x cdma_comp:%x to 1\n", cdma_num, cdma_comp[cdma_num]);
-
-	//	cdma_wait_sleep(cdma_num);
-
 	cdma_idle_poll(cdma_num);
 
-	//	iret = wait_event_interruptible(wq, cdma_comp[cdma_num] != 0);
+	//atomic_set(&cdma_atom[cdma_num], 0);
 	//	ret = wait_event_interruptible(wq, atomic_read(&cdma_atom[cdma_num]) != 0);
 
 	//	if (ret != 0)
 	//		printk(KERN_INFO"	<pci_dma_transfer>: WAIT EVENT FORCED FROM USER SPACE, CDMA %x Never interrupted.\n", cdma_num);
 
-	//	cdma_comp[cdma_num] = 0;
-	atomic_set(&cdma_atom[cdma_num], 0);
+	//atomic_set(&cdma_atom[cdma_num], 0);
 
 	verbose_printk(KERN_INFO"	<pci_dma_transfer>: returned from ISR.\n");
-	verbose_printk(KERN_INFO"	<pci_dma_transfer>: reset the cdma num:%x wait variable cdma_comp:%x to 0\n", cdma_num, cdma_comp[cdma_num]);
 
 	// Acknowledge the CDMA and check for error status
 	ack_status = cdma_ack(cdma_num);
