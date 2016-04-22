@@ -354,7 +354,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	}
 	else
 	{
-		peripheral_space_offset = 0;
+	  //peripheral_space_offset = 0;
 		verbose_printk(KERN_INFO"%s<probe>BAR 1 is not in use\n", pci_devName);
 	}
 	/*****************************************************************************/
@@ -543,7 +543,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 	//		return ERROR;
 	//	}
 	//	verbose_printk(KERN_INFO"<probe>pci bar 1 virtual address base is:%p\n", pci_bar_1_vir_addr);
-	peripheral_space_offset = 0;
+	//peripheral_space_offset = 0;
 	pci_bar_1_size = 0;
 
 	/*****************************************************************************/
@@ -597,15 +597,16 @@ static int sv_plat_probe(struct platform_device *pdev)
 	cdma_set[1] = 0;
 	cdma_set[2] = 0;
 	pcie_ctl_set = 0;
-//	pcie_m_set = 0;
+
 	int_ctrl_set = 0;
 	printk(KERN_INFO"<sv_driver_init> cdma_address    size (%d) value %llx\n", sizeof(cdma_address),cdma_address);
 	printk(KERN_INFO"<sv_driver_init> pcie_m_address  size (%d) value %llx\n", sizeof(pcie_m_address),pcie_m_address);
 	printk(KERN_INFO"<sv_driver_init> cdma_2_address  size (%d) value %llx\n", sizeof(cdma_2_address),cdma_2_address);
 	printk(KERN_INFO"<sv_driver_init> int_ctlr_address  size (%d) value %llx\n", sizeof(int_ctlr_address),int_ctlr_address);
-	cdma_address   &= 0xFFFFFFFF;
-	pcie_m_address &= 0xFFFFFFFF;
-	cdma_2_address &= 0xFFFFFFFF;
+	// these addresses should alayws be in the 32 bit range
+	cdma_address     &= 0xFFFFFFFF;
+	pcie_m_address   &= 0xFFFFFFFF;
+	cdma_2_address   &= 0xFFFFFFFF;
 	int_ctlr_address &= 0xFFFFFFFF;
 	if (cdma_address != 0xFFFFFFFF)
 	{
@@ -633,10 +634,8 @@ static int sv_plat_probe(struct platform_device *pdev)
 	 * is not handled by the core by writing to a register. For Zynq, the axi to DDR address
 	 * mapping is 1-1 and should be written directly to the returned DMA handle */
 
-	//axi_pcie_m = axi_pcie_m + (u64)dma_addr_base;   //cdma 1
 	axi_pcie_m = (u64)dma_addr_base;   //cdma 1
 
-//	cdma_capable = (cdma_set[1] == 1) & (pcie_m_set == 1) & (int_ctrl_set == 1);
 	cdma_capable = (cdma_set[1] == 1) & (int_ctrl_set == 1);
 
 	printk(KERN_INFO"<probe> cdma_capable = %x\n", cdma_capable);
@@ -744,7 +743,6 @@ static int __init sv_driver_init(void)
 
 			init_waitqueue_head(&wq);
 			init_waitqueue_head(&wq_periph);
-			init_waitqueue_head(&mutexq);
 			init_waitqueue_head(&thread_q_head);
 			init_waitqueue_head(&thread_q_head_read);
 			init_waitqueue_head(&cdma_q_head);
@@ -779,7 +777,6 @@ static int __init sv_driver_init(void)
 
 			init_waitqueue_head(&wq);
 			init_waitqueue_head(&wq_periph);
-			init_waitqueue_head(&mutexq);
 			init_waitqueue_head(&thread_q_head);
 			init_waitqueue_head(&thread_q_head_read);
 			init_waitqueue_head(&pci_write_head);

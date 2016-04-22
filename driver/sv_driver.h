@@ -120,7 +120,6 @@ extern void * pci_bar_1_vir_addr;        //hardware base virtual address
 extern void * pci_bar_2_vir_addr;        //hardware base virtual address
 
 /*this is the user peripheral address offset*/
-extern u64 peripheral_space_offset;
 extern u64 bar_0_axi_offset;
 extern u64 peripheral_space_1_offset;
 
@@ -129,7 +128,6 @@ extern uint pcie_m_address;
 /*These are the interrupt and mutex wait variables */
 extern wait_queue_head_t wq;
 extern wait_queue_head_t wq_periph;
-extern wait_queue_head_t mutexq;
 extern wait_queue_head_t thread_q_head;
 extern wait_queue_head_t thread_q_head_read;
 extern wait_queue_head_t pci_write_head;

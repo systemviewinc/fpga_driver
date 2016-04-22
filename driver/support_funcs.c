@@ -1002,13 +1002,8 @@ int direct_write(u64 axi_address, void *buf, size_t count, int transfer_type)
 
 	/*determine which BAR to write to*/
 	/* Also does a final check to make sure you are writing in range */
-	if ((axi_address >= peripheral_space_offset) & ((axi_address + count) < (peripheral_space_offset + pci_bar_1_size)))
-	{
-		verbose_printk(KERN_INFO"		<direct_write>: Direct writing to BAR 1\n");
-		verbose_printk(KERN_INFO"		<direct_write>: Direct writing to BAR 1 with axi address:%llx\n", axi_address);
-		virt_addr = (axi_address - peripheral_space_offset) + pci_bar_1_vir_addr;
-	}
-	else if ((axi_address + count) < (bar_0_axi_offset + pci_bar_size))
+	if ((axi_address + count) < (bar_0_axi_offset + pci_bar_size) &&
+	    (axi_address >= bar_0_axi_offset))
 	{
 		virt_addr = (axi_address - bar_0_axi_offset) + pci_bar_vir_addr;
 		verbose_printk(KERN_INFO"		<direct_write>: Direct writing to BAR 0\n");
@@ -1053,13 +1048,8 @@ int direct_read(u64 axi_address, void *buf, size_t count, int transfer_type)
 	verbose_printk(KERN_INFO"		<direct_read>: Entering Direct Read\n");
 	/*determine which BAR to read from*/
 	/* Also does a final check to make sure you are writing in range */
-	if ((axi_address >= peripheral_space_offset) & ((axi_address + count) < (peripheral_space_offset + pci_bar_1_size)))
-	{
-		verbose_printk(KERN_INFO"		<direct_read>: Direct reading from BAR 1 with axi address:%llx\n", axi_address);
-		virt_addr = (axi_address - peripheral_space_offset) + pci_bar_1_vir_addr;
-		verbose_printk(KERN_INFO"		<direct_read>: Direct reading from virtual address:%p\n", virt_addr);
-	}
-	else if ((axi_address + count) < (bar_0_axi_offset + pci_bar_size))
+	if ((axi_address + count) < (bar_0_axi_offset + pci_bar_size) && 
+	    (axi_address >= bar_0_axi_offset))
 	{
 		verbose_printk(KERN_INFO"		<direct_read>: Direct reading from BAR 0\n");
 		virt_addr = (axi_address - bar_0_axi_offset) + pci_bar_vir_addr;
