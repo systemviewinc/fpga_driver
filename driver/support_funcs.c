@@ -767,7 +767,7 @@ int pcie_ctl_init(u64 axi_address, u32 dma_addr_base)
 	return 0;
 }
 
-int cdma_init(int cdma_num, int cdma_addr, u32 dma_addr_base)
+int cdma_init(int cdma_num, uint cdma_addr, u32 dma_addr_base)
 {
 	//	u32 axi_cdma;
 	u64 axi_dest;
@@ -888,19 +888,20 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 	u64 dma_axi_address = 0;
 	//	void * dma_p;
 	
-	//printk("<data_transfer>: writing/reading to base address 0x%llx \n", axi_address);
+	verbose_printk("<data_transfer>: writing/reading to base address 0x%llx %d %llx %llx %llx\n", axi_address,count,dma_off,bar_0_axi_offset,pci_bar_size);
 
 	/*determine if the axi range is in direct accessible memory space*/
-	if ((axi_address + (u64)count) < (bar_0_axi_offset + pci_bar_size))
+	if ((axi_address + (u64)count) < (bar_0_axi_offset + pci_bar_size) &&
+	    (axi_address >= bar_0_axi_offset))
 		in_range = 1;
-	else if ((axi_address + (u64)count) < (peripheral_space_offset + pci_bar_1_size))
-	{
-		if (axi_address >= peripheral_space_offset)
-			in_range = 1;
-	}
+	/* else if ((axi_address + (u64)count) < (peripheral_space_offset + pci_bar_1_size)) */
+	/* { */
+	/* 	if (axi_address >= peripheral_space_offset) */
+	/* 		in_range = 1; */
+	/* } */
 
 	//if  data is small or the cdma is not initialized and in range
-	if (((count < 16) | (cdma_capable == 0)) & (in_range == 1))
+	if (in_range == 1) // ((count < 16) | (cdma_capable == 0)) & 
 	{
 		if ((transfer_type == NORMAL_READ) | (transfer_type == KEYHOLE_READ))
 			status = direct_read(axi_address, buf, count, transfer_type);
@@ -909,7 +910,6 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 		else
 			verbose_printk(KERN_INFO"<data_transfer>: error no transfer type specified\n");
 	}
-
 	else if (cdma_capable == 1)
 	{
 		/* Find an available CDMA to use and wait if both are in use */
@@ -1186,8 +1186,9 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 	//Writing SA_LSB
 	axi_dest = axi_cdma_loc + CDMA_SA;
 
-	direct_write(axi_dest, (void*)&SA_LSB, 4, NORMAL_WRITE);
-	verbose_printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA_LSB address ('%x') to CDMA at axi address:%llx\n", SA_LSB, axi_dest);
+	direct_write(axi_dest    , (void*)&SA_LSB, 4, NORMAL_WRITE);
+	direct_write(axi_dest + 4, (void*)&SA_MSB, 4, NORMAL_WRITE); 
+	verbose_printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA  address ('%x') to CDMA at axi address:%llx\n", SA, axi_dest);
 	//read the status register
 	axi_dest = axi_cdma_loc + CDMA_SR;
 	//	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
@@ -1200,8 +1201,9 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 	//	verbose_printk(KERN_INFO"	<pci_dma_transfer>: writing DA_MSB address ('%x') to CDMA at axi address:%llx\n", DA_MSB, axi_dest);
 	//Writing DA_LSB
 	axi_dest = axi_cdma_loc + CDMA_DA;
-	direct_write(axi_dest, (void*)&DA_LSB, 4, NORMAL_WRITE);
-	verbose_printk(KERN_INFO"	<pci_dma_transfer>: writing DA_LSB address ('%x') to CDMA at axi address:%llx\n", DA_LSB, axi_dest);
+	direct_write(axi_dest,   (void*)&DA_LSB, 4, NORMAL_WRITE);
+	direct_write(axi_dest+4, (void*)&DA_MSB, 4, NORMAL_WRITE);
+	verbose_printk(KERN_INFO"	<pci_dma_transfer>: writing DA address ('%x') to CDMA at axi address:%llx\n", DA, axi_dest);
 	//read the status register
 	axi_dest = axi_cdma_loc + CDMA_SR;
 	//	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);

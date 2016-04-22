@@ -40,6 +40,7 @@
 //#define BACK_PRESSURE 1
 #define RING_BUFF_SIZE_MULTIPLIER 2
 /********* printk statements *********/
+#define verbose_printk printk
 #ifndef verbose_printk
 #define verbose_printk(...)
 #endif
@@ -88,6 +89,7 @@
 #define PLATFORM 2 /**< Driver Type */
 
 /* Shared Global Variables */
+typedef unsigned int uint;
 
 extern u64 axi_pcie_ctl;   /**< This variable is set at insmod to hold the PCIe control port AXI Address */
 extern u64 axi_interr_ctrl; /**< This variable is set at insmod to hold the Interrupt Controller AXI Address */
@@ -122,7 +124,7 @@ extern u64 peripheral_space_offset;
 extern u64 bar_0_axi_offset;
 extern u64 peripheral_space_1_offset;
 
-extern int pcie_m_address;
+extern uint pcie_m_address;
 
 /*These are the interrupt and mutex wait variables */
 extern wait_queue_head_t wq;
@@ -282,7 +284,7 @@ u32 num2vec(int num);
 /**
  * @brief This function initializes the CDMA.
 */
-int cdma_init(int cdma_num, int cdma_address, u32 dma_addr_base);
+int cdma_init(int cdma_num, uint cdma_address, u32 dma_addr_base);
 /**
  * @brief This function writes the translation address (The DMA Hardware base address) to the
  * PCIe control register. 

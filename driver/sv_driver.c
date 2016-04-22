@@ -43,12 +43,12 @@
 /***********Set default values for insmod parameters***************************/
 int device_id = 100;   /**< Insmod Parameter - PCIe specific */
 int major = 241;/**< Insmod Parameter - Major number of Driver*/
-int cdma_address = 0xFFFFFFFF;/**< Insmod Parameter - the AXI Address of CDMA 1*/
-int cdma_2_address = 0xFFFFFFFF;/**< Insmod Parameter - the AXI Address of CDMA 2*/
+uint cdma_address = 0xFFFFFFFF;/**< Insmod Parameter - the AXI Address of CDMA 1*/
+uint cdma_2_address = 0xFFFFFFFF;/**< Insmod Parameter - the AXI Address of CDMA 2*/
 int enable_cdma_2 = 0;/**< Insmod Parameter - The Enable to use CDMA 2*/
-int pcie_ctl_address = 0xFFFFFFFF;/**< Insmod Parameter - The AXI Address of the PCIe Control regs*/
-int pcie_m_address = 0xFFFFFFFF;/**< Insmod Parameter - AXI address of data transport slave address as viewed from CDMA, set to 0 (currently not used) */
-int int_ctlr_address = 0xFFFFFFFF;/**< Insmod Parameter - AXI Address of Interrupt Controller*/
+uint pcie_ctl_address = 0xFFFFFFFF;/**< Insmod Parameter - The AXI Address of the PCIe Control regs*/
+uint pcie_m_address = 0xFFFFFFFF;/**< Insmod Parameter - AXI address of data transport slave address as viewed from CDMA, set to 0 (currently not used) */
+uint int_ctlr_address = 0xFFFFFFFF;/**< Insmod Parameter - AXI Address of Interrupt Controller*/
 int driver_type = PCI;/**< Insmod Parameter - Driver typem either PCIe or Platform*/
 int dma_system_size = 4194304;/**< Insmod Parameter - Size of DMA Allocation, max and default is 4MB*/
 int dma_file_size = 4096;/**< Insmod Parameter - Currently not used, the HW buffer size is now set on a file by file basis.*/
@@ -70,19 +70,19 @@ MODULE_PARM_DESC(major, "MajorNumber");/**< Insmod Parameter */
 module_param(enable_cdma_2, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
 MODULE_PARM_DESC(enable_cdma_2, "EnableCDMA2");/**< Insmod Parameter */
 
-module_param(cdma_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
+module_param(cdma_address, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
 MODULE_PARM_DESC(cdma_address, "CDMAAddress");/**< Insmod Parameter */
 
-module_param(cdma_2_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
+module_param(cdma_2_address, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
 MODULE_PARM_DESC(cdma_2_address, "CDMAAddress2");/**< Insmod Parameter */
 
-module_param(pcie_ctl_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
+module_param(pcie_ctl_address, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
 MODULE_PARM_DESC(pcie_ctl_address, "PCIeCTLAddress");/**< Insmod Parameter */
 
-module_param(pcie_m_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
+module_param(pcie_m_address, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
 MODULE_PARM_DESC(pcie_m_address, "PCIeMAddress");/**< Insmod Parameter */
 
-module_param(int_ctlr_address, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
+module_param(int_ctlr_address, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
 MODULE_PARM_DESC(int_ctlr_address, "IntCtlrAddress");/**< Insmod Parameter */
 
 module_param(driver_type, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
@@ -117,9 +117,7 @@ void * pci_bar_1_vir_addr = NULL;        /**< hardware base virtual address for 
 void * pci_bar_2_vir_addr = NULL;        /**< hardware base virtual address for BAR 2 (not currently used) */
 
 /*this is the user peripheral address offset*/
-u64 peripheral_space_offset = 0x80000000;   /**< The AXI Address for BAR 1 (currently unused) */
-u64 bar_0_axi_offset = 0x40000000;         /**< The AXI  address of BAR 0 (ie common interface IP) */  
-u64 peripheral_space_1_offset = 0xC00000000; /**< The AXI Address of BAR 2 (currently unused) */
+u64 bar_0_axi_offset = 0x80000000;         /**< The AXI  address of BAR 0 (ie common interface IP) */  
 
 u64 axi_pcie_ctl; /**< Global Variable that stores the PCIe Control Register AXI Address */
 u64 axi_interr_ctrl; /**< Global Variable that stores the Interrupt Controller AXI Address */
@@ -252,9 +250,9 @@ read:           pci_read,
 /* ************************device init and exit *********************** */
 static int __init sv_driver_init(void);
 static void sv_driver_exit(void);
-static int probe(struct pci_dev * dev, const struct pci_device_id * id);
+static int sv_pci_probe(struct pci_dev * dev, const struct pci_device_id * id);
 static int sv_plat_probe(struct platform_device *pdev);
-static void remove(struct pci_dev * dev);
+static void sv_pci_remove(struct pci_dev * dev);
 static int sv_plat_remove(struct platform_device * dev);
 static unsigned char skel_get_revision(struct pci_dev * dev);
 
@@ -296,7 +294,7 @@ static unsigned char skel_get_revision(struct pci_dev *dev)
 /**
  * @brief This is the Probe function called for PCIe Devices
 */
-static int probe(struct pci_dev *dev, const struct pci_device_id *id)
+static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
 	int ret;
 	int pcie_m_set;
@@ -406,12 +404,13 @@ static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 	verbose_printk(KERN_INFO"<probe>pci set as master\n");
 
 	//enable MSI interrupts
+#if defined(CONFIG_PCI_MSI)
 	if(0 > pci_enable_msi(pci_dev_struct)){
 		printk(KERN_INFO"%s:<probe>MSI enable error\n", pci_devName);
 		return ERROR;
 	}
 	verbose_printk(KERN_INFO"<probe>pci enabled msi interrupt\n");
-
+#endif
 	//request IRQ
 	if(0 > request_irq(pci_dev_struct->irq, &pci_isr, IRQF_SHARED, pci_devName, pci_dev_struct)){
 		printk(KERN_INFO"%s:<probe>request IRQ error\n", pci_devName);
@@ -551,27 +550,29 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 
 	//set DMA mask
-	if(0 != dma_set_mask(&pdev->dev, 0x00000000FFFFFFFF)){
+	if(0 != dma_set_mask(&pdev->dev, 0x00000000ffffffff)){
 		printk(KERN_INFO"%s:<probe>set DMA mask error\n", pci_devName);
 		return ERROR;
 	}
 	verbose_printk(KERN_INFO"<probe>dma mask set\n");
 
 	irq_num = platform_get_irq(pdev, 0);
-	verbose_printk(KERN_INFO"<probe>IRQ number is:%x\n", irq_num);
+	printk(KERN_INFO"<probe>IRQ number is:%x\n", irq_num);
 
 	//request IRQ
 	if(0 > request_irq(irq_num, &pci_isr, IRQF_SHARED, pci_devName, pdev)){
 		printk(KERN_INFO"%s:<probe>request IRQ error\n", pci_devName);
 		return ERROR;
 	}
-
+	
+	printk(KERN_INFO"<probe>IRQ request complete\n");
 	//register the char device
 	if(0 > register_chrdev(major, "sv_driver", &pci_fops)){
 		printk(KERN_INFO"%s:<probe>char driver not registered\n", "sv_driver");
 		return ERROR;
 	}
 
+	printk(KERN_INFO"<probe>register device complete\n");
 	/*allocate the DMA buffer*/
 	dma_buffer_base = dma_alloc_coherent(dev_struct, (size_t)dma_buffer_size, &dma_addr_base, GFP_KERNEL);
 	if(NULL == dma_buffer_base)
@@ -590,6 +591,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 		current_dma_offset_internal = 0;
 		dma_garbage_offset = 4096;
 	}
+	printk(KERN_INFO"<probe>alloc coherent complete\n");
 
 	//set defaults
 	cdma_set[1] = 0;
@@ -597,7 +599,14 @@ static int sv_plat_probe(struct platform_device *pdev)
 	pcie_ctl_set = 0;
 //	pcie_m_set = 0;
 	int_ctrl_set = 0;
-
+	printk(KERN_INFO"<sv_driver_init> cdma_address    size (%d) value %llx\n", sizeof(cdma_address),cdma_address);
+	printk(KERN_INFO"<sv_driver_init> pcie_m_address  size (%d) value %llx\n", sizeof(pcie_m_address),pcie_m_address);
+	printk(KERN_INFO"<sv_driver_init> cdma_2_address  size (%d) value %llx\n", sizeof(cdma_2_address),cdma_2_address);
+	printk(KERN_INFO"<sv_driver_init> int_ctlr_address  size (%d) value %llx\n", sizeof(int_ctlr_address),int_ctlr_address);
+	cdma_address   &= 0xFFFFFFFF;
+	pcie_m_address &= 0xFFFFFFFF;
+	cdma_2_address &= 0xFFFFFFFF;
+	int_ctlr_address &= 0xFFFFFFFF;
 	if (cdma_address != 0xFFFFFFFF)
 	{
 		ret = cdma_init(1, cdma_address, (u32)dma_addr_base);
@@ -637,7 +646,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static void remove(struct pci_dev *dev)
+static void sv_pci_remove(struct pci_dev *dev)
 {
 	/* clean up any allocated resources and stuff here.
 	 * 	 * like call release_region();
@@ -647,9 +656,9 @@ static void remove(struct pci_dev *dev)
 	iounmap(pci_bar_vir_addr);
 
 	free_irq(pci_dev_struct->irq, pci_dev_struct);
-
+#if defined(CONFIG_PCI_MSI)
 	pci_disable_msi(pci_dev_struct);
-
+#endif
 	dma_free_coherent(dev_struct, (size_t)dma_buffer_size, dma_buffer_base, dma_addr_base);
 
 	/*Destroy the read thread*/
@@ -717,8 +726,8 @@ static struct pci_driver pci_driver = {
 	//.name = "vsi_driver",
 	.name = pci_devName_const,
 	.id_table = ids,
-	.probe = probe,
-	.remove = remove,
+	.probe = sv_pci_probe,
+	.remove = sv_pci_remove,
 };
 
 
@@ -775,7 +784,7 @@ static int __init sv_driver_init(void)
 			init_waitqueue_head(&thread_q_head_read);
 			init_waitqueue_head(&pci_write_head);
 
-			bar_0_axi_offset = 0x40000000;
+			bar_0_axi_offset = 0x80000000;
 
 			/*Create Read Thread*/
 			thread_struct_read = create_thread_read(&read_fifo);
@@ -1143,12 +1152,12 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 		case SET_AXI_DEVICE:
 			verbose_printk(KERN_INFO"<ioctl>: Setting Peripheral Axi Address: 0x%x for minor:%d\n", arg_loc, mod_desc->minor);
-			mod_desc->axi_addr = arg_loc&(0x00000000FFFFFFFF);
+			mod_desc->axi_addr = arg_loc&(0xFFFFFFFFFFFFFFFF);
 			break;
 
 		case SET_AXI_CTL_DEVICE:
 			printk(KERN_INFO"<ioctl>: Setting Peripheral CTL AXI Address: 0x%x for minor:%d\n", arg_loc, mod_desc->minor);
-			mod_desc->axi_addr_ctl = arg_loc&(0x00000000FFFFFFFF);
+			mod_desc->axi_addr_ctl = arg_loc&(0xFFFFFFFFFFFFFFFF);
 			break;
 
 
@@ -1429,7 +1438,7 @@ loff_t pci_llseek( struct file *filp, loff_t off, int whence)
 		default: /* cant happen */
 			return -EINVAL;
 	}
-	verbose_printk(KERN_INFO"<pci_read>: attempted seek\n");
+	verbose_printk(KERN_INFO"<pci_read>: attempted seek %d\n",newpos);
 	if (newpos < 0) return -EINVAL;
 	filp->f_pos = newpos;
 	return newpos;
