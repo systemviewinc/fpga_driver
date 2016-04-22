@@ -47,15 +47,15 @@ int cdma_address = 0xFFFFFFFF;/**< Insmod Parameter - the AXI Address of CDMA 1*
 int cdma_2_address = 0xFFFFFFFF;/**< Insmod Parameter - the AXI Address of CDMA 2*/
 int enable_cdma_2 = 0;/**< Insmod Parameter - The Enable to use CDMA 2*/
 int pcie_ctl_address = 0xFFFFFFFF;/**< Insmod Parameter - The AXI Address of the PCIe Control regs*/
-int pcie_m_address = 0xFFFFFFFF;/**< Insmod Parameter */
-int int_ctlr_address = 0xFFFFFFFF;/**< Insmod Parameter */
-int driver_type = PCI;/**< Insmod Parameter */
-int dma_system_size = 4194304;/**< Insmod Parameter */
-int dma_file_size = 4096;/**< Insmod Parameter */
-int dma_byte_width = 8;   /**< Insmod Parameter */
-int back_pressure = 1;/**< Insmod Parameter */
-static char buffer[128];/**< Insmod Parameter */
-static char  *pci_devName = &buffer[0];/**< Insmod Parameter */
+int pcie_m_address = 0xFFFFFFFF;/**< Insmod Parameter - AXI address of data transport slave address as viewed from CDMA, set to 0 (currently not used) */
+int int_ctlr_address = 0xFFFFFFFF;/**< Insmod Parameter - AXI Address of Interrupt Controller*/
+int driver_type = PCI;/**< Insmod Parameter - Driver typem either PCIe or Platform*/
+int dma_system_size = 4194304;/**< Insmod Parameter - Size of DMA Allocation, max and default is 4MB*/
+int dma_file_size = 4096;/**< Insmod Parameter - Currently not used, the HW buffer size is now set on a file by file basis.*/
+int dma_byte_width = 8;   /**< Insmod Parameter - This parameter is the data width of the CDMA. It is used to calculate the FIFO empty value.*/
+int back_pressure = 1;/**< Insmod Parameter - This parameter sets whether the READ Ring Buffer should overwrite data or backpressure to HW.*/
+static char buffer[128];/**< Used to store the PCIe Device Name*/
+static char  *pci_devName = &buffer[0];/**< Insmod Parameter - the PCIe Device Name.*/
 //const char * pci_devName_const;
 
 module_param(device_id, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
@@ -121,17 +121,17 @@ u64 peripheral_space_offset = 0x80000000;   /**< The AXI Address for BAR 1 (curr
 u64 bar_0_axi_offset = 0x40000000;         /**< The AXI  address of BAR 0 (ie common interface IP) */  
 u64 peripheral_space_1_offset = 0xC00000000; /**< The AXI Address of BAR 2 (currently unused) */
 
-u64 axi_pcie_ctl;
-u64 axi_interr_ctrl;
-u64 axi_pcie_m;
+u64 axi_pcie_ctl; /**< Global Variable that stores the PCIe Control Register AXI Address */
+u64 axi_interr_ctrl; /**< Global Variable that stores the Interrupt Controller AXI Address */
+u64 axi_pcie_m;  /**< Global Variable that stores the data transport IP Slave AXI Address as seen from the CDMA*/
 
-u8 cdma_set[5];
-u8 pcie_ctl_set;
+u8 cdma_set[5];  /**< Global variable that stores which CDMAs have been initialized. (currently only using 2 CDMAs) */
+u8 pcie_ctl_set; /**< Global variable that is a flag to tell if the PCIe Controll address has been set */
 
-int cdma_status;
-int cdma_capable = 0;
-unsigned int irq_num;
-int cdma_usage_cnt = 0;
+//int cdma_status;
+int cdma_capable = 0; /**< Global variable that is a flag to tell if the driver has been initialized properly to use the CDMA(s) */
+unsigned int irq_num; /**< Global variable that stores the IRQ number that is probed from the device */
+int cdma_usage_cnt = 0; /**< Global variable to count the number of CDMA uses. Used for statistics gathering */
 
 /*CDMA Semaphores*/
 struct mutex CDMA_sem;		/**< the Semaphore to lock CDMA 1 */
@@ -147,34 +147,39 @@ u32 dma_garbage_offset;   /**< This offset memory region is used for dumping dat
 u64 dma_buffer_size = 1048576; /**< Default value for size of DMA Allocation, Max is 4MB, this is set through insmod */
 u32 current_dma_offset_internal; /**< The current offset of the internal DMA regions. The driver uses these for register R/W */
 
-dma_addr_t dma_m_addr[MAX_NUM_MASTERS];
-
-void * dma_master_buf[MAX_NUM_MASTERS];
+dma_addr_t dma_m_addr[MAX_NUM_MASTERS]; /**< Used for Master DMA Allocations (currently not used) */
+void * dma_master_buf[MAX_NUM_MASTERS]; /**< Used for Master DMA Allocations (currently not used) */
 
 /* *************************************************  */
 
-size_t dma_size;
-wait_queue_head_t wq;
-wait_queue_head_t wq_periph;
-wait_queue_head_t mutexq;
+//size_t dma_size;
+wait_queue_head_t wq;  /**< This is the wait queue for the CDMAs, (if not polling) (currently not used) */
+wait_queue_head_t wq_periph; /**< This is the wait queue for the peripherals being polled. */
+//wait_queue_head_t mutexq;
+
+// Write Thread data 
 wait_queue_head_t thread_q_head; /**< The Wait queue for the WRITE Thread */
+atomic_t thread_q = ATOMIC_INIT(0); /**< The Wait variable for the WRITE Thread */
+struct task_struct * thread_struct; /**< task_struct used in creation of WRITE Thread */
+
+// Read Thread data
 wait_queue_head_t thread_q_head_read; /**< The Wait Queue for the READ Thread */
+atomic_t thread_q_read = ATOMIC_INIT(0); /**< The Wait variable for the READ Thread */
+struct task_struct * thread_struct_read; /**< task_struct used in creation of READ Thread */
+
 wait_queue_head_t pci_write_head; /**< The Wait Queue for the blocking/sleeping pci_write function */
+
 atomic_t cdma_atom[5]; /**< CDMA_x wait variable (if not polling) (currently not used) */
-int num_int;
+//int num_int;
 
-atomic_t mutex_free = ATOMIC_INIT(0);
+//atomic_t mutex_free = ATOMIC_INIT(0);
 
 
-atomic_t thread_q_read = ATOMIC_INIT(0);
-struct task_struct * thread_struct_read;
 DEFINE_KFIFO(read_fifo, struct mod_desc*, 8192); /**< sets up the global READ FIFO */
-spinlock_t fifo_lock;
+spinlock_t fifo_lock; /**< The Spinlock Variable for writing to the READ FIFO */
 
-atomic_t thread_q = ATOMIC_INIT(0);
-struct task_struct * thread_struct;
 DEFINE_KFIFO(write_fifo, struct mod_desc*, 8192); /**< sets up the global WRITE FIFO */
-spinlock_t fifo_lock_write;
+spinlock_t fifo_lock_write; /**< The Spinlock Variable for writing to the WRITE FIFO */
 
 /*Driver Statistics*/
 atomic_t driver_tx_bytes = ATOMIC_INIT(0);  /**< Global Atomic Variable for Driver Statistics */
@@ -184,7 +189,7 @@ atomic_t driver_stop_flag = ATOMIC_INIT(0);/**< Global Atomic Variable for Drive
 struct timespec driver_start_time;/**< Global Struct for Driver Statistics */
 struct timespec driver_stop_time;/**< Global Struct Variable for Driver Statistics */
 
-spinlock_t mLock;
+//spinlock_t mLock;
 
 const u32 INT_CTRL_IER      = 0x08;  /**< Interrupt Controller Register Offset, see Xilinx doc. */
 const u32 INT_CTRL_MER      = 0x1c;	 /**< Interrupt Controller Register Offset, see Xilinx doc. */

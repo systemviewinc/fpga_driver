@@ -38,38 +38,38 @@
 
 /******************************** Xilinx Register Offsets **********************************/
 
-const u32 AXI_STREAM_ISR    = 0x00;
-const u32 AXI_STREAM_IER    = 0x04;
-const u32 AXI_STREAM_TDFR   = 0x08;
-const u32 AXI_STREAM_TDFV   = 0x0c;
-const u32 AXI_STREAM_TDFD   = 0x00;
-const u32 AXI_STREAM_TLR    = 0x14;
-const u32 AXI_STREAM_RDFR   = 0x18;
-const u32 AXI_STREAM_RDFO   = 0x1C;
-const u32 AXI_STREAM_RDFD   = 0x1000;
-const u32 AXI_STREAM_RLR    = 0x24;
-const u32 AXI_STREAM_SRR    = 0x28;
-const u32 AXI_STREAM_TDR    = 0x2C;
-const u32 AXI_STREAM_RDR    = 0x30;
-const u32 AXI_STREAM_TXID   = 0x34;
-const u32 AXI_STREAM_TXUSER = 0x38;
-const u32 AXI_STREAM_RXID   = 0x3C;
+const u32 AXI_STREAM_ISR    = 0x00;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+const u32 AXI_STREAM_IER    = 0x04;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+const u32 AXI_STREAM_TDFR   = 0x08;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+const u32 AXI_STREAM_TDFV   = 0x0c;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+const u32 AXI_STREAM_TDFD   = 0x00;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+const u32 AXI_STREAM_TLR    = 0x14;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+const u32 AXI_STREAM_RDFR   = 0x18;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+const u32 AXI_STREAM_RDFO   = 0x1C;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+const u32 AXI_STREAM_RDFD   = 0x1000;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+const u32 AXI_STREAM_RLR    = 0x24;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+const u32 AXI_STREAM_SRR    = 0x28;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+const u32 AXI_STREAM_TDR    = 0x2C;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+const u32 AXI_STREAM_RDR    = 0x30;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+const u32 AXI_STREAM_TXID   = 0x34;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+const u32 AXI_STREAM_TXUSER = 0x38;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+const u32 AXI_STREAM_RXID   = 0x3C;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
 
-const u32 CDMA_CR           = 0x00;
-const u32 CDMA_SR           = 0x04;
-const u32 CDMA_DA           = 0x20;
-const u32 CDMA_DA_MSB       = 0x24;
-const u32 CDMA_SA           = 0x18;
-const u32 CDMA_SA_MSB       = 0x1C;
-const u32 CDMA_BTT          = 0x28;
+const u32 CDMA_CR           = 0x00;    /**< CDMA Register Offset (See Xilinx Doc) */
+const u32 CDMA_SR           = 0x04;    /**< CDMA Register Offset (See Xilinx Doc) */
+const u32 CDMA_DA           = 0x20;    /**< CDMA Register Offset (See Xilinx Doc) */
+const u32 CDMA_DA_MSB       = 0x24;    /**< CDMA Register Offset (See Xilinx Doc) */
+const u32 CDMA_SA           = 0x18;    /**< CDMA Register Offset (See Xilinx Doc) */
+const u32 CDMA_SA_MSB       = 0x1C;    /**< CDMA Register Offset (See Xilinx Doc) */
+const u32 CDMA_BTT          = 0x28;    /**< CDMA Register Offset (See Xilinx Doc) */
 
-const u32 AXIBAR2PCIEBAR_0L = 0x20c;
-const u32 AXIBAR2PCIEBAR_1L = 0x214;
+const u32 AXIBAR2PCIEBAR_0L = 0x20c;    /**< AXI PCIe Subsystem Offset (See Xilinx Doc) */
+const u32 AXIBAR2PCIEBAR_1L = 0x214;    /**< AXI PCIe Subsystem Offset (See Xilinx Doc) */
 
 /******************************** Local Scope Globals ***************************************/
 
-u64 axi_cdma;
-u64 axi_cdma_2;
+u64 axi_cdma; /**< Holds AXI Base address of CDMA 1 */
+u64 axi_cdma_2; /**< Holds AXI Base address of CDMA 2 */
 
 /******************************** Support functions ***************************************/
 
