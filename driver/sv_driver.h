@@ -40,7 +40,15 @@
 //#define BACK_PRESSURE 1
 #define RING_BUFF_SIZE_MULTIPLIER 2
 /********* printk statements *********/
-#define verbose_printk printk
+//#define verbose_printk printk
+#define verbose_write_printk printk
+#define verbose_cdma_printk printk
+#ifndef verbose_cdma_printk
+#define verbose_cdma_printk(...)
+#endif
+#ifndef verbose_write_printk
+#define verbose_write_printk(...)
+#endif
 #ifndef verbose_printk
 #define verbose_printk(...)
 #endif
@@ -121,7 +129,6 @@ extern void * pci_bar_2_vir_addr;        //hardware base virtual address
 
 /*this is the user peripheral address offset*/
 extern u64 bar_0_axi_offset;
-extern u64 peripheral_space_1_offset;
 
 extern uint pcie_m_address;
 

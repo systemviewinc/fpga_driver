@@ -331,62 +331,6 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	}
 	printk(KERN_INFO"<probe>pci bar virtual address base is:%p\n", pci_bar_vir_addr);
 
-	/****************** BAR 1 Mapping *******************************************/
-	//get the base hardware address
-	pci_bar_1_addr = pci_resource_start(pci_dev_struct, 1);
-	if (0 > pci_bar_1_addr){
-		printk(KERN_INFO"%s<probe>BAR 1 base hardware address is not set\n", pci_devName);
-		return ERROR;
-	}
-	//get the base memory size
-	pci_bar_1_size = pci_resource_len(pci_dev_struct, 1);
-	verbose_printk(KERN_INFO"<probe>pci bar 1 size is:%lu\n", pci_bar_1_size);
-
-	//map the hardware space to virtual space
-	if (pci_bar_1_size > 0)
-	{
-		pci_bar_1_vir_addr = ioremap(pci_bar_1_addr, pci_bar_1_size);
-		if(0 == pci_bar_1_vir_addr){
-			printk(KERN_INFO"%s:<probe>ioremap error when mapping to virtual address\n", pci_devName);
-			return ERROR;
-		}
-		verbose_printk(KERN_INFO"<probe>pci bar 1 virtual address base is:%p\n", pci_bar_1_vir_addr);
-	}
-	else
-	{
-	  //peripheral_space_offset = 0;
-		verbose_printk(KERN_INFO"%s<probe>BAR 1 is not in use\n", pci_devName);
-	}
-	/*****************************************************************************/
-
-
-	/****************** BAR 2 Mapping *******************************************/
-	//get the base hardware address
-	pci_bar_2_addr = pci_resource_start(pci_dev_struct, 2);
-	if (0 > pci_bar_2_addr){
-		printk(KERN_INFO"%s<probe>BAR 2 base hardware address is not set\n", pci_devName);
-		return ERROR;
-	}
-	//get the base memory size
-	pci_bar_2_size = pci_resource_len(pci_dev_struct, 2);
-	verbose_printk(KERN_INFO"<probe>pci bar 2 size is:%lu\n", pci_bar_2_size);
-
-	if (pci_bar_2_size > 0)
-	{
-		//map the hardware space to virtual space
-		pci_bar_2_vir_addr = ioremap(pci_bar_2_addr, pci_bar_2_size);
-		if(0 == pci_bar_2_vir_addr){
-			printk(KERN_INFO"%s:<probe>ioremap error when mapping to virtual address\n", pci_devName);
-			return ERROR;
-		}
-		verbose_printk(KERN_INFO"<probe>pci bar 2 virtual address base is:%p\n", pci_bar_2_vir_addr);
-	}
-	else
-	{
-		peripheral_space_1_offset = 0;
-		verbose_printk(KERN_INFO"%s<probe>BAR 2 is not in use\n", pci_devName);
-	}
-	/*****************************************************************************/
 
 	//enable the device
 	ret = pci_enable_device(dev);
@@ -1148,12 +1092,12 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	switch(cmd){
 
 		case SET_AXI_DEVICE:
-			verbose_printk(KERN_INFO"<ioctl>: Setting Peripheral Axi Address: 0x%x for minor:%d\n", arg_loc, mod_desc->minor);
+			printk(KERN_INFO"<ioctl>: Setting Peripheral Axi Address: 0x%llx for minor:%d\n", arg_loc, mod_desc->minor);
 			mod_desc->axi_addr = arg_loc&(0xFFFFFFFFFFFFFFFF);
 			break;
 
 		case SET_AXI_CTL_DEVICE:
-			printk(KERN_INFO"<ioctl>: Setting Peripheral CTL AXI Address: 0x%x for minor:%d\n", arg_loc, mod_desc->minor);
+			printk(KERN_INFO"<ioctl>: Setting Peripheral CTL AXI Address: 0x%llx for minor:%d\n", arg_loc, mod_desc->minor);
 			mod_desc->axi_addr_ctl = arg_loc&(0xFFFFFFFFFFFFFFFF);
 			break;
 
@@ -1512,14 +1456,14 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	bytes = 0;
 	bytes_written = 0;
 
-	verbose_printk(KERN_INFO"\n\n");
-	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n");
-	verbose_printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION BEGIN  **************************\n");
-	verbose_printk(KERN_INFO"<pci_write>:                  Attempting to transfer %zu bytes\n", count);
-	verbose_printk(KERN_INFO"<pci_write>: ************************************************************************\n\n");
+	verbose_write_printk(KERN_INFO"\n\n");
+	verbose_write_printk(KERN_INFO"<pci_write>: ************************************************************************\n");
+	verbose_write_printk(KERN_INFO"<pci_write>: ******************** WRITE TRANSACTION BEGIN  **************************\n");
+	verbose_write_printk(KERN_INFO"<pci_write>:                  Attempting to transfer %zu bytes\n", count);
+	verbose_write_printk(KERN_INFO"<pci_write>: ************************************************************************\n\n");
 
-	verbose_printk(KERN_INFO"WRITE file struct offset: %x", filep->f_pos);
-	verbose_printk(KERN_INFO"WRITE offset param: %x", *f_pos);
+	verbose_write_printk(KERN_INFO"WRITE file struct offset: %x", filep->f_pos);
+	verbose_write_printk(KERN_INFO"WRITE offset param: %x", *f_pos);
 
 	if(mod_desc->set_dma_flag == 0)
 	{
@@ -1554,17 +1498,16 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		if (partial_count > mod_desc->dma_size)
 		{
 			remaining_size = count - bytes_written;
-			verbose_printk(KERN_INFO"<pci_write>: the current DMA Buffer size of: 0x%x is not large enough for *remaining* transfer size:%zu bytes\n", mod_desc->dma_size, remaining_size);
+			verbose_write_printk(KERN_INFO"<pci_write>: the current DMA Buffer size of: 0x%x is not large enough for *remaining* transfer size:%zu bytes\n", mod_desc->dma_size, remaining_size);
 			partial_count = mod_desc->dma_size;
 		}
 
-		verbose_printk(KERN_INFO"<pci_write>: the amount of bytes being copied to kernel: %zu\n", partial_count);
+		verbose_write_printk(KERN_INFO"<pci_write>: the amount of bytes being copied to kernel: %zu\n", partial_count);
 
 
 		if (mod_desc->mode == AXI_STREAM_FIFO)
 		{
 
-			//getnstimeofday(&start_time);
 			while(!query_ring_buff(mod_desc, partial_count)) 
 			{
 				/*sleep until the write thread signals priority to pci_write
@@ -1574,20 +1517,16 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				//wake up write thread
 				atomic_set(&thread_q, 1);
 				wake_up_interruptible(&thread_q_head);
-				verbose_printk(KERN_INFO"<pci_write>: waking up write thread\n");
+				verbose_write_printk(KERN_INFO"<pci_write>: waking up write thread a\n");
 
 				//return bytes_written;
 
-				verbose_printk(KERN_INFO"<pci_write>: pci_write is going to sleep ZzZzZzZzZzZzZz\n");
+				verbose_write_printk(KERN_INFO"<pci_write>: pci_write is going to sleep ZzZzZzZzZzZzZz\n");
 				ret = wait_event_interruptible(pci_write_head, atomic_read(mod_desc->pci_write_q) == 1);
 				atomic_set(mod_desc->pci_write_q, 0);
-				verbose_printk(KERN_INFO"<pci_write>: woke up the sleeping pci_write function!!\n");
+				verbose_write_printk(KERN_INFO"<pci_write>: woke up the sleeping pci_write function!!\n");
 				//schedule();
 			}
-			//getnstimeofday(&stop_time);
-			//diff = timespec_sub((stop_time), (start_time));
-			//if(diff.tv_nsec > 1000000)
-			//	printk("<pci_write> ring buffer sleep wait time: %lunS\n", diff.tv_nsec);			
 
 			//if we need to wrap around the ring buffer....
 			wtk = atomic_read(mod_desc->wtk);
@@ -1608,7 +1547,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			//	printk("<pci_write> Copy_from_user time: %lunS\n", diff.tv_nsec);			
 
 			wtk = get_new_ring_pointer(partial_count, wtk, (int)mod_desc->dma_size);
-			verbose_printk(KERN_INFO"<pci_write_%d>:ring_point_%d: WTK : %d\n", minor, minor, wtk);
+			verbose_write_printk(KERN_INFO"<pci_write_%d>:ring_point_%d: WTK : %d\n", minor, minor, wtk);
 
 			spin_lock_irqsave(mod_desc->ring_pointer_write, flags);
 			// --------------   SPIN LOCKED ------------------------//
@@ -1618,7 +1557,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			if(atomic_read(mod_desc->wth) == wtk)
 			{
 				atomic_set(mod_desc->ring_buf_pri, 0);
-				verbose_printk(KERN_INFO"<pci_write_%d>:ring_point_%d: ring buff priority: %d\n", minor, minor, atomic_read(mod_desc->ring_buf_pri));
+				verbose_write_printk(KERN_INFO"<pci_write_%d>:ring_point_%d: ring buff priority: %d\n", minor, minor, atomic_read(mod_desc->ring_buf_pri));
 			}
 			// --------------   SPIN LOCK RELEASE ------------------------//
 			spin_unlock_irqrestore(mod_desc->ring_pointer_write, flags);
@@ -1641,7 +1580,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			//wake up write thread
 			atomic_set(&thread_q, 1);
 			wake_up_interruptible(&thread_q_head);
-			verbose_printk(KERN_INFO"<pci_write_%d>: waking up write thread\n", minor);
+			verbose_write_printk(KERN_INFO"<pci_write_%d>: waking up write thread b\n", minor);
 
 		}
 

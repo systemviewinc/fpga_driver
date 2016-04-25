@@ -374,10 +374,11 @@ void write_thread(struct kfifo* write_fifo)
 	//struct sched_param param = { .sched_priority = 10 };
 	//sched_setscheduler(current, SCHED_FIFO, &param);
 
+	verbose_write_printk(KERN_INFO"<write_thread>: started !!\n");
 	while(!kthread_should_stop()){
 		ret = wait_event_interruptible(thread_q_head, atomic_read(&thread_q) == 1);
 		atomic_set(&thread_q, 0); // the threaded way
-		verbose_printk(KERN_INFO"<write_thread>: woke up the write thread!!\n");
+		verbose_write_printk(KERN_INFO"<write_thread>: woke up the write thread!!\n");
 
 		/*read the fifo*/
 		while (!kfifo_is_empty(write_fifo))
@@ -397,12 +398,12 @@ void write_thread(struct kfifo* write_fifo)
 			if (atomic_read(mod_desc->ring_buf_pri) == 0) //The thread has priority when the atomic variable is 0
 			priority = 1;   
 			d2w =  data_to_transfer(mod_desc, wth, wtk, priority);
-
+			verbose_write_printk(KERN_INFO"<write_thread>: write_fifo !empty d2w=%d\n",d2w);
 			if(d2w != 0)
 			{				
 				write_incomplete = write_data(mod_desc);
 				
-				verbose_printk(KERN_INFO"<write_thread>: write incomplete is: %d\n", write_incomplete);
+				verbose_write_printk(KERN_INFO"<write_thread>: write incomplete is: %d\n", write_incomplete);
 				if (write_incomplete == 1)
 				{
 
@@ -413,13 +414,14 @@ void write_thread(struct kfifo* write_fifo)
 					{
 						if(mod_desc != mod_desc_temp)
 						{
-							verbose_printk(KERN_INFO"<write_thread>: writing file struct back to fifo.....\n");
-							verbose_printk(KERN_INFO"<write_thread>: writing minor : %d  peeked file minor:  %d\n", mod_desc->minor, mod_desc_temp->minor);
+							verbose_write_printk(KERN_INFO"<write_thread>: writing file struct back to fifo.....\n");
+							verbose_write_printk(KERN_INFO"<write_thread>: writing minor : %d  peeked file minor:  %d\n", 
+									     mod_desc->minor, mod_desc_temp->minor);
 							/*add mod_desc back to the fifo*/
 							if(!kfifo_is_full(write_fifo))
 							{
 								spin_lock_irqsave(mod_desc->in_fifo_write, flags);	
-								if(mod_desc->in_fifo_write_flag == 0);
+								if(mod_desc->in_fifo_write_flag == 0)
 								{
 									mod_desc->in_fifo_write_flag = 1;
 									kfifo_in_spinlocked(write_fifo, &mod_desc, 1, &fifo_lock_write);
@@ -431,17 +433,16 @@ void write_thread(struct kfifo* write_fifo)
 
 						}
 						else
-							verbose_printk(KERN_INFO"<write_thread>: identical file struct in fifo, not writing.\n");
+							verbose_write_printk(KERN_INFO"<write_thread>: identical file struct in fifo, not writing.\n");
 					}
-
 					else
 					{
-						verbose_printk(KERN_INFO"<write_thread>: writing file struct back to fifo.....\n");
+						verbose_write_printk(KERN_INFO"<write_thread>: writing file struct back to fifo.....\n");
 						/*add mod_desc back to the fifo*/
 						if(!kfifo_is_full(write_fifo))
 						{
 								spin_lock_irqsave(mod_desc->in_fifo_write, flags);	
-								if(mod_desc->in_fifo_write_flag == 0);
+								if(mod_desc->in_fifo_write_flag == 0)
 								{
 									mod_desc->in_fifo_write_flag = 1;
 									kfifo_in_spinlocked(write_fifo, &mod_desc, 1, &fifo_lock_write);
@@ -458,15 +459,15 @@ void write_thread(struct kfifo* write_fifo)
 
 					}
 
-					verbose_printk(KERN_INFO"<write_thread>: Calling Schedule in the Write Thread\n");
+					verbose_write_printk(KERN_INFO"<write_thread>: Calling Schedule in the Write Thread\n");
 					schedule();
 				}
 			}
 		}
-		verbose_printk(KERN_INFO"<write_thread>: Write Thread is going back to sleep ZzZzZzZzZzZzZzZ\n");
+		verbose_write_printk(KERN_INFO"<write_thread>: Write Thread is going back to sleep ZzZzZzZzZzZzZzZ\n");
 		
 	}
-	verbose_printk("Leaving write thread\n");
+	verbose_write_printk("Leaving write thread\n");
 }
 
 int write_data(struct mod_desc * mod_desc)
@@ -493,12 +494,6 @@ int write_data(struct mod_desc * mod_desc)
 
 	while(d2w>0)
 	{
-		//priority = 0;
-
-		//wth = atomic_read(mod_desc->wth);
-		//wtk = atomic_read(mod_desc->wtk);
-		//if (atomic_read(mod_desc->ring_buf_pri) == 0) //The thread has priority when the atomic variable is 0
-		//	priority = 1;   
 
 		not_rdy_count = 0;
 
@@ -508,29 +503,28 @@ int write_data(struct mod_desc * mod_desc)
 				 * is not ready, we must requeue the mod_desc in the write FIFO*/
 				not_rdy_count++;
 				schedule();
-				if(not_rdy_count == 10)
+				if(not_rdy_count == 10) {
 				/*Here we still have more data to write to the hardware but the fifo
 				 * is not ready, we must requeue the mod_desc in the write FIFO*/
-				{
-				atomic_set(&thread_q_read, 1); // the threaded way
-				wake_up_interruptible(&thread_q_head_read);
-			//	schedule();
-				verbose_printk(KERN_INFO"<soft_isr>: Waking up the read thread\n");
-				verbose_printk("<write_data> Needing to backpressure....\n");
-				return 1;
+					atomic_set(&thread_q_read, 1); // the threaded way
+					wake_up_interruptible(&thread_q_head_read);
+					//	schedule();
+					verbose_printk(KERN_INFO"<soft_isr>: Waking up the read thread\n");
+					verbose_printk("<write_data> Needing to backpressure....\n");
+					return 1;
 				}
 
 		}
 	//	else
 	//	{
-			verbose_printk("<write_data> the write fifo is ready, writing data...\n");
-			verbose_printk("<write_data> data to write is: %d\n", d2w);
+			verbose_write_printk("<write_data> the write fifo is ready, writing data...\n");
+			verbose_write_printk("<write_data> data to write is: %d\n", d2w);
 
 			if (d2w > (int)(mod_desc->file_size))
 			{
-				verbose_printk("<write_data> Too much data for hardware fifo decreasing size\n");
+				verbose_write_printk("<write_data> Too much data for hardware fifo decreasing size\n");
 				d2w = (int)(mod_desc->file_size);
-				verbose_printk("<write_data> Updated data to write is: %d\n", d2w);
+				verbose_write_printk("<write_data> Updated data to write is: %d\n", d2w);
 			}
 
 			write_count = axi_stream_fifo_write((size_t)d2w, mod_desc, (u64)wth);
@@ -604,10 +598,10 @@ int write_fifo_ready(struct mod_desc* mod_desc)
 	//read_reg = (*(mod_desc->kernel_reg_read));    
 	//read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
 
-	verbose_printk(KERN_INFO"<write_fifo_ready>: Initial Transmit Data FIFO Fill Level:%x\n", buf);
+	verbose_write_printk(KERN_INFO"<write_fifo_ready>: Initial Transmit Data FIFO Fill Level:%x\n", buf);
 
 	fifo_empty_level = (((u32)(mod_desc->file_size))/8)-4;  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
-	verbose_printk(KERN_INFO"<write_fifo_ready>: FIFO empty Level: %x\n", fifo_empty_level);
+	verbose_write_printk(KERN_INFO"<write_fifo_ready>: FIFO empty Level: %x read_reg %x\n", fifo_empty_level,read_reg);
 	
 	if (read_reg != fifo_empty_level)
 	{
@@ -1143,11 +1137,11 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 
 		case KEYHOLE_WRITE:
 			bit_vec = 0x00000020;   //the bit for KEYHOLE WRITE
-			verbose_printk(KERN_INFO"	<keyhole_write_set>: Setting the CDMA Keyhole WRITE as ENABLED\n");
+			verbose_cdma_printk(KERN_INFO"	<keyhole_write_set>: Setting the CDMA Keyhole WRITE as ENABLED\n");
 			ret = cdma_config_set(bit_vec, 1, cdma_num);   //value of one means we want to SET the register
 			break;
 
-		default:verbose_printk(KERN_INFO"	<keyhole_setting> no keyhole swtting will be used.\n");
+		default:printk(KERN_INFO"	<keyhole_setting> no keyhole swtting will be used.\n");
 	}
 
 	switch(cdma_num)
@@ -1160,64 +1154,41 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 			axi_cdma_loc = axi_cdma_2;
 			verbose_printk(KERN_INFO"	<pci_dma_transfer>:Using CDMA 2\n");
 			break;
-		default:verbose_printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
+		default:printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
 			return(0);
 	}
 
-	//read the config register
-	//	axi_dest = axi_cdma_loc + CDMA_CR;
-	//	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
-	//	verbose_printk(KERN_INFO"	<pci_dma_transfer>: CDMA Configuration before transmission:%x\n", status);
-
-	//Writing SA_MSB
-	//	direct_write(axi_dest, (void*)&SA_MSB, 4, NORMAL_WRITE);
-	verbose_printk(KERN_INFO"	<pci_dma_transfer>: ********* CDMA TRANSFER INITIALIZATION *************\n\n");
-	//	verbose_printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA_MSB address ('%x') to CDMA at axi address:%llx\n", SA_MSB, axi_dest);
-	//Writing SA_LSB
+	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: ********* CDMA TRANSFER INITIALIZATION *************\n\n");
+	//Writing SA
 	axi_dest = axi_cdma_loc + CDMA_SA;
+	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA_MSB address ('%x') to CDMA at axi address:%llx\n", SA_MSB, axi_dest);
+	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA_LSB address ('%x') to CDMA at axi address:%llx\n", SA_LSB, axi_dest+4);
 
 	direct_write(axi_dest    , (void*)&SA_LSB, 4, NORMAL_WRITE);
 	direct_write(axi_dest + 4, (void*)&SA_MSB, 4, NORMAL_WRITE); 
-	verbose_printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA  address ('%x') to CDMA at axi address:%llx\n", SA, axi_dest);
-	//read the status register
-	axi_dest = axi_cdma_loc + CDMA_SR;
-	//	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
-	//	if (status != 0x02)
-	//		printk(KERN_INFO"<pci_dma_transfer>: ERROR! CDMA Status after writing SA:%x\n", status);
+	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA  address ('%llx') to CDMA at axi address:%llx\n", SA, axi_dest);
 
-	//Writing DA_MSB
-	//	axi_dest = axi_cdma + CDMA_DA_MSB;
-	//	direct_write(axi_dest, (void*)&DA_MSB, 4, NORMAL_WRITE);
-	//	verbose_printk(KERN_INFO"	<pci_dma_transfer>: writing DA_MSB address ('%x') to CDMA at axi address:%llx\n", DA_MSB, axi_dest);
-	//Writing DA_LSB
+	//Writing DA
 	axi_dest = axi_cdma_loc + CDMA_DA;
+
+	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: writing DA_MSB address ('%x') to CDMA at axi address:%llx\n", DA_MSB, axi_dest);
+	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: writing DA_LSB address ('%x') to CDMA at axi address:%llx\n", DA_LSB, axi_dest+4);
+
 	direct_write(axi_dest,   (void*)&DA_LSB, 4, NORMAL_WRITE);
 	direct_write(axi_dest+4, (void*)&DA_MSB, 4, NORMAL_WRITE);
-	verbose_printk(KERN_INFO"	<pci_dma_transfer>: writing DA address ('%x') to CDMA at axi address:%llx\n", DA, axi_dest);
+	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: writing DA address ('%llx') to CDMA at axi address:%llx\n", DA, axi_dest);
 	//read the status register
-	axi_dest = axi_cdma_loc + CDMA_SR;
-	//	direct_read(axi_dest, (void*)&status, 4, NORMAL_READ);
-	//	if (status != 0x02)
-	//		printk(KERN_INFO"<pci_dma_transfer>: ERROR CDMA Status after writing DA:%x\n", status);
 
 	//Writing BTT
 	axi_dest = axi_cdma_loc + CDMA_BTT;
 	verbose_printk(KERN_INFO"	<pci_dma_transfer>: writing bytes to transfer ('%d') to CDMA at axi address:%llx\n", BTT, axi_dest);
 	direct_write(axi_dest, (void*)&BTT, 4, NORMAL_WRITE);
 
-	verbose_printk(KERN_INFO"	<pci_dma_transfer>: ********* CDMA TRANSFER INITIALIZED *************\n");
+	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: ********* CDMA TRANSFER INITIALIZED *************\n");
 
 	cdma_idle_poll(cdma_num);
 
-	//atomic_set(&cdma_atom[cdma_num], 0);
-	//	ret = wait_event_interruptible(wq, atomic_read(&cdma_atom[cdma_num]) != 0);
-
-	//	if (ret != 0)
-	//		printk(KERN_INFO"	<pci_dma_transfer>: WAIT EVENT FORCED FROM USER SPACE, CDMA %x Never interrupted.\n", cdma_num);
-
-	//atomic_set(&cdma_atom[cdma_num], 0);
-
-	verbose_printk(KERN_INFO"	<pci_dma_transfer>: returned from ISR.\n");
+	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: returned from ISR.\n");
 
 	// Acknowledge the CDMA and check for error status
 	ack_status = cdma_ack(cdma_num);
@@ -1228,7 +1199,7 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 		ret = cdma_config_set(bit_vec, 0, cdma_num);	//unsets the keyhole configuration
 	}
 
-	verbose_printk(KERN_INFO"	<pci_dma_transfer>: ********* CDMA TRANSFER FINISHED *************\n");
+	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: ********* CDMA TRANSFER FINISHED *************\n");
 
 	cdma_usage_cnt = cdma_usage_cnt + 1;
 
@@ -1265,7 +1236,7 @@ void cdma_idle_poll(int cdma_num)
 			axi_cdma_loc = axi_cdma_2;
 			break;
 		default:
-			verbose_printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
+			printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
 			return;
 	}
 
@@ -1284,8 +1255,6 @@ void cdma_idle_poll(int cdma_num)
 		printk(KERN_INFO"	BAD CDMA status:%x\n", status);
 		printk(KERN_INFO"       If using PCIe, add a buffer to axi interconnect in front of PCIe Slave input\n");
 	}
-	//	else
-	//	printk(KERN_INFO"	<cdma_ack>: CDMA status:%x\n", status);
 
 }
 
@@ -1432,18 +1401,18 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_
 	u32 fifo_empty_level;
 	u32 buf, read_reg;
 
-	verbose_printk(KERN_INFO"<axi_stream_fifo_write>: writing to the AXI Stream FIFO\n");
-	verbose_printk(KERN_INFO"<axi_stream_fifo_write>: number of bytes to write:%zu\n", count);
+	verbose_write_printk(KERN_INFO"<axi_stream_fifo_write>: writing to the AXI Stream FIFO\n");
+	verbose_write_printk(KERN_INFO"<axi_stream_fifo_write>: number of bytes to write:%zu\n", count);
 
 	init_write = *((u32*)(mod_desc->dma_write));
 	dma_offset_write = ((u64)mod_desc->dma_offset_write) + ring_pointer_offset;
 	dma_offset_internal_read = (u64)mod_desc->dma_offset_internal_read;
 	dma_offset_internal_write = (u64)mod_desc->dma_offset_internal_write;
 
-	verbose_printk(KERN_INFO"<pci_write>: writing peripheral with starting value: %x\n", init_write);
-	verbose_printk(KERN_INFO"<pci_write>: DMA offset write value: %llx\n", dma_offset_write);
-	verbose_printk(KERN_INFO"<pci_write>: DMA internal offset write value: %llx\n", dma_offset_internal_write);
-	verbose_printk(KERN_INFO"<pci_write>: DMA internal offset read value: %llx\n", dma_offset_internal_read);
+	verbose_write_printk(KERN_INFO"<pci_write>: writing peripheral with starting value: %x\n", init_write);
+	verbose_write_printk(KERN_INFO"<pci_write>: DMA offset write value: %llx\n", dma_offset_write);
+	verbose_write_printk(KERN_INFO"<pci_write>: DMA internal offset write value: %llx\n", dma_offset_internal_write);
+	verbose_write_printk(KERN_INFO"<pci_write>: DMA internal offset read value: %llx\n", dma_offset_internal_read);
 
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFV;  // the transmit FIFO vacancy
 
@@ -1457,24 +1426,13 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_
 		return -1;
 	}
 	read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
-	//read_reg = (*(mod_desc->kernel_reg_read));    
-	//read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
-
-	//printk(KERN_INFO"<pci_write>: Initial Transmit Data FIFO Fill Level:%x\n", buf);
-
 	/*This While loop will continuously loop until the axi streaming fifo is empty
 	 * if there is a holdup in data, we are stuck here....  */
 
 	fifo_empty_level = (((u32)(mod_desc->file_size))/8)-4;  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
-	//	fifo_empty_level = (((u32)(mod_desc->file_size))/32)-4;  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
+	//fifo_empty_level = (((u32)(mod_desc->file_size))/32)-4;  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
 	//fifo_empty_level = (u32)(((u32)(mod_desc->file_size)/(u32)dma_byte_width)-4);  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
 
-	//printk(KERN_INFO"<pci_write>: (0x%x/32)-4 = 0x%x \n", (mod_desc->file_size), fifo_empty_level);
-	//printk(KERN_INFO"<pci_write>: The Calculated Fifo Empty level is: %x\n", fifo_empty_level);
-	//	while (*(mod_desc->kernel_reg_read) != 0x01fc)  //1fc is an empty 512 depth fifo
-	//	while (*(mod_desc->kernel_reg_read) != 0x07fc)  //7fc is an empty 2048 depth fifo
-	//	while (*(mod_desc->kernel_reg_read) != 0x0ffc)  //1fc is an empty 512 depth fifo
-	//	while (*(mod_desc->kernel_reg_read) != fifo_empty_level)  //1fc is an empty 512 depth fifo
 	while (read_reg != fifo_empty_level)  //1fc is an empty 512 depth fifo
 	{
 		printk(KERN_INFO"<axi_streaming_fifo_write>: stuck waiting for hardware fifo....\n");
@@ -1500,7 +1458,7 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_
 		//printk(KERN_INFO"<pci_write>: The Calculated Fifo Empty level is: %x\n", fifo_empty_level);
 	}
 	
-	verbose_printk(KERN_INFO"<axi_streaming_fifo_write>: hardware FIFO is OK to write to\n");
+	verbose_write_printk(KERN_INFO"<axi_streaming_fifo_write>: hardware FIFO is OK to write to\n");
 
 	/*Set keyhole*/
 	keyhole_en = KEYHOLE_WRITE;
