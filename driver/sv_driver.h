@@ -246,34 +246,57 @@ struct statistics
  * @brief This function is used to initiate a CDMA Transfer. It requires
  * a locked CDMA resource an AXI Start Address, AXI Destination Address, 
  * and a Keyhole setting.
+ * @param SA 64bit Starting Address of DMA transfer.
+ * @param DA 64bit Destination Address of DMA transfer.
+ * @param BTT Number of bytes to transfer.
+ * @param keyhole_en Instructs the CDMA to to a keyhole transaction or not
+ * @param cdma_num Instructs which CDMA to use (Assumes it has been locked)
 */
 int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num);
 /**
  * @brief This function is used to acknowledge a CDMA transaction. It will check
  * for any failures.
+ * @param cdma_num Instructs which CDMA to use (Assumes it has been locked)
 */
 int cdma_ack(int cdma_num);
 /**
  * @brief This asserts or deasserts hte keyhole setting in the CDMA register.
+ * @param cdma_num Instructs which CDMA to use (Assumes it has been locked)
+ * @param bit_vec 32b bit vector to set the CDMA register
+ * @param set (1) or unset (0) the bits.
 */
 int cdma_config_set(u32 bit_vec, int set_unset, int cdma_num);
 /**
  * @brief This function issues a read from the host to the desired axi address.
+ * @param axi_address 64b AXI address to read from.
+ * @param buf the address of store the read data
+ * @param count the number of bytes to read
+ * @param transfer_type determines keyhole read or regular read
 */
 int direct_read(u64 axi_address, void *buf, size_t count, int transfer_type);
 /**
  * @brief This function issues a write from the host to the desired axi address.
+ * @param axi_address 64b AXI address to write to.
+ * @param buf the address to write the data from
+ * @param count the number of bytes to write
+ * @param transfer_type determines keyhole write or regular write
 */
 int direct_write(u64 axi_address, void *buf, size_t count, int transfer_type);
 /**
  * @brief This function determines whether the axi peripheral can be read from/written to
  * directly or if it needs to use the DMAs. Once it decides it calls the apporpiate functions
  * to transfer data.
+ * @param axi_address 64b AXI address to act on.
+ * @param buf the system memory address to act on if direct R/W is selected.
+ * @param count The amount of data to R/W
+ * @param transfer_type determines R/W or R/W with keyhole.
+ * @param dma_offset The DMA offset of memory region if DMA transfer is selected.
 */
 int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u64 dma_offset);
 /**
  * @brief This function is used for interrupt processing. it returns the integer value of the 
  * least significant set bit position.
+ * @param vec The 32b vector to convert to an integer (converts to integer of least sig set bit)
 */
 int vec2num(u32 vec);
 /**
@@ -284,84 +307,118 @@ int cdma_query(void);
 /**
  * @brief This function is used for interrupt processing. it returns the one-hot vector value 
  * of the input num as a position.
+ * @param num converts this number to one hot vector
 */
 u32 num2vec(int num);
 /**
  * @brief This function initializes the CDMA.
+ * @param cdma_num Instructs which CDMA to use (Assumes it has been locked)
+ * @param cdma_address the AXI address of the CDMA
+ * @param dma_addr_base Used to set the dma translation address to the PCIe control reg.
 */
 int cdma_init(int cdma_num, uint cdma_address, u32 dma_addr_base);
 /**
  * @brief This function writes the translation address (The DMA Hardware base address) to the
  * PCIe control register. 
+ * @param axi_address The 64b AXI address of the PCIe Control interface (set through insmod). 
+ * @param dma_addr_base Used to set the dma translation address to the PCIe control reg.
 */
 int pcie_ctl_init(u64 axi_address, u32 dma_addr_base);
 //void pcie_m_init(int cdma_num);
 /**
- * @brief This function initialized the interrupt controller in the FPGA. 
+ * @brief This function initialized the interrupt controller in the FPGA.
+ * @param axi_address The 64b AXI address of the Interrupt Controller (set through insmod). 
 */
 void int_ctlr_init(u64 axi_address);
 /**
  * @brief This function allocates the DMA regions for the peripheral. 
+ * @param mod_desc the struct containing all the file variables.
+ * @param dma_buffer_base the current DMA allocated region offset to be assigned
+ * @param dma_buffer_size The size of the DMA buffer. 
 */
 int dma_file_init(struct mod_desc *mod_desc, void *dma_buffer_base, u64 dma_buffer_size);
 /**
  * @brief This function performs calls appropriate functions for writing to the AXI Streaming FIFO. 
+ * @param count The number of bytes to write to the AXI streaming FIFO.
+ * @param mod_desc The struct containing all the file variables.
+ * @param ring_pointer_offset The current offset of the ring pointer in memory for data to write.
 */
 size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_pointer_offset);
 /**
  * @brief This function performs calls appropriate functions for Reading from the AXI Streaming FIFO. 
+ * @param count The number of bytes to read from the AXI streaming FIFO.
+ * @param mod_desc The struct containing all the file variables.
+ * @param ring_pointer_offset The current offset of the ring pointer in memory to store data.
 */
 size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_pointer_offset);
 /**
  * @brief This function initializes the AXI Streaming FIFO. 
+ * @param mod_desc The struct containing all the file variables.
 */
 int axi_stream_fifo_init(struct mod_desc * mod_desc);
 /**
  * @brief This function causes the process to block (sleep) until CDMA completion interrupt is 
  * received.  It is currently not being uses because we found polling operates much faster. 
+ * @param cdma_num Instructs which CDMA to use (Assumes it has been locked)
 */
 void cdma_wait_sleep(int cdma_num);
 /**
  * @brief This function continuously polls the CDMA until the completion bit is read. 
+ * @param cdma_num Instructs which CDMA to use (Assumes it has been locked)
 */
 void cdma_idle_poll(int cdma_num);
 /**
  * @brief This function operates on it's own thread after insmod. It is used to handle all AXI-Streaming
- * write transfers.  It reads from the write ring buffers and writes the data to hardware. 
+ * write transfers.  It reads from the write ring buffers and writes the data to hardware.
+ * @param write_fifo the kernel FIFO data structure for the global write FIFO. 
 */
 void write_thread(struct kfifo* write_fifo);
 /**
  * @brief This function operates on it's own thread after insmod. It is used to handle all AXI-Streaming
  * read transfers.  It reads from the hardware and stores data in the Read Ring Buffer. It wakes up the 
  * poll method for the file upon receiving new data. 
+ * @param read_fifo the kernel FIFO data structure for the global read FIFO. 
 */
 void read_thread(struct kfifo* read_fifo);
 /**
  * @brief This function is called by the driver to create the write thread. 
+ * @param mod_desc The struct containing all the file variables.
 */
 struct task_struct* create_thread(struct mod_desc *mod_desc);
 /**
  * @brief This function is called by the driver to create the read thread. 
+ * @param read_fifo the kernel FIFO data structure for the global read FIFO. 
 */
 struct task_struct* create_thread_read(struct kfifo* read_fifo);
 /**
  * @brief This function is called by the write thread to write data to the FPGA. 
+ * @param mod_desc The struct containing all the file variables.
 */
 int write_data(struct mod_desc* mod_desc);
 /**
- * @brief This function is will update a ring pointer given the amount of bytes written or read. 
+ * @brief This function is will update a ring pointer given the amount of bytes written or read.
+ * @param bytes_written The number of bytes to advance the ring pointer
+ * @param ring_pointer_offset The current ring pointer offset.
+ * @param file_size The size of the ring buffer to handle wrap around cases. 
 */
 int get_new_ring_pointer(int bytes_written, int ring_pointer_offset, int file_size);
 /**
  * @brief This function will determine if the data size has room in the ring buffer 
+ * @param mod_desc The struct containing all the file variables.
+ * @param size The amount of data required to store to ring buffer.
 */
 int query_ring_buff(struct mod_desc* mod_desc, size_t size); 
 /**
- * @brief This function returns the amount of data available in the ring buffer 
+ * @brief This function returns the amount of data/space available in the ring buffer 
+ * @param mod_desc The struct containing all the file variables.
+ * @param tail The ring pointer offset at the tail of the ring buffer (starting point)
+ * @param head The ring pointer offset at the head of the ring buffer (ending point)
+ * @param priorty setting this to 1 gives priority if head==tail.
 */
 int data_to_transfer(struct mod_desc *mod_desc, int tail, int head, int priority);
 /**
  * @brief This function checks if there is any available data to be read from an axi stream fifo. 
+ * @param mod_desc The struct containing all the file variables.
 */
 size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc);
 /**
@@ -370,6 +427,7 @@ size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc);
 int read_data(struct mod_desc * mod_desc);
 /**
  * @brief This function checks to see if the axi streaming fifo is empty. 
+ * @param mod_desc The struct containing all the file variables.
 */
 int write_fifo_ready(struct mod_desc* mod_desc);
 // ******************************************************************
