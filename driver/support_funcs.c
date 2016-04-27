@@ -787,31 +787,31 @@ int cdma_init(int cdma_num, uint cdma_addr, u32 dma_addr_base)
 			return -1;
 	}
 
-	verbose_printk(KERN_INFO"<cdma_%x_init>: *******************Setting CDMA AXI Address:%llx ******************************************\n", cdma_num, axi_cdma_loc);
+	verbose_cdma_printk(KERN_INFO"<cdma_%x_init>: *******************Setting CDMA AXI Address:%llx ******************************************\n", cdma_num, axi_cdma_loc);
 	cdma_set[cdma_num] = 1;
 
 	/*Issue a Soft Reset*/
 	axi_dest = axi_cdma_loc + CDMA_CR;
 	cdma_status = 0x00000004;
-	verbose_printk(KERN_INFO"<cdma_%x_init>: sending a soft reset to the CDMA\n", cdma_num);
+	verbose_cdma_printk(KERN_INFO"<cdma_%x_init>: sending a soft reset to the CDMA\n", cdma_num);
 	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE, 0);
 
 	/*Check the current status*/
 	axi_dest = axi_cdma_loc + CDMA_SR;
 	//			direct_read(axi_dest, (void*)&cdma_status, 4, NORMAL_READ);
 	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0);
-	verbose_printk(KERN_INFO"<cdma_%x_init>: CDMA status before configuring:%x\n", cdma_num, cdma_status);
+	verbose_cdma_printk(KERN_INFO"<cdma_%x_init>: CDMA status before configuring:%x\n", cdma_num, cdma_status);
 
 	/*Check the current config*/
 	axi_dest = axi_cdma_loc + CDMA_CR;
 	//			direct_read(axi_dest, (void*)&cdma_status, 4, NORMAL_READ);
 	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0);
-	verbose_printk(KERN_INFO"<cdma_%x_init>: CDMA config before configuring:%x\n", cdma_num, cdma_status);
+	verbose_cdma_printk(KERN_INFO"<cdma_%x_init>: CDMA config before configuring:%x\n", cdma_num, cdma_status);
 
 	/*clear any pre existing interrupt*/
 	axi_dest = axi_cdma_loc + CDMA_SR;
 	cdma_status = 0x00001000;
-	verbose_printk(KERN_INFO"<cdma_%x_init>: attempting to write:%x to cdma status reg\n", cdma_num, cdma_status);
+	verbose_cdma_printk(KERN_INFO"<cdma_%x_init>: attempting to write:%x to cdma status reg\n", cdma_num, cdma_status);
 	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE, 0);
 
 	/*set the interrupt on complete bit*/
@@ -822,12 +822,12 @@ int cdma_init(int cdma_num, uint cdma_addr, u32 dma_addr_base)
 	/*Check the current status*/
 	axi_dest = axi_cdma_loc + CDMA_SR;
 	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0);
-	verbose_printk(KERN_INFO"<cdma_%x_init>: CDMA status after configuring:%x\n", cdma_num, cdma_status);
+	verbose_cdma_printk(KERN_INFO"<cdma_%x_init>: CDMA status after configuring:%x\n", cdma_num, cdma_status);
 
 	/*Check the current config*/
 	axi_dest = axi_cdma_loc + CDMA_CR;
 	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0);
-	verbose_printk(KERN_INFO"<cdma_%x_init>: CDMA config after configuring:%x\n", cdma_num, cdma_status);
+	verbose_cdma_printk(KERN_INFO"<cdma_%x_init>: CDMA config after configuring:%x\n", cdma_num, cdma_status);
 
 
 	/*This checks to see if the user has set the pcie_ctl base address
@@ -841,10 +841,10 @@ int cdma_init(int cdma_num, uint cdma_addr, u32 dma_addr_base)
 
 		//write DMA addr to PCIe CTL for address translation
 		ret = data_transfer(axi_dest, (void *)(&dma_addr_loc), 4, NORMAL_WRITE, 0);
-		verbose_printk(KERN_INFO"<cdma_init>: writing dma address ('%x') to pcie_ctl at AXI address:%llx\n", dma_addr_loc, axi_dest);
+		verbose_cdma_printk(KERN_INFO"<cdma_init>: writing dma address ('%x') to pcie_ctl at AXI address:%llx\n", dma_addr_loc, axi_dest);
 		//check the pcie-ctl got the translation address
 		ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0);
-		verbose_printk(KERN_INFO"<cdma_init>: PCIe CTL register:%x\n", cdma_status);
+		verbose_cdma_printk(KERN_INFO"<cdma_init>: PCIe CTL register:%x\n", cdma_status);
 
 	}
 
@@ -1161,8 +1161,8 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: ********* CDMA TRANSFER INITIALIZATION *************\n\n");
 	//Writing SA
 	axi_dest = axi_cdma_loc + CDMA_SA;
-	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA_MSB address ('%x') to CDMA at axi address:%llx\n", SA_MSB, axi_dest);
-	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA_LSB address ('%x') to CDMA at axi address:%llx\n", SA_LSB, axi_dest+4);
+	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA_LSB address ('%x') to CDMA at axi address:%llx\n", SA_LSB, axi_dest);
+	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: writing dma SA_MSB address ('%x') to CDMA at axi address:%llx\n", SA_MSB, axi_dest+4);
 
 	direct_write(axi_dest    , (void*)&SA_LSB, 4, NORMAL_WRITE);
 	direct_write(axi_dest + 4, (void*)&SA_MSB, 4, NORMAL_WRITE); 
@@ -1171,8 +1171,8 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 	//Writing DA
 	axi_dest = axi_cdma_loc + CDMA_DA;
 
-	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: writing DA_MSB address ('%x') to CDMA at axi address:%llx\n", DA_MSB, axi_dest);
-	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: writing DA_LSB address ('%x') to CDMA at axi address:%llx\n", DA_LSB, axi_dest+4);
+	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: writing DA_LSB address ('%x') to CDMA at axi address:%llx\n", DA_LSB, axi_dest);
+	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: writing DA_MSB address ('%x') to CDMA at axi address:%llx\n", DA_MSB, axi_dest+4);
 
 	direct_write(axi_dest,   (void*)&DA_LSB, 4, NORMAL_WRITE);
 	direct_write(axi_dest+4, (void*)&DA_MSB, 4, NORMAL_WRITE);
@@ -1181,14 +1181,12 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 
 	//Writing BTT
 	axi_dest = axi_cdma_loc + CDMA_BTT;
-	verbose_printk(KERN_INFO"	<pci_dma_transfer>: writing bytes to transfer ('%d') to CDMA at axi address:%llx\n", BTT, axi_dest);
+	verbose_cdma_rintk(KERN_INFO"	<pci_dma_transfer>: writing bytes to transfer ('%d') to CDMA at axi address:%llx\n", BTT, axi_dest);
 	direct_write(axi_dest, (void*)&BTT, 4, NORMAL_WRITE);
 
 	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: ********* CDMA TRANSFER INITIALIZED *************\n");
 
 	cdma_idle_poll(cdma_num);
-
-	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: returned from ISR.\n");
 
 	// Acknowledge the CDMA and check for error status
 	ack_status = cdma_ack(cdma_num);

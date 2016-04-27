@@ -43,11 +43,16 @@
 //#define verbose_printk printk
 #define verbose_write_printk printk
 #define verbose_cdma_printk printk
+#define verbose_isr_printk printk
+//#define verbose_printk printk
 #ifndef verbose_cdma_printk
 #define verbose_cdma_printk(...)
 #endif
 #ifndef verbose_write_printk
 #define verbose_write_printk(...)
+#endif
+#ifndef verbose_isr_printk
+#define verbose_isr_printk(...)
 #endif
 #ifndef verbose_printk
 #define verbose_printk(...)

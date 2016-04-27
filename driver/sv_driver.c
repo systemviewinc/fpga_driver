@@ -781,7 +781,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	int i;
 	unsigned long flags;
 
-	verbose_printk(KERN_INFO"<pci_isr>:						Entered the ISR");
+	verbose_isr_printk(KERN_INFO"<pci_isr>:	Entered the ISR (%llx)",axi_interr_ctrl);
 
 	//	tasklet_schedule(&isr_tasklet);
 
@@ -794,24 +794,24 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	/*This is the interrupt status register*/
 	axi_dest = axi_interr_ctrl + INT_CTRL_ISR;
 	ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
-	verbose_printk(KERN_INFO"<soft_isr>: interrupt status register vector is: ('%x')\n", status);
+	verbose_isr_printk(KERN_INFO"<soft_isr>: interrupt status register vector is: ('%x')\n", status);
 
 
 	while(status > 0)
 	{
 		int_num = vec2num(status);
-		verbose_printk(KERN_INFO"<soft_isr>: interrupt number is: ('%d')\n", int_num);
+		verbose_isr_printk(KERN_INFO"<soft_isr>: interrupt number is: ('%d')\n", int_num);
 		device_mode = mod_desc_arr[int_num]->mode;
 
 		if (device_mode == CDMA)
 		{
-			verbose_printk(KERN_INFO"<soft_isr>: this interrupt is from the CDMA\n");
+			verbose_isr_printk(KERN_INFO"<soft_isr>: this interrupt is from the CDMA\n");
 			vec_serviced = vec_serviced | num2vec(int_num);
 		}
 
 		else if (device_mode == AXI_STREAM_FIFO)
 		{
-			verbose_printk(KERN_INFO"<soft_isr>: this interrupt is from a user peripheral\n");
+			verbose_isr_printk(KERN_INFO"<soft_isr>: this interrupt is from a user peripheral\n");
 
 			/*If is it a streaming peripheral, we want to write to the FIFO and use the
 			  write thread and ring buffer*/
@@ -820,7 +820,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 			if(mod_desc_arr[int_num]->in_fifo_flag == 0)	
 			{
 				if (kfifo_len(&read_fifo) > 4)	
-					verbose_printk(KERN_INFO"<isr>: kfifo stored elements: %d\n", kfifo_len(&read_fifo));
+					verbose_isr_printk(KERN_INFO"<isr>: kfifo stored elements: %d\n", kfifo_len(&read_fifo));
 
 				if(!kfifo_is_full(&read_fifo))
 					kfifo_in_spinlocked(&read_fifo, &mod_desc_arr[int_num], 1, &fifo_lock);
@@ -833,14 +833,14 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 			//for ring buffer peripherals (axi streaming)
 			atomic_set(&thread_q_read, 1); // the threaded way
 			wake_up_interruptible(&thread_q_head_read);
-			verbose_printk(KERN_INFO"<soft_isr>: Waking up the read thread\n");
+			verbose_isr_printk(KERN_INFO"<soft_isr>: Waking up the read thread\n");
 		}
 		else
 		{
 			atomic_set(mod_desc_arr[int_num]->atomic_poll, 1);  //non threaded way
 			//for non ring buffer peripherals (memory)
 			wake_up(&wq_periph);
-			verbose_printk(KERN_INFO"<soft_isr>: Waking up the Poll()\n");
+			verbose_isr_printk(KERN_INFO"<soft_isr>: Waking up the Poll()\n");
 		}
 
 		vec_serviced = vec_serviced | num2vec(int_num);
@@ -859,7 +859,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	}
 
 
-	verbose_printk(KERN_INFO"<soft_isr>: All interrupts serviced. The following Vector is acknowledged: %x\n", vec_serviced);
+	verbose_isr_printk(KERN_INFO"<soft_isr>: All interrupts serviced. The following Vector is acknowledged: %x\n", vec_serviced);
 
 	if (vec_serviced > 0)
 	{
@@ -868,7 +868,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 		{
 			//	cdma_comp[1] = 1;      //condition for wake_up
 			atomic_set(&cdma_atom[1], 1);
-			verbose_printk(KERN_INFO"<soft_isr>: Waking up CDMA 1\n");
+			verbose_isr_printk(KERN_INFO"<soft_isr>: Waking up CDMA 1\n");
 			wake_up_interruptible(&wq);
 		}
 
@@ -876,7 +876,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 		{
 			//	cdma_comp[2] = 1;      //condition for wake_up
 			atomic_set(&cdma_atom[2], 1);
-			verbose_printk(KERN_INFO"<soft_isr>: Waking up CDMA 2\n");
+			verbose_isr_printk(KERN_INFO"<soft_isr>: Waking up CDMA 2\n");
 			wake_up_interruptible(&wq);
 		}
 
@@ -894,7 +894,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 		}
 	}
 
-	verbose_printk(KERN_INFO"<soft_isr>:						Exiting ISR\n");
+	verbose_isr_printk(KERN_INFO"<soft_isr>:						Exiting ISR\n");
 
 	return IRQ_HANDLED;
 
