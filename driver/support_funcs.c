@@ -1181,7 +1181,7 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 
 	//Writing BTT
 	axi_dest = axi_cdma_loc + CDMA_BTT;
-	verbose_cdma_rintk(KERN_INFO"	<pci_dma_transfer>: writing bytes to transfer ('%d') to CDMA at axi address:%llx\n", BTT, axi_dest);
+	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: writing bytes to transfer ('%d') to CDMA at axi address:%llx\n", BTT, axi_dest);
 	direct_write(axi_dest, (void*)&BTT, 4, NORMAL_WRITE);
 
 	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: ********* CDMA TRANSFER INITIALIZED *************\n");
