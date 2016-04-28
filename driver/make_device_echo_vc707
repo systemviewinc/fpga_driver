@@ -1,4 +1,4 @@
-insmod vsi_driver_2.ko pci_devName="vsi_driver_2" cdma_2_address="0x40002000" dma_byte_width=32 cdma_address="0x40001000" device_id="0x7028" dma_file_size=16384 dma_system_size=4194304 driver_type=1 enable_cdma_2=1 int_ctlr_address="0x40000000" major=241 pcie_ctl_address="0x40003000" pcie_m_address="0" 
+insmod vsi_driver_1.ko pci_devName="vsi_driver_1" cdma_2_address="0x40002000" dma_byte_width=32 cdma_address="0x40001000" device_id="0x7022" dma_file_size=16384 dma_system_size=4194304 driver_type=1 enable_cdma_2=1 int_ctlr_address="0x40000000" major=242 pcie_ctl_address="0x40003000" pcie_m_address="0" 
 
 rm -rf /dev/vsi_system_vc709_packet_p_arg_2_seq_o
 rm -rf /dev/vsi_system_vc709_packet_p_arg_1_seq_i
@@ -9,34 +9,34 @@ rm -rf /dev/vsi_read_2
 rm -rf /dev/vsi_write_3
 rm -rf /dev/vsi_read_3
 
-mknod /dev/vsi_system_vc709_packet_p_arg_2_seq_o c 241 1
+mknod /dev/vsi_system_vc709_packet_p_arg_2_seq_o c 242 1
 chown root /dev/vsi_system_vc709_packet_p_arg_2_seq_o
 chmod 666  /dev/vsi_system_vc709_packet_p_arg_2_seq_o
 
-mknod /dev/vsi_system_vc709_packet_p_arg_1_seq_i c 241 2
+mknod /dev/vsi_system_vc709_packet_p_arg_1_seq_i c 242 2
 chown root /dev/vsi_system_vc709_packet_p_arg_1_seq_i
 chmod 666  /dev/vsi_system_vc709_packet_p_arg_1_seq_i
 
-mknod /dev/vsi_write c 241 3
+mknod /dev/vsi_write c 242 3
 chown root /dev/vsi_write
 chmod 666  /dev/vsi_write
 
-mknod /dev/vsi_read c 241 4
+mknod /dev/vsi_read c 242 4
 chown root /dev/vsi_read
 chmod 666  /dev/vsi_read
 
-mknod /dev/vsi_write_2 c 241 5
+mknod /dev/vsi_write_2 c 242 5
 chown root /dev/vsi_write_2
 chmod 666  /dev/vsi_write_2
 
-mknod /dev/vsi_read_2 c 241 6
+mknod /dev/vsi_read_2 c 242 6
 chown root /dev/vsi_read_2
 chmod 666  /dev/vsi_read_2
 
-mknod /dev/vsi_write_3 c 241 7
+mknod /dev/vsi_write_3 c 242 7
 chown root /dev/vsi_write_3
 chmod 666  /dev/vsi_write_3
 
-mknod /dev/vsi_read_3 c 241 8
+mknod /dev/vsi_read_3 c 242 8
 chown root /dev/vsi_read_3
 chmod 666  /dev/vsi_read_3

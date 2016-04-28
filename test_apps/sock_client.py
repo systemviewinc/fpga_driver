@@ -17,8 +17,8 @@ class Socket_session():
         port = self.port
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
         s.connect((host, port)) 
-        self.t = threading.Thread(target=self.tx_data, args=(port, 16384, s, 32768))
-        self.r = threading.Thread(target=self.rx_data, args=(s, 16384, 32768))
+        self.t = threading.Thread(target=self.tx_data, args=(port, 64, s, 64))
+        self.r = threading.Thread(target=self.rx_data, args=(s, 64, 64))
         self.t.start()
         self.r.start()
         #pool = ThreadPool(processes=2)
