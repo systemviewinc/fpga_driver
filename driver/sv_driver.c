@@ -694,8 +694,6 @@ static int __init sv_driver_init(void)
 
 			ids[0].vendor =  PCI_VENDOR_ID_XILINX;
 			ids[0].device =  (u32)device_id;
-			//ids[1].vendor = PCI_VENDOR_ID_XILINX;
-			//ids[1].device = (u32)device_id;
 
 			strcpy(pci_devName_const, pci_devName);
 			printk("using driver name: %s\n", pci_devName_const);
@@ -864,6 +862,11 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	if (vec_serviced > 0)
 	{
 		/* The CDMA vectors (1 and 2) */
+
+		/*The CDMA vectors are currently not being used unless we go back to the CDMAs sending interrupts.
+		 * Right now we are polling the IDLE bit and it works much faster than waiting for the interrupt
+		 */
+
 		if ((vec_serviced & 0x01) == 0x01)
 		{
 			//	cdma_comp[1] = 1;      //condition for wake_up
@@ -986,10 +989,6 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->ip_not_ready = 0;
 	s->atomic_poll = atomic_poll;
 	s->set_dma_flag = 0;
-	//	s->thread_struct_write = NULL;
-	//	s->thread_struct_read = NULL;
-	//	s->thread_q = 0;
-	//	s->thread_q_read = thread_q_read;
 	s->wth = wth;
 	s->wtk = wtk;
 	s->rfh = rfh;
@@ -1040,30 +1039,9 @@ int pci_release(struct inode *inode, struct file *filep)
 	kfree((const void*)mod_desc->start_time);
 	kfree((const void*)mod_desc->stop_time);
 
-	//	mod_desc->thread_q = 1;
-	//	wake_up_interruptible(&thread_q_head);
-	//	while(kthread_stop(mod_desc->thread_struct_write)<0)
-	//	{
-	//		schedule();
-	//		mod_desc->thread_q = 1;
-	//		wake_up_interruptible(&thread_q_head);
-	//		printk(KERN_INFO"<pci_release>: stuck closing tx thread\n");
-	//	}
-	//
-	//	atomic_set(mod_desc->thread_q_read, 1);
-	//	wake_up_interruptible(&thread_q_head_read);
-	//	while(kthread_stop(mod_desc->thread_struct_read)<0)
-	//	{
-	//		schedule();
-	//		printk(KERN_INFO"<pci_release>: stuck closing rx thread\n");
-	//		atomic_set(mod_desc->thread_q_read, 1);
-	//		atomic_set(mod_desc->ring_buf_pri_read, 0);
-	//		wake_up_interruptible(&thread_q_head_read);
-	//	}
-	//
 	//	kfree((const void*)filep->private_data);
 
-	//printk(KERN_INFO"<pci_release>: Successfully closed file minor number: %d\n", mod_desc->minor);
+	verbose_printk(KERN_INFO"<pci_release>: Successfully closed file minor number: %d\n", mod_desc->minor);
 
 	return SUCCESS;
 }
@@ -1401,11 +1379,10 @@ int pci_poll(struct file *filep, poll_table * pwait)
 	 *peripheral has data*/
 
 	poll_wait(filep, &wq_periph, pwait);
-	//	poll_wait(filep, mod_desc->iwq, pwait);
 
 	//printk(KERN_INFO"<pci_poll>: Peripheral (' %x ') Interrupt Detected!!\n", mod_desc->int_num);
 
-	//	verbose_printk(KERN_INFO"<pci_poll>: Interrupt count of polling peripheral:%x\n", has_data);
+	verbose_printk(KERN_INFO"<pci_poll>: Interrupt count of polling peripheral:%x\n", has_data);
 
 	if (atomic_read(mod_desc->atomic_poll))
 	{
@@ -1441,9 +1418,6 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	unsigned long flags;
 	int minor;
 	void* buffer;
-//	struct timespec start_time;
-//	struct timespec stop_time;
-//	struct timespec diff;	
 
 	int wtk;
 	bytes = 0;
@@ -1655,8 +1629,6 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	}
 
 	//bytes = bytes_written;
-
-	//msleep(5000);   //experiment....
 
 	//file statistics
 	mod_desc->tx_bytes = mod_desc->tx_bytes + bytes_written;
