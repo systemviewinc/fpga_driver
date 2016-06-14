@@ -41,6 +41,7 @@
 #define RING_BUFF_SIZE_MULTIPLIER 2
 /********* printk statements *********/
 //#define verbose_printk printk
+#define verbose_read_printk printk
 #define verbose_write_printk printk
 #define verbose_cdma_printk printk
 #define verbose_isr_printk printk
@@ -50,6 +51,9 @@
 #endif
 #ifndef verbose_write_printk
 #define verbose_write_printk(...)
+#endif
+#ifndef verbose_read_printk
+#define verbose_read_printk(...)
 #endif
 #ifndef verbose_isr_printk
 #define verbose_isr_printk(...)
@@ -221,6 +225,7 @@ struct mod_desc
 	spinlock_t * in_fifo_write; /**< Spinlock variable to protect code for writing in_fifo flag */
 	int in_fifo_flag;			/**< Flag variable to tell if it already exists in the READ FIFO */
 	int in_fifo_write_flag;     /**< Flag variable to tell if it already exists in the WRITE FIFO */
+	int has_interrupt_vec;	/**< This file has an interrupt associated with it */
 };
 
 //DECLARE_KFIFO(read_fifo, struct mod_desc*, 4096);

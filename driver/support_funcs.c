@@ -273,7 +273,7 @@ void read_thread(struct kfifo* read_fifo)
 	while(!kthread_should_stop()){
 		ret = wait_event_interruptible(thread_q_head_read, atomic_read(&thread_q_read) == 1);
 		atomic_set(&thread_q_read, 0); // the threaded way
-		verbose_printk(KERN_INFO"<user_peripheral_read>: woke up the read thread!!\n");
+		verbose_read_printk(KERN_INFO"<user_peripheral_read>: woke up the read thread!!\n");
 
 		/*read the fifo*/
 		while (!kfifo_is_empty(read_fifo))
@@ -302,8 +302,8 @@ void read_thread(struct kfifo* read_fifo)
 					{
 						if(mod_desc != mod_desc_temp)
 						{
-							verbose_printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
-							verbose_printk(KERN_INFO"<read_thread>: writing minor : %d  peeked file minor:  %d\n", mod_desc->minor, mod_desc_temp->minor);
+							verbose_read_printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
+							verbose_read_printk(KERN_INFO"<read_thread>: writing minor : %d  peeked file minor:  %d\n", mod_desc->minor, mod_desc_temp->minor);
 							/*add mod_desc back to the fifo*/
 							if(!kfifo_is_full(read_fifo))
 							{
@@ -321,12 +321,12 @@ void read_thread(struct kfifo* read_fifo)
 
 						}
 						else
-							verbose_printk(KERN_INFO"<read_thread>: identical file struct in fifo, not writing.\n");
+							verbose_read_printk(KERN_INFO"<read_thread>: identical file struct in fifo, not writing.\n");
 					}
 
 					else
 					{
-						verbose_printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
+						verbose_read_printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
 						/*add mod_desc back to the fifo*/
 						if(!kfifo_is_full(read_fifo))
 						{
@@ -341,7 +341,7 @@ void read_thread(struct kfifo* read_fifo)
 						else
 							printk(KERN_INFO"<isr>: kfifo is full, not writing mod desc\n");
 
-						verbose_printk(KERN_INFO"<read_thread>: The only fifo member is the full ring buffer file, going to sleep.\n");
+						verbose_read_printk(KERN_INFO"<read_thread>: The only fifo member is the full ring buffer file, going to sleep.\n");
 						break;           // go back and wait for new fifo activity
 
 					}
@@ -608,8 +608,7 @@ struct task_struct* create_thread(struct mod_desc *mod_desc)
 	struct task_struct * kthread_heap;
 	kthread_heap = kthread_create(write_thread,(void*)mod_desc,"vsi_write_thread");
 
-	if((kthread_heap))
-	{
+	if((kthread_heap)) {
 		printk("Write Thread Created\n");
 		wake_up_process(kthread_heap);
 	}
@@ -621,8 +620,7 @@ struct task_struct* create_thread_read(struct kfifo* read_fifo)
 	struct task_struct * kthread_heap;
 	kthread_heap = kthread_create(read_thread, read_fifo, "vsi_read_thread");
 
-	if((kthread_heap))
-	{
+	if((kthread_heap)) {
 		printk("Read Thread Created\n");
 		wake_up_process(kthread_heap);
 	}
@@ -1513,20 +1511,17 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_p
 	*(mod_desc->kernel_reg_write) = 0xFFFFFFFF;
 	buf = 0xFFFFFFFF;
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, dma_offset_internal_write);
-	if (ret > 0)
-	{
+	if (ret > 0) {
 		printk(KERN_INFO"<axi_stream_fifo_read>: ERROR writing to reset interrupts on AXI Stream FIFO\n");
 		return -1;
 	}
-
 
 	/*Read FIFO Fill level*/
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RLR;
 	buf = 0;
 	*(mod_desc->kernel_reg_read) = 0x0;   //set to zero
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, dma_offset_internal_read);
-	if (ret > 0)
-	{
+	if (ret > 0) {
 		printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Read FIFO fill level\n");
 		return -1;
 	}
@@ -1542,10 +1537,8 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_p
 	/*So we don't read more data than is available*/
 	if (read_bytes < (u32)count)
 		count = read_bytes;
-
 	/*if more data is available than what is requested from user space*/
-	else if (read_bytes > (u32)count)
-	{
+	else if (read_bytes > (u32)count) {
 		verbose_printk(KERN_INFO"<axi_stream_fifo_read> There is more data to be read than requested\n");
 		verbose_printk(KERN_INFO"<axi_stream_fifo_read> This could lead to overflow of data in the FPGA\n");
 		//	printk(KERN_INFO"<axi_stream_fifo_read> Lots of data in the read FIFO: 0x%x\n", read_bytes);
@@ -1553,15 +1546,12 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_p
 	}
 
 	/*Check to make sure we are doing an 8 byte aligned read*/
-	if ((count % 32) > 0)
-	{
-
+	if ((count % 32) > 0) {
 		count = count - (count % 32);
 		verbose_printk(KERN_INFO"<axi_stream_fifo_read> Read value changed to: 0x%x for alignment.\n", (u32)count);
 	}
 
-	if (count == 0)
-	{
+	if (count == 0) {
 		verbose_printk(KERN_INFO"<axi_stream_fifo_read> There is either no data to read, or less than 8 bytes.\n");
 		return 0;
 	}
@@ -1576,8 +1566,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_p
 	//printk(KERN_INFO"<axi_stream_fifo_read> Final Read value is 0x%x \n", (u32)count);
 
 	ret = data_transfer(axi_dest, 0, count, keyhole_en, dma_offset_read);
-	if (ret > 0)
-	{
+	if (ret > 0) {
 		printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Data from Read FIFO\n");
 		return -1;
 	}
@@ -1610,8 +1599,7 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 	*(mod_desc->kernel_reg_write) = 0x000000A5;
 	buf = 0x000000A5;
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
-	if (ret > 0)
-	{
+	if (ret > 0) {
 		printk(KERN_INFO"<axi_stream_fifo_init>: ERROR setting minor number: %d\n", mod_desc->minor);
 		return -1;
 	}
@@ -1622,8 +1610,7 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 	*(mod_desc->kernel_reg_write) = 0x000000A5;
 	buf = 0x000000A5;
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
-	if (ret > 0)
-	{
+	if (ret > 0) {
 		printk(KERN_INFO"<axi_stream_fifo_init>: ERROR\n");
 		return -1;
 	}
@@ -1633,8 +1620,7 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
 	buf = 0;
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, mod_desc->dma_offset_internal_read);
-	if (ret > 0)
-	{
+	if (ret > 0) {
 		printk(KERN_INFO"<axi_stream_fifo_init>: ERROR\n");
 		return -1;
 	}
@@ -1646,8 +1632,7 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 	*(mod_desc->kernel_reg_write) = 0xFFFFFFFF;
 	buf = 0xFFFFFFFF;
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
-	if (ret > 0)
-	{
+	if (ret > 0) {
 		printk(KERN_INFO"<axi_stream_fifo_init>: ERROR\n");
 		return -1;
 	}
@@ -1656,8 +1641,7 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 	//Read CTL interface
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, mod_desc->dma_offset_internal_read);
-	if (ret > 0)
-	{
+	if (ret > 0) {
 		printk(KERN_INFO"<axi_stream_fifo_init>: ERROR\n");
 		return -1;
 	}
@@ -1668,8 +1652,7 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 	*(mod_desc->kernel_reg_write) = 0x04000000;
 	buf = 0x04000000;
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, mod_desc->dma_offset_internal_write);
-	if (ret > 0)
-	{
+	if (ret > 0) {
 		printk(KERN_INFO"<axi_stream_fifo_init>: ERROR\n");
 		return -1;
 	}
@@ -1679,8 +1662,7 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFV;  // the transmit FIFO vacancy
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, mod_desc->dma_offset_internal_read);
-	if (ret > 0)
-	{
+	if (ret > 0) {
 		printk(KERN_INFO"<axi_stream_fifo_init>: ERROR\n");
 		return -1;
 	}
@@ -1695,20 +1677,17 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 	printk(KERN_INFO"<axi_stream_fifo_init>: file size: 0x%x\n", (u32)mod_desc->file_size);
 	printk(KERN_INFO"<axi_stream_fifo_init>: calculated size: 0x%x\n", fifo_empty_level);
 	printk(KERN_INFO"<axi_stream_fifo_init>: register read size: 0x%x\n", read_reg);
-	if (read_reg > 0)
-	{
+	if (read_reg > 0) {
 		//fifo_empty_level = (u32)((((mod_desc->file_size))/(u32)dma_byte_width)-4);  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
 		fifo_empty_level = (((u32)(mod_desc->file_size))/8)-4;  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
-		if (read_reg != fifo_empty_level)  
-		{	
+		if (read_reg != fifo_empty_level) {	
 			printk(KERN_INFO"<axi_stream_fifo_init>: Error during initialization, the calculated axi-s fifo size is not equivalent to the actual size, Fix parameters\n");
 			printk(KERN_INFO"<axi_stream_fifo_init>: calculated size: 0x%x\n", fifo_empty_level);
 			printk(KERN_INFO"<axi_stream_fifo_init>: register read size: 0x%x\n", read_reg);
 			//return -1;
 		}
 		printk(KERN_INFO"<axi_stream_fifo_init>: Transmit axi-s fifo initialized\n");
-	}
-	else
+	} else
 		printk(KERN_INFO"<axi_stream_fifo_init>: Receive axi-s fifo initialized\n");
 
 	return 0;

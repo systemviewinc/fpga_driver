@@ -2,7 +2,9 @@ obj-m += sv_driver.o
 sv_driver-y += vsi_driver_bin.o
 
 
-KDIR := ~/Desktop/repos/linux-xlnx/
+#KDIR := ~/Desktop/repos/linux-xlnx/
+KDIR := ~/DF_vivado/zynq_linux/linux-xlnx
+
 PWD := $(shell pwd)
 
 all:
