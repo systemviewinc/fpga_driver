@@ -138,8 +138,7 @@ int data_to_transfer(struct mod_desc *mod_desc, int tail, int head, int priority
 	// This function is used to determine the amount of data available to be transfered
 	// starting from the tail to the head.
 
-	if(tail == head)
-	{
+	if(tail == head) {
 		if (priority)  // this is a priority variable to solve which side can write (1 = wtk, 0 = wth)
 			return mod_desc->dma_size;
 		else
@@ -170,8 +169,7 @@ int read_data(struct mod_desc * mod_desc)
 
 	read_count = 1;
 
-	while(read_count>0)  //we want to keep reading until all data is read
-	{
+	while(read_count>0) { //we want to keep reading until all data is read
 		max_can_read = 0;        
 		priority = 0;
 
@@ -181,15 +179,11 @@ int read_data(struct mod_desc * mod_desc)
 			priority = 1;   
 
 		max_can_read = data_to_transfer(mod_desc, rfh, rfu, priority);
-		if (max_can_read == 0)
-		{
-			if (back_pressure)
-			{
+		if (max_can_read == 0) {
+			if (back_pressure) {
 				verbose_printk("Needing to backpressure....\n");
 				return 1;
-			}
-
-			else {
+			} else {
 				/*drop data*/
 
 				/*save the actual ring buffer pointer*/
@@ -211,16 +205,13 @@ int read_data(struct mod_desc * mod_desc)
 				if (drop_count == 0)
 					break;
 			}
-		}
-		else
-		{
+		} else {
 			verbose_printk(KERN_INFO"<user_peripheral_read>: maximum read amount: %d\n", max_can_read);
 
 			read_count = axi_stream_fifo_read((size_t)max_can_read, mod_desc, (u64)rfh);
 			//printk("READ_COUNT: Just read %d bytes from HW\n", read_count);
 
-			if (read_count < 0)
-			{
+			if (read_count < 0) {
 				printk(KERN_INFO"<user_peripheral_read>: ERROR reading data from axi stream fifo\n");
 			}
 
@@ -257,10 +248,10 @@ int read_data(struct mod_desc * mod_desc)
 	return 0;
 }
 
-//void read_thread(struct mod_desc *mod_desc)
-void read_thread(struct kfifo* read_fifo)
+int read_thread(void *in_param)
 {
 	int ret;
+	struct kfifo* read_fifo = (struct kfifo *)in_param;
 	struct mod_desc * mod_desc;
 	struct mod_desc * mod_desc_temp;
 	int read_incomplete;
@@ -270,17 +261,18 @@ void read_thread(struct kfifo* read_fifo)
 	//struct sched_param param = { .sched_priority = 0 };
 	//sched_setscheduler(current, SCHED_FIFO, &param);
 
-	while(!kthread_should_stop()){
+	while(!kthread_should_stop()) {
 		ret = wait_event_interruptible(thread_q_head_read, atomic_read(&thread_q_read) == 1);
 		atomic_set(&thread_q_read, 0); // the threaded way
 		verbose_read_printk(KERN_INFO"<user_peripheral_read>: woke up the read thread!!\n");
 
 		/*read the fifo*/
-		while (!kfifo_is_empty(read_fifo))
-		{
+		while (!kfifo_is_empty(read_fifo)) {
 
 			//read fifo
-			kfifo_out(read_fifo, &mod_desc, 1);
+			if (kfifo_out(read_fifo, &mod_desc, 1)) {
+				verbose_read_printk(KERN_INFO"<user_peripheral_read>:kfifo_out returned non-zero\n");
+			}
 			/*set in fifo flag variable*/
 			spin_lock_irqsave(mod_desc->in_fifo, flags);	
 			mod_desc->in_fifo_flag = 0;
@@ -289,56 +281,43 @@ void read_thread(struct kfifo* read_fifo)
 			/*Check if there is any data to be read*/
 			d2r = axi_stream_fifo_d2r(mod_desc);
 
-			if(d2r != 0)
-			{				
+			if(d2r != 0) {				
 				read_incomplete = read_data(mod_desc);
-				if (read_incomplete == 1)
-				{
+				if (read_incomplete == 1) {
 
 					/*Lets first peek to see next fifo item, if it is the same file struct
 					 *we dont want to push the same one back on.  This is preventing the 
 					 *endless loop of identical file structs */
-					if(kfifo_out_peek(read_fifo, &mod_desc_temp, 1)) //returns 0 if there was no data to peek    
-					{
-						if(mod_desc != mod_desc_temp)
-						{
+					if(kfifo_out_peek(read_fifo, &mod_desc_temp, 1)) { //returns 0 if there was no data to peek    
+						if(mod_desc != mod_desc_temp) {
 							verbose_read_printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
-							verbose_read_printk(KERN_INFO"<read_thread>: writing minor : %d  peeked file minor:  %d\n", mod_desc->minor, mod_desc_temp->minor);
+							verbose_read_printk(KERN_INFO"<read_thread>: writing minor : %d  peeked file minor:  %d\n", 
+									    mod_desc->minor, mod_desc_temp->minor);
 							/*add mod_desc back to the fifo*/
-							if(!kfifo_is_full(read_fifo))
-							{
+							if(!kfifo_is_full(read_fifo)) {
 								spin_lock_irqsave(mod_desc->in_fifo, flags);	
-								if(mod_desc->in_fifo_flag == 0);
-								{
+								if(mod_desc->in_fifo_flag == 0); {
 									mod_desc->in_fifo_flag = 1;
 									kfifo_in_spinlocked(read_fifo, &mod_desc, 1, &fifo_lock);
 								}
 								spin_unlock_irqrestore(mod_desc->in_fifo, flags);
-							}
-							//kfifo_in(read_fifo, &mod_desc, 1);
-							else
+							} else
 								printk(KERN_INFO"<read_thread>: kfifo is full, not writing mod desc\n");
 
 						}
 						else
 							verbose_read_printk(KERN_INFO"<read_thread>: identical file struct in fifo, not writing.\n");
-					}
-
-					else
-					{
+					} else {
 						verbose_read_printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
 						/*add mod_desc back to the fifo*/
-						if(!kfifo_is_full(read_fifo))
-						{
+						if(!kfifo_is_full(read_fifo)) {
 							spin_lock_irqsave(mod_desc->in_fifo, flags);	
-							if(mod_desc->in_fifo_flag == 0);
-							{
+							if(mod_desc->in_fifo_flag == 0); {
 								mod_desc->in_fifo_flag = 1;
 								kfifo_in_spinlocked(read_fifo, &mod_desc, 1, &fifo_lock);
 							}
 							spin_unlock_irqrestore(mod_desc->in_fifo, flags);
-						}
-						else
+						} else
 							printk(KERN_INFO"<isr>: kfifo is full, not writing mod desc\n");
 
 						verbose_read_printk(KERN_INFO"<read_thread>: The only fifo member is the full ring buffer file, going to sleep.\n");
@@ -357,10 +336,12 @@ void read_thread(struct kfifo* read_fifo)
 		}
 	}
 	verbose_printk("Leaving thread\n");
+	return 0;
 }
 
-void write_thread(struct kfifo* write_fifo)
+int write_thread(void *in_param)
 {
+	struct kfifo* write_fifo = (struct kfifo*)in_param;
 	struct mod_desc * mod_desc;
 	struct mod_desc * mod_desc_temp;
 	int write_incomplete;
@@ -383,7 +364,9 @@ void write_thread(struct kfifo* write_fifo)
 		{
 
 			//read fifo
-			kfifo_out(write_fifo, &mod_desc, 1);
+			if (kfifo_out(write_fifo, &mod_desc, 1)) {
+				verbose_write_printk(KERN_INFO"<write_thread>kfifo_out returned non-zero\n");
+			}
 			/*set in fifo flag variable*/
 			spin_lock_irqsave(mod_desc->in_fifo_write, flags);	
 			mod_desc->in_fifo_write_flag = 0;
@@ -461,6 +444,7 @@ void write_thread(struct kfifo* write_fifo)
 
 	}
 	verbose_write_printk("Leaving write thread\n");
+	return 0;
 }
 
 int write_data(struct mod_desc * mod_desc)
@@ -593,8 +577,7 @@ int write_fifo_ready(struct mod_desc* mod_desc)
 	fifo_empty_level = (((u32)(mod_desc->file_size))/8)-4;  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
 	verbose_write_printk(KERN_INFO"<write_fifo_ready>: FIFO empty Level: %x read_reg %x\n", fifo_empty_level,read_reg);
 
-	if (read_reg != fifo_empty_level)
-	{
+	if (read_reg != fifo_empty_level) {
 		return 0;
 	}
 
@@ -707,8 +690,7 @@ int pcie_ctl_init(u64 axi_address, u32 dma_addr_base)
 	verbose_printk(KERN_INFO"<pcie_ctl_init>: Setting PCIe Control Axi Address\n");
 	axi_pcie_ctl = axi_address;
 
-	if(cdma_set[1] == 1)
-	{
+	if(cdma_set[1] == 1) {
 		/*convert to u32 to send to CDMA*/
 		dma_addr_loc = (u32)dma_addr_base;
 
@@ -725,8 +707,7 @@ int pcie_ctl_init(u64 axi_address, u32 dma_addr_base)
 
 		if (status == dma_addr_loc)
 			verbose_printk(KERN_INFO"<pci_ioctl_cdma_set>: PCIe CTL register set SUCCESS:%x\n", status);
-		else
-		{
+		else {
 			printk(KERN_INFO"<pci_ioctl_cdma_set>:!!!!!!!!!!! PCIe CTL register FAILURE !!!!!!!!!!!!!!!:%x\n", status);
 			printk(KERN_INFO"<pci_ioctl_cdma_set>: Most likely due to incorrect setting in PCIe IP for AXI to BAR translation HIGH address\n");
 			printk(KERN_INFO"<pci_ioctl_cdma_set>: Must set this value to be the DMA buffer size allocation.\n");
@@ -744,21 +725,20 @@ int cdma_init(int cdma_num, uint cdma_addr, u32 dma_addr_base)
 	int ret;
 	u64 axi_cdma_loc;
 
-	switch(cdma_num)
-	{
-		case 1:
-			axi_cdma = cdma_addr;
-			axi_cdma_loc = axi_cdma;
-			mutex_init(&CDMA_sem);
-			break;
-		case 2:
-			axi_cdma_2 = cdma_addr;
-			axi_cdma_loc = axi_cdma_2;
-			mutex_init(&CDMA_sem_2);
-			break;
-		default:
-			printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
-			return -1;
+	switch(cdma_num) {
+	case 1:
+		axi_cdma = cdma_addr;
+		axi_cdma_loc = axi_cdma;
+		mutex_init(&CDMA_sem);
+		break;
+	case 2:
+		axi_cdma_2 = cdma_addr;
+		axi_cdma_loc = axi_cdma_2;
+		mutex_init(&CDMA_sem_2);
+		break;
+	default:
+		printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
+		return -1;
 	}
 
 	verbose_cdma_printk(KERN_INFO"<cdma_%x_init>: *******************Setting CDMA AXI Address:%llx ******************************************\n", cdma_num, axi_cdma_loc);
@@ -807,8 +787,7 @@ int cdma_init(int cdma_num, uint cdma_addr, u32 dma_addr_base)
 	/*This checks to see if the user has set the pcie_ctl base address
 	 * if so, we can go ahead and write the dma_addr to the pcie translation
 	 * register.*/
-	if(pcie_ctl_set == 1)
-	{
+	if(pcie_ctl_set == 1) {
 		/*convert to u32 to send to CDMA*/
 		dma_addr_loc = (u32)dma_addr_base;
 		axi_dest = axi_pcie_ctl + AXIBAR2PCIEBAR_0L;
@@ -829,8 +808,7 @@ int vec2num(u32 vec)
 {
 	int count = 0;
 
-	while((vec & 0x1) == 0)
-	{
+	while((vec & 0x1) == 0) {
 		count = count + 1;
 		vec = vec>>1;
 	}
@@ -864,87 +842,62 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 		in_range = 1;
 
 	//if  data is small or the cdma is not initialized and in range
-	if (in_range == 1) // ((count < 16) | (cdma_capable == 0)) & 
-	{
+	if (in_range == 1) {// ((count < 16) | (cdma_capable == 0)) & 
 		if ((transfer_type == NORMAL_READ) | (transfer_type == KEYHOLE_READ))
 			status = direct_read(axi_address, buf, count, transfer_type);
 		else if ((transfer_type == NORMAL_WRITE) | (transfer_type == KEYHOLE_WRITE))
 			status = direct_write(axi_address, buf, count, transfer_type);
 		else
 			verbose_printk(KERN_INFO"<data_transfer>: error no transfer type specified\n");
-	}
-	else if (cdma_capable == 1)
-	{
+	} else if (cdma_capable == 1) {
 		/* Find an available CDMA to use and wait if both are in use */
 		cdma_num = 0;
-		while (cdma_num == 0)
-		{
+		while (cdma_num == 0) {
 			cdma_num = cdma_query();
-			if (cdma_num == 0)
-			{
+			if (cdma_num == 0) {
 				//atomic_set(&cdma_q, 0);
 				//wait_event_interruptible(cdma_q_head, atomic_read(&cdma_q) == 1);
 				schedule();
 			}
 		}
 
-		//	if (cdma_num == 0)
-		//	{
-		/*default to CDMA 1 and wait on it*/
-		//		if (mutex_lock_interruptible(&CDMA_sem))
-		//		{
-		//			verbose_printk(KERN_INFO"User interrupted while waiting for CDMA semaphore.\n");
-		//			return -ERESTARTSYS;
-		//		}
-		//		cdma_num = 1;
-		//		atomic_set(&mutex_free, 0);  //wait variable for mutex lock
-		//		wait_event_interruptible(mutexq, atomic_read(&mutex_free) != 0);
-		//	}
-
 		dma_axi_address = axi_pcie_m + dma_off;  //the AXI address written to the CDMA
 
-		if ((transfer_type == NORMAL_READ) | (transfer_type == KEYHOLE_READ))
-		{
+		if ((transfer_type == NORMAL_READ) || (transfer_type == KEYHOLE_READ)) {
 			status = cdma_transfer(axi_address, dma_axi_address, (u32)count, transfer_type, cdma_num);
 			if (status != 0)   //unsuccessful CDMA transmission
 				verbose_printk(KERN_INFO"ERROR on CDMA READ!!!.\n");
 			//			memcpy(buf, (const void*)dma_p, count);
 
-		}
-		else if ((transfer_type == NORMAL_WRITE) | (transfer_type == KEYHOLE_WRITE))
-		{
+		} else if ((transfer_type == NORMAL_WRITE) | (transfer_type == KEYHOLE_WRITE)) {
 			//Transfer data from user space to kernal space at the allocated DMA region
 			//		memcpy(dma_p, (const void*)buf, count);
 			status = cdma_transfer(dma_axi_address, axi_address, (u32)count, transfer_type, cdma_num);
 			//			test = 0xDEADBEEF;
 			//			memcpy(dma_p, (const void*)&test, 4);
-		}
-		else
+		} else
 			verbose_printk(KERN_INFO"<data_transfer>: error no transfer type specified\n");
 
 		/*Release Mutex on CDMA*/
-		switch(cdma_num)
-		{
-			case 1:
-				verbose_printk(KERN_INFO"												<data_transfer>: Releasing Mutex on CDMA 1\n");
-				mutex_unlock(&CDMA_sem);
-				break;
-
-			case 2:
-				verbose_printk(KERN_INFO"												<data_transfer>: Releasing Mutex on CDMA 2\n");
-				mutex_unlock(&CDMA_sem_2);
-				break;
-			default : verbose_printk(KERN_INFO"<data_transfer>: ERROR: unknown cdma number detected.\n");
-					  return(0);
+		switch(cdma_num) {
+		case 1:
+			verbose_printk(KERN_INFO"<data_transfer>: Releasing Mutex on CDMA 1\n");
+			mutex_unlock(&CDMA_sem);
+			break;
+			
+		case 2:
+			verbose_printk(KERN_INFO"<data_transfer>: Releasing Mutex on CDMA 2\n");
+			mutex_unlock(&CDMA_sem_2);
+			break;
+		default : verbose_printk(KERN_INFO"<data_transfer>: ERROR: unknown cdma number detected.\n");
+			return(0);
 		}
-
+		
 		/*wake up any sleeping processes waiting on a CDMA */
 		//atomic_set(&cdma_q, 1);
 		//wake_up_interruptible(&cdma_q_head);
-
-	}
-
-	else
+		
+	} else
 		verbose_printk(KERN_INFO"<data_transfer>: ERROR: Address is out of range and CDMA is not initialized\n");
 
 	return status;
@@ -966,13 +919,10 @@ int direct_write(u64 axi_address, void *buf, size_t count, int transfer_type)
 	/*determine which BAR to write to*/
 	/* Also does a final check to make sure you are writing in range */
 	if ((axi_address + count) < (bar_0_axi_offset + pci_bar_size) &&
-			(axi_address >= bar_0_axi_offset))
-	{
+			(axi_address >= bar_0_axi_offset)) {
 		virt_addr = (axi_address - bar_0_axi_offset) + pci_bar_vir_addr;
 		verbose_printk(KERN_INFO"		<direct_write>: Direct writing to BAR 0\n");
-	}
-	else
-	{
+	} else {
 		verbose_printk(KERN_INFO"		<direct_write>: ERROR trying to Direct write out of memory range!\n");
 		return 1;
 	}
@@ -981,8 +931,7 @@ int direct_write(u64 axi_address, void *buf, size_t count, int transfer_type)
 
 	offset = 0;
 	len = count/4;
-	for(i = 0; i<len; i++)
-	{
+	for(i = 0; i<len; i++) {
 		newaddr_src = (u32 *)(kern_buf + offset);
 		write_value = *newaddr_src;
 		newaddr_dest = (u32 *)(virt_addr + offset);
@@ -1012,21 +961,17 @@ int direct_read(u64 axi_address, void *buf, size_t count, int transfer_type)
 	/*determine which BAR to read from*/
 	/* Also does a final check to make sure you are writing in range */
 	if ((axi_address + count) < (bar_0_axi_offset + pci_bar_size) && 
-			(axi_address >= bar_0_axi_offset))
-	{
+			(axi_address >= bar_0_axi_offset)) {
 		verbose_printk(KERN_INFO"		<direct_read>: Direct reading from BAR 0\n");
 		virt_addr = (axi_address - bar_0_axi_offset) + pci_bar_vir_addr;
-	}
-	else
-	{
+	} else {
 		verbose_printk(KERN_INFO"		<direct_read>: ERROR trying to Direct read out of memory range!\n");
 		return 1;
 	}
 
 	offset = 0;
 
-	for(i = 0; i<len; i++)
-	{
+	for(i = 0; i<len; i++) {
 		newaddr_src = (u32 *)(virt_addr + offset);
 		kern_buf[i] = ioread32(newaddr_src);
 		//		kern_buf[i] = *newaddr_src;  *this works too*
@@ -1045,14 +990,11 @@ int cdma_query(void)
 {
 	/*Check the CDMA Semaphore*/
 
-	if (mutex_is_locked(&CDMA_sem))
-	{
+	if (mutex_is_locked(&CDMA_sem)) {
 		if (mutex_is_locked(&CDMA_sem_2) | (cdma_set[2] == 0))
 			verbose_printk(KERN_INFO "!!!!!!!!! all CDMAs in use !!!!!!!!\n");
-		else
-		{
-			if (mutex_lock_interruptible(&CDMA_sem_2))
-			{
+		else {
+			if (mutex_lock_interruptible(&CDMA_sem_2)) {
 				verbose_printk(KERN_INFO"User interrupted while waiting for CDMA semaphore.\n");
 				return -ERESTARTSYS;
 			}
@@ -1060,11 +1002,8 @@ int cdma_query(void)
 			verbose_printk(KERN_INFO"										<cdma_transfer>: cdma_set[2] = %x\n", cdma_set[2]);
 			return 2;
 		}
-	}
-	else
-	{
-		if (mutex_lock_interruptible(&  /**< The atomic conditional variable for CDMA (if not polling) */CDMA_sem))
-		{
+	} else {
+		if (mutex_lock_interruptible(&  /**< The atomic conditional variable for CDMA (if not polling) */CDMA_sem)) {
 			verbose_printk(KERN_INFO"User interrupted while waiting for CDMA semaphore.\n");
 			return -ERESTARTSYS;
 		}
@@ -1098,33 +1037,32 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 
 	switch(keyhole_en){
 
-		case KEYHOLE_READ:
-			bit_vec = 0x00000010;   //the bit for KEYHOLE READ
-			verbose_printk(KERN_INFO"	<keyhole_read_set>: Setting the CDMA Keyhole READ as ENABLED\n");
-			ret = cdma_config_set(bit_vec, 1, cdma_num);   //value of one means we want to SET the register
+	case KEYHOLE_READ:
+		bit_vec = 0x00000010;   //the bit for KEYHOLE READ
+		verbose_printk(KERN_INFO"	<keyhole_read_set>: Setting the CDMA Keyhole READ as ENABLED\n");
+		ret = cdma_config_set(bit_vec, 1, cdma_num);   //value of one means we want to SET the register
+		break;
+		
+	case KEYHOLE_WRITE:
+		bit_vec = 0x00000020;   //the bit for KEYHOLE WRITE
+		verbose_cdma_printk(KERN_INFO"	<keyhole_write_set>: Setting the CDMA Keyhole WRITE as ENABLED\n");
+		ret = cdma_config_set(bit_vec, 1, cdma_num);   //value of one means we want to SET the register
 			break;
-
-		case KEYHOLE_WRITE:
-			bit_vec = 0x00000020;   //the bit for KEYHOLE WRITE
-			verbose_cdma_printk(KERN_INFO"	<keyhole_write_set>: Setting the CDMA Keyhole WRITE as ENABLED\n");
-			ret = cdma_config_set(bit_vec, 1, cdma_num);   //value of one means we want to SET the register
-			break;
-
-		default:printk(KERN_INFO"	<keyhole_setting> no keyhole swtting will be used.\n");
+			
+	default:printk(KERN_INFO"	<keyhole_setting> no keyhole swtting will be used.\n");
 	}
-
-	switch(cdma_num)
-	{
-		case 1:
-			axi_cdma_loc = axi_cdma;
-			verbose_printk(KERN_INFO"	<pci_dma_transfer>:Using CDMA 1\n");
-			break;
-		case 2:
-			axi_cdma_loc = axi_cdma_2;
-			verbose_printk(KERN_INFO"	<pci_dma_transfer>:Using CDMA 2\n");
-			break;
-		default:printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
-				return(0);
+	
+	switch(cdma_num) {
+	case 1:
+		axi_cdma_loc = axi_cdma;
+		verbose_printk(KERN_INFO"	<pci_dma_transfer>:Using CDMA 1\n");
+		break;
+	case 2:
+		axi_cdma_loc = axi_cdma_2;
+		verbose_printk(KERN_INFO"	<pci_dma_transfer>:Using CDMA 2\n");
+		break;
+	default:printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
+		return(0);
 	}
 
 	verbose_cdma_printk(KERN_INFO"	<pci_dma_transfer>: ********* CDMA TRANSFER INITIALIZATION *************\n\n");
@@ -1160,8 +1098,7 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 	// Acknowledge the CDMA and check for error status
 	ack_status = cdma_ack(cdma_num);
 
-	if ((keyhole_en == KEYHOLE_READ) | (keyhole_en == KEYHOLE_WRITE))
-	{
+	if ((keyhole_en == KEYHOLE_READ) | (keyhole_en == KEYHOLE_WRITE)) {
 		bit_vec = 0x20 | 0x10;      // "0x30" unset both CDMA keyhole read and write
 		ret = cdma_config_set(bit_vec, 0, cdma_num);	//unsets the keyhole configuration
 	}
@@ -1194,31 +1131,27 @@ void cdma_idle_poll(int cdma_num)
 	int ret;
 	u64 axi_cdma_loc;
 
-	switch(cdma_num)
-	{
-		case 1:
-			axi_cdma_loc = axi_cdma;
-			break;
-		case 2:
-			axi_cdma_loc = axi_cdma_2;
-			break;
-		default:
-			printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
-			return;
+	switch(cdma_num) {
+	case 1:
+		axi_cdma_loc = axi_cdma;
+		break;
+	case 2:
+		axi_cdma_loc = axi_cdma_2;
+		break;
+	default:
+		printk(KERN_INFO"	!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n");
+		return;
 	}
-
+	
 	status = 0x0;
 	axi_dest = axi_cdma_loc + CDMA_SR;
 
-	while(((u32)status & 0x02) != 0x02)  //this means while CDMA is NOT idle
-	{
+	while(((u32)status & 0x02) != 0x02) {  //this means while CDMA is NOT idle
 		/* Check the status of the CDMA to see if successful */
 		ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
 		verbose_printk(KERN_INFO"	<cdma_idle_poll>: CDMA status:%x\n", status);
 		schedule();
-	}
-	if (status == 0xFFFFFFFF)
-	{
+	} if (status == 0xFFFFFFFF) {
 		printk(KERN_INFO"	BAD CDMA status:%x\n", status);
 		printk(KERN_INFO"       If using PCIe, add a buffer to axi interconnect in front of PCIe Slave input\n");
 	}
@@ -1465,22 +1398,34 @@ size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc)
 	size_t count;
 
 	dma_offset_internal_read = (u64)mod_desc->dma_offset_internal_read;
-	/*Read FIFO Fill level*/
+	/*Read FIFO Fill level RDFO */
+	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RDFO;
+	buf = 0;
+	*(mod_desc->kernel_reg_read) = 0x0;   //set to zero
+	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, dma_offset_internal_read);
+	if (ret > 0) {
+		printk(KERN_INFO"<axi_stream_fifo_d2r>: ERROR reading Read FIFO fill level (RDFO)\n");
+		return -1;
+	}
+	read_reg = (*(mod_desc->kernel_reg_read))|buf;   
+	verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_d2r>: RLR value = %d\n",read_reg);
+	mod_desc->axi_fifo_rdfo = read_reg & 0x7fffffff; // remember the read
+
+	/*Read FIFO Fill level RLR (byte count)*/
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RLR;
 	buf = 0;
 	*(mod_desc->kernel_reg_read) = 0x0;   //set to zero
 
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, dma_offset_internal_read);
-	if (ret > 0)
-	{
-		printk(KERN_INFO"<axi_stream_fifo_d2r>: ERROR reading Read FIFO fill level\n");
+	if (ret > 0) {
+		printk(KERN_INFO"<axi_stream_fifo_d2r>: ERROR reading Read FIFO fill level (RLR)\n");
 		return -1;
 	}
-	read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
-	//read_reg = (*(mod_desc->kernel_reg_read));  
-	//read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+	read_reg = (*(mod_desc->kernel_reg_read))|buf;   
+	verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_d2r>: RLR value = %d\n",read_reg);
+	mod_desc->axi_fifo_rlr = read_reg; // remember the read
 
-	count = read_reg;	
+	count = read_reg & 0x7fffffff;	
 	return count;  	
 }
 
@@ -1490,8 +1435,8 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_p
 	int keyhole_en;
 	u32 read_bytes;
 	u64 axi_dest;
-	u32 buf, read_reg;
-
+	u32 buf, read_reg, fill_level;
+	
 	u64 dma_offset_write;
 	u64 dma_offset_read;
 	u64 dma_offset_internal_read;
@@ -1504,7 +1449,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_p
 
 	/*debug stuff*/
 	//Read CTL interface
-	verbose_printk(KERN_INFO"<axi_stream_fifo_read>: Reading the AXI Stream FIFO\n");
+	verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_read>: Reading the AXI Stream FIFO\n");
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
 
 	//reset interrupts on CTL interface
@@ -1515,57 +1460,73 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_p
 		printk(KERN_INFO"<axi_stream_fifo_read>: ERROR writing to reset interrupts on AXI Stream FIFO\n");
 		return -1;
 	}
+	
+	/* should not read FIFO RLR if already read */
+	if (mod_desc->axi_fifo_rlr) {
+		fill_level = mod_desc->axi_fifo_rdfo;
+		read_reg   = mod_desc->axi_fifo_rlr;
+		mod_desc->axi_fifo_rlr = mod_desc->axi_fifo_rdfo = 0;
+	} else {
+		// read the FIFO fill level RDFO
+		axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RDFO;
+		buf = 0;
+		*(mod_desc->kernel_reg_read) = 0x0;   //set to zero
+		ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, dma_offset_internal_read);
+		if (ret > 0) {
+			printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Read FIFO fill level\n");
+			return -1;
+		} 
+		fill_level = ((*(mod_desc->kernel_reg_read))|buf) & 0x7fffffff;
 
-	/*Read FIFO Fill level*/
-	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RLR;
-	buf = 0;
-	*(mod_desc->kernel_reg_read) = 0x0;   //set to zero
-	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, dma_offset_internal_read);
-	if (ret > 0) {
-		printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Read FIFO fill level\n");
-		return -1;
+		/*Read FIFO Fill level (RLR) */
+		axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RLR;
+		buf = 0;
+		*(mod_desc->kernel_reg_read) = 0x0;   //set to zero
+		ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, dma_offset_internal_read);
+		if (ret > 0) {
+			printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Read FIFO fill level\n");
+			return -1;
+		}
+		  //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+		read_reg = (*(mod_desc->kernel_reg_read))|buf;
+		
 	}
-	read_reg = (*(mod_desc->kernel_reg_read))|buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
-	//read_reg = (*(mod_desc->kernel_reg_read));    
-	//read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+	fill_level *= dma_byte_width;
+	verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_read>: RLR value = 0x%x fill_level = %d ,count %d\n",read_reg,fill_level, count);
 
 	/*we are masking off the 32nd bit because the FIFO is in cut through mode
 	 *and sets the LSB to 1 to indicate a partial packet.*/
-	//read_bytes = (0x7fffffff & *(mod_desc->kernel_reg_read));
 	read_bytes = (0x7fffffff & read_reg);
+	if (read_bytes == 0) {
+	 	verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_read> There is either no data to read, or less than 8 bytes.\n"); 
+		return 0; // nothing to read
+	}
 
 	/*So we don't read more data than is available*/
 	if (read_bytes < (u32)count)
 		count = read_bytes;
 	/*if more data is available than what is requested from user space*/
 	else if (read_bytes > (u32)count) {
-		verbose_printk(KERN_INFO"<axi_stream_fifo_read> There is more data to be read than requested\n");
-		verbose_printk(KERN_INFO"<axi_stream_fifo_read> This could lead to overflow of data in the FPGA\n");
+		verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_read> There is more data to be read than requested\n");
+		verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_read> This could lead to overflow of data in the FPGA\n");
 		//	printk(KERN_INFO"<axi_stream_fifo_read> Lots of data in the read FIFO: 0x%x\n", read_bytes);
 		/*something needs to be done here.....*/
 	}
 
-	/*Check to make sure we are doing an 8 byte aligned read*/
-	if ((count % 32) > 0) {
-		count = count - (count % 32);
-		verbose_printk(KERN_INFO"<axi_stream_fifo_read> Read value changed to: 0x%x for alignment.\n", (u32)count);
+	// fill level is number of entries * width
+	if (fill_level  < count) {
+		verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_read>: FIFO fill level (%d) less than expected (%d)\n",
+					read_reg, count);
+		count = (read_reg * dma_byte_width);
 	}
-
-	if (count == 0) {
-		verbose_printk(KERN_INFO"<axi_stream_fifo_read> There is either no data to read, or less than 8 bytes.\n");
-		return 0;
-	}
-
+	verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_read>: FIFO fill level %d \n", read_reg);
+	if (read_reg == 0) return 0;
 	//set CDMA KEYHOLE
 	keyhole_en = KEYHOLE_READ;
 
 	axi_dest = mod_desc->axi_addr + AXI_STREAM_RDFD;
-
-	verbose_printk(KERN_INFO"<axi_stream_fifo_read> AXI Address of FIFO:%llx\n", mod_desc->axi_addr);
-
-	//printk(KERN_INFO"<axi_stream_fifo_read> Final Read value is 0x%x \n", (u32)count);
-
-	ret = data_transfer(axi_dest, 0, count, keyhole_en, dma_offset_read);
+	verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_read> AXI Address of FIFO:%llx\n", mod_desc->axi_addr);
+	ret = data_transfer(axi_dest, 0, read_reg, keyhole_en, dma_offset_read);
 	if (ret > 0) {
 		printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Data from Read FIFO\n");
 		return -1;
@@ -1583,7 +1544,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_p
 
 	//	axi_stream_fifo_init(mod_desc);
 
-	verbose_printk(KERN_INFO"<axi_stream_fifo_read>: Leaving the READ AXI Stream FIFO routine\n");
+	verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_read>: Leaving the READ AXI Stream FIFO routine %d\n",count);
 	return count;
 }
 

@@ -196,7 +196,7 @@ const u32 INT_CTRL_IAR      = 0x0C;	 /**< Interrupt Controller Register Offset, 
 
 
 /*This is an array of interrupt structures to hold up to 8 peripherals*/
-struct mod_desc * mod_desc_arr[12] = {{ 0 }}; /**< This is an array of Module Descriptions that is used to be indexed by interrupt number
+struct mod_desc * mod_desc_arr[12] = { 0 }; /**< This is an array of Module Descriptions that is used to be indexed by interrupt number
 												* This is how the pci_isr knows which peripheral has sent the interrupt. */
 
 /*ISR Tasklet */
@@ -366,7 +366,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	if(0 > register_chrdev(major, pci_devName, &pci_fops)){
 		//	dynamic_major = register_chrdev(0, pci_devName, &pci_fops);
 		printk(KERN_INFO"%s:<probe>char driver not registered\n", pci_devName);
-		printk(KERN_INFO"%s:<probe>char driver major number: 0x%x\n", major);
+		printk(KERN_INFO"%s:<probe>char driver major number: 0x%x\n", pci_devName,major);
 		return ERROR;
 	}
 
@@ -526,7 +526,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 	}
 	else
 	{
-		printk(KERN_INFO"<sv_driver_init>: dma buffer base address is:%llx\n", (u64)dma_buffer_base);
+		printk(KERN_INFO"<sv_driver_init>: dma buffer base address is:%p\n", dma_buffer_base);
 		printk(KERN_INFO"<sv_driver_init>: dma system memory buffer base address is:%llx\n", (u64)dma_addr_base);
 		//we want to leave the first 4k for the kernel to use internally on file registers.
 		//the second 4k is used as a throw away buffer for data drops.
@@ -543,10 +543,10 @@ static int sv_plat_probe(struct platform_device *pdev)
 	pcie_ctl_set = 0;
 
 	int_ctrl_set = 0;
-	printk(KERN_INFO"<sv_driver_init> cdma_address    size (%d) value %llx\n", sizeof(cdma_address),cdma_address);
-	printk(KERN_INFO"<sv_driver_init> pcie_m_address  size (%d) value %llx\n", sizeof(pcie_m_address),pcie_m_address);
-	printk(KERN_INFO"<sv_driver_init> cdma_2_address  size (%d) value %llx\n", sizeof(cdma_2_address),cdma_2_address);
-	printk(KERN_INFO"<sv_driver_init> int_ctlr_address  size (%d) value %llx\n", sizeof(int_ctlr_address),int_ctlr_address);
+	printk(KERN_INFO"<sv_driver_init> cdma_address    size (%d) value 0x%x\n", sizeof(cdma_address),cdma_address);
+	printk(KERN_INFO"<sv_driver_init> pcie_m_address  size (%d) value 0x%x\n", sizeof(pcie_m_address),pcie_m_address);
+	printk(KERN_INFO"<sv_driver_init> cdma_2_address  size (%d) value 0x%x\n", sizeof(cdma_2_address),cdma_2_address);
+	printk(KERN_INFO"<sv_driver_init> int_ctlr_address  size (%d) value 0x%x\n", sizeof(int_ctlr_address),int_ctlr_address);
 	// these addresses should alayws be in the 32 bit range
 	cdma_address     &= 0xFFFFFFFF;
 	pcie_m_address   &= 0xFFFFFFFF;
@@ -674,10 +674,11 @@ static int __init sv_driver_init(void)
 	dma_buffer_size = (u64)dma_system_size;
 	//void * dummy;
 
+	printk(KERN_INFO"<sv_driver_init>: Initializing driver type %d\n",driver_type);
 	switch(driver_type){
 		case PCI:
-			verbose_printk(KERN_INFO"<pci_init>: Device ID: ('%d')\n", device_id);
-			verbose_printk(KERN_INFO"<pci_init>: Major Number: ('%d')\n", major);
+			printk(KERN_INFO"<pci_init>: Device ID: ('%d')\n", device_id);
+			printk(KERN_INFO"<pci_init>: Major Number: ('%d')\n", major);
 
 			init_waitqueue_head(&wq);
 			init_waitqueue_head(&wq_periph);
@@ -965,6 +966,8 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->master_num = 0;
 	s->interrupt_vec = 0;
 	s->has_interrupt_vec = 0;
+	s->axi_fifo_rlr  = 0;
+	s->axi_fifo_rdfo = 0;
 	s->keyhole_config = 0;
 	s->dma_offset_read = 0;
 	s->dma_offset_write = 0;
@@ -1450,10 +1453,9 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	{
 		partial_count = count - bytes_written;
 
-		if (partial_count > mod_desc->dma_size)
-		{
+		if (partial_count > mod_desc->dma_size) {
 			remaining_size = count - bytes_written;
-			verbose_write_printk(KERN_INFO"<pci_write>: the current DMA Buffer size of: 0x%x is not large enough for *remaining* transfer size:%zu bytes\n", mod_desc->dma_size, remaining_size);
+			verbose_write_printk(KERN_INFO"<pci_write>: DMA Buffer size of: 0x%x is not large enough for *remaining* transfer size:%zu bytes\n", mod_desc->dma_size, remaining_size);
 			partial_count = mod_desc->dma_size;
 		}
 
@@ -1657,20 +1659,18 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 	temp = 0;
 
-	verbose_printk(KERN_INFO"\n\n");
-	verbose_printk(KERN_INFO"<pci_read>: ************************************************************************\n");
-	verbose_printk(KERN_INFO"<pci_read>: ******************** READ TRANSACTION BEGIN  **************************\n");
-	verbose_printk(KERN_INFO"<pci_read>: ************************************************************************\n");
+	verbose_read_printk(KERN_INFO"\n\n");
+	verbose_read_printk(KERN_INFO"<pci_read>: ************************************************************************\n");
+	verbose_read_printk(KERN_INFO"<pci_read>: ******************** READ TRANSACTION BEGIN  **************************\n");
+	verbose_read_printk(KERN_INFO"<pci_read>: ************************************************************************\n");
 
-	verbose_printk(KERN_INFO"READ file struct offset: %x", filep->f_pos);
-	verbose_printk(KERN_INFO"READ offset param: %x , count requested %d", *f_pos, count);
+	verbose_read_printk(KERN_INFO"READ file struct offset: %x", filep->f_pos);
+	verbose_read_printk(KERN_INFO"READ offset param: %x , count requested %d", *f_pos, count);
 
 	if (count <= 0) return ERROR;
-	if(mod_desc->set_dma_flag == 0)
-	{
+	if(mod_desc->set_dma_flag == 0) {
 		ret = dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size);
-		if (ret < 0)
-		{
+		if (ret < 0) {
 			printk(KERN_INFO"<pci_read>:!!!! DMA init FAILURE!!!!.\n");
 			return ERROR;
 		}
@@ -1680,20 +1680,17 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 	verbose_printk(KERN_INFO"<pci_read>: Attempting to read %zu bytes\n", count);
 
-	if (mod_desc->start_flag == 1)
-	{
+	if (mod_desc->start_flag == 1) {
 		getnstimeofday(mod_desc->start_time);
 		mod_desc->start_flag = 0;
 	}
 
-	if (atomic_read(&driver_start_flag) == 1)
-	{
+	if (atomic_read(&driver_start_flag) == 1) {
 		getnstimeofday(&driver_start_time);
 		atomic_set(&driver_start_flag, 0);
 	}
 
-	if (count > mod_desc->dma_size)
-	{
+	if (count > mod_desc->dma_size) {
 		verbose_printk(KERN_INFO"<pci_read>: Attempting to read more than the allocated DMA size of:%zu\n", mod_desc->dma_size);
 		verbose_printk(KERN_INFO"<pci_read>: readjusting the read amount to:%zu\n", mod_desc->dma_size);
 		count = (size_t)mod_desc->dma_size;

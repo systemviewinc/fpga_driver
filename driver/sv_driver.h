@@ -41,9 +41,10 @@
 #define RING_BUFF_SIZE_MULTIPLIER 2
 /********* printk statements *********/
 //#define verbose_printk printk
-#define verbose_read_printk printk
-#define verbose_write_printk printk
-#define verbose_cdma_printk printk
+//#define verbose_read_printk printk
+//#define verbose_write_printk printk
+//#define verbose_cdma_printk printk
+#define verbose_axi_fifo_printk printk
 #define verbose_isr_printk printk
 //#define verbose_printk printk
 #ifndef verbose_cdma_printk
@@ -54,6 +55,9 @@
 #endif
 #ifndef verbose_read_printk
 #define verbose_read_printk(...)
+#endif
+#ifndef verbose_axi_fifo_printk
+#define verbose_axi_fifo_printk(...)
 #endif
 #ifndef verbose_isr_printk
 #define verbose_isr_printk(...)
@@ -226,6 +230,8 @@ struct mod_desc
 	int in_fifo_flag;			/**< Flag variable to tell if it already exists in the READ FIFO */
 	int in_fifo_write_flag;     /**< Flag variable to tell if it already exists in the WRITE FIFO */
 	int has_interrupt_vec;	/**< This file has an interrupt associated with it */
+	int axi_fifo_rlr;	/**< Last read RLR  value if non-zero this has to be used */
+	int axi_fifo_rdfo;	/**< Last read RDFO value if non-zero this has to be used */
 };
 
 //DECLARE_KFIFO(read_fifo, struct mod_desc*, 4096);
@@ -382,14 +388,14 @@ void cdma_idle_poll(int cdma_num);
  * write transfers.  It reads from the write ring buffers and writes the data to hardware.
  * @param write_fifo the kernel FIFO data structure for the global write FIFO. 
 */
-void write_thread(struct kfifo* write_fifo);
+int write_thread(void *in_param);
 /**
  * @brief This function operates on it's own thread after insmod. It is used to handle all AXI-Streaming
  * read transfers.  It reads from the hardware and stores data in the Read Ring Buffer. It wakes up the 
  * poll method for the file upon receiving new data. 
  * @param read_fifo the kernel FIFO data structure for the global read FIFO. 
 */
-void read_thread(struct kfifo* read_fifo);
+int read_thread(void *in_param);
 /**
  * @brief This function is called by the driver to create the write thread. 
  * @param mod_desc The struct containing all the file variables.
