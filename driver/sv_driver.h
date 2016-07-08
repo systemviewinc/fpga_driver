@@ -44,9 +44,23 @@
 //#define verbose_read_printk printk
 //#define verbose_write_printk printk
 //#define verbose_cdma_printk printk
-#define verbose_axi_fifo_printk printk
-#define verbose_isr_printk printk
+//#define verbose_axi_fifo_printk printk
+//#define verbose_isr_printk printk
+//#define verbose_poll_printk printk
+//#define verbose_axi_fifo_d2r_printk printk
+//#define verbose_direct_write_printk printk
+//#define verbose_direct_read_printk printk
+#define verbose_llseek_printk printk
 //#define verbose_printk printk
+#ifndef verbose_llseek_printk
+#define verbose_llseek_printk(...)
+#endif
+#ifndef verbose_direct_read_printk
+#define verbose_direct_read_printk(...)
+#endif
+#ifndef verbose_direct_write_printk
+#define verbose_direct_write_printk(...)
+#endif
 #ifndef verbose_cdma_printk
 #define verbose_cdma_printk(...)
 #endif
@@ -59,8 +73,14 @@
 #ifndef verbose_axi_fifo_printk
 #define verbose_axi_fifo_printk(...)
 #endif
+#ifndef verbose_axi_fifo_d2r_printk
+#define verbose_axi_fifo_d2r_printk(...)
+#endif
 #ifndef verbose_isr_printk
 #define verbose_isr_printk(...)
+#endif
+#ifndef verbose_poll_printk
+#define verbose_poll_printk(...)
 #endif
 #ifndef verbose_printk
 #define verbose_printk(...)
@@ -232,6 +252,7 @@ struct mod_desc
 	int has_interrupt_vec;	/**< This file has an interrupt associated with it */
 	int axi_fifo_rlr;	/**< Last read RLR  value if non-zero this has to be used */
 	int axi_fifo_rdfo;	/**< Last read RDFO value if non-zero this has to be used */
+	wait_queue_head_t poll_wq; /**< waitq for events */
 };
 
 //DECLARE_KFIFO(read_fifo, struct mod_desc*, 4096);

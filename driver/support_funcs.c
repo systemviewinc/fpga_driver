@@ -201,7 +201,8 @@ int read_data(struct mod_desc * mod_desc)
 				atomic_set(mod_desc->atomic_poll, 1);
 
 				verbose_printk("waking up the poll.....\n");
-				wake_up(&wq_periph);
+				//wake_up(&wq_periph);
+				wake_up(&mod_desc->poll_wq);
 				if (drop_count == 0)
 					break;
 			}
@@ -240,8 +241,9 @@ int read_data(struct mod_desc * mod_desc)
 
 		atomic_set(mod_desc->atomic_poll, 1);
 
-		verbose_printk("waking up the poll.....\n");
-		wake_up(&wq_periph);
+		verbose_isr_printk("<user_peripheral_read>waking up the poll.....%d\n",mod_desc->minor);
+		//wake_up(&wq_periph);
+		wake_up(&mod_desc->poll_wq);
 
 	}
 
@@ -280,7 +282,7 @@ int read_thread(void *in_param)
 
 			/*Check if there is any data to be read*/
 			d2r = axi_stream_fifo_d2r(mod_desc);
-
+			verbose_isr_printk(KERN_INFO"<read_thread>: mod_desc minor %d %d\n",mod_desc->minor,d2r);
 			if(d2r != 0) {				
 				read_incomplete = read_data(mod_desc);
 				if (read_incomplete == 1) {
@@ -563,8 +565,7 @@ int write_fifo_ready(struct mod_desc* mod_desc)
 	buf = 0x0;
 
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, dma_offset_internal_read);
-	if (ret > 0)
-	{
+	if (ret > 0) {
 		printk(KERN_INFO"<pci_write>: ERROR reading from AXI Streaming FIFO control interface\n");
 		return -1;
 	}
@@ -618,18 +619,15 @@ int dma_file_init(struct mod_desc *mod_desc, void *dma_buffer_base, u64 dma_buff
 	int dma_file_size;
 	dma_file_size = (int)(mod_desc->file_size)*RING_BUFF_SIZE_MULTIPLIER;  //we want the ring buffer to be atleast 2 times the size of the file size (aka fifo size)
 
-	verbose_printk(KERN_INFO"<dma_file_init>: Setting Peripheral DMA size:%d\n", dma_file_size);
+	printk(KERN_INFO"<dma_file_init>: Setting Peripheral DMA size:%d, current offset %lld\n", dma_file_size,(u64)dma_current_offset);
 	mod_desc->dma_size = (size_t)dma_file_size;
 
 	//if (((u64)dma_current_offset + dma_file_size) > (u64)((char*)dma_buffer_base + dma_buffer_size))
-	if (((u64)dma_current_offset + (2*dma_file_size)) > (u64)dma_buffer_size)
-	{
+	if (((u64)dma_current_offset + (2*dma_file_size)) > (u64)dma_buffer_size) {
 		printk(KERN_INFO"<dma_file_init>: ERROR! DMA Buffer out of memory!\n");
 		printk(KERN_INFO"<dma_file_init>: Decrease file sizes or increase dma size insmod parameter\n");
 		return -1;
-	}
-	else
-	{
+	} else {
 		verbose_printk(KERN_INFO"<dma_file_init>: The current system memory dma offset:%x\n", dma_current_offset);
 		mod_desc->dma_offset_read = dma_current_offset;            //set the dma start address for the peripheral read
 		mod_desc->dma_offset_write = dma_current_offset + (u32)dma_file_size; //set the dma start address for the peripheral write
@@ -644,7 +642,7 @@ int dma_file_init(struct mod_desc *mod_desc, void *dma_buffer_base, u64 dma_buff
 		verbose_printk(KERN_INFO"<dma_file_init>: Success setting peripheral DMA\n");
 	}
 	mod_desc->set_dma_flag = 1;
-	printk(KERN_INFO"<dma_file_init>: Success setting peripheral DMA for file minor: %d\n", mod_desc->minor);
+	printk(KERN_INFO"<dma_file_init>: Success setting peripheral DMA for file minor: %d size %d\n", mod_desc->minor, dma_file_size);
 
 	return 0;
 }
@@ -655,7 +653,7 @@ void int_ctlr_init(u64 axi_address)
 	u64 axi_dest;
 	int ret;
 
-	verbose_printk(KERN_INFO"<int_ctlr_init>: Setting Interrupt Controller Axi Address\n");
+	printk(KERN_INFO"<int_ctlr_init>: Setting Interrupt Controller Axi Address\n");
 	axi_interr_ctrl = axi_address;
 
 	/*Write to Interrupt Enable Register (IER)*/
@@ -672,7 +670,7 @@ void int_ctlr_init(u64 axi_address)
 
 	//			status = ioread32((u32 *)int_ctrl_virt_addr_loc);  //binary "11"
 	ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
-	verbose_printk(KERN_INFO"<int_ctlr_init>: read: ('%x') from MER register\n", status);
+	printk(KERN_INFO"<int_ctlr_init>: read: ('%x') from MER register\n", status);
 
 	/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
 	status = 0xFFFFFFFF;
@@ -828,7 +826,7 @@ u32 num2vec(int num)
 int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u64 dma_off)
 {
 	//	u32 test;
-	int in_range = 0;
+	int in_range ;
 	int status = 0;
 	int cdma_num = 0;
 	u64 dma_axi_address = 0;
@@ -838,9 +836,13 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 
 	/*determine if the axi range is in direct accessible memory space*/
 	if ((axi_address + (u64)count) < (bar_0_axi_offset + pci_bar_size) &&
-			(axi_address >= bar_0_axi_offset))
+	    (axi_address >= bar_0_axi_offset)) {
 		in_range = 1;
-
+	} else {
+		in_range = 0;
+		verbose_write_printk(KERN_INFO"<data_transfer> address 0x%llx out of range using DMA %d\n",axi_address,cdma_capable);
+		verbose_read_printk(KERN_INFO"<data_transfer> address 0x%llx out of range using DMA %d\n",axi_address,cdma_capable);
+	}
 	//if  data is small or the cdma is not initialized and in range
 	if (in_range == 1) {// ((count < 16) | (cdma_capable == 0)) & 
 		if ((transfer_type == NORMAL_READ) | (transfer_type == KEYHOLE_READ))
@@ -921,13 +923,12 @@ int direct_write(u64 axi_address, void *buf, size_t count, int transfer_type)
 	if ((axi_address + count) < (bar_0_axi_offset + pci_bar_size) &&
 			(axi_address >= bar_0_axi_offset)) {
 		virt_addr = (axi_address - bar_0_axi_offset) + pci_bar_vir_addr;
-		verbose_printk(KERN_INFO"		<direct_write>: Direct writing to BAR 0\n");
 	} else {
-		verbose_printk(KERN_INFO"		<direct_write>: ERROR trying to Direct write out of memory range!\n");
+		verbose_direct_write_printk(KERN_INFO"		<direct_write>: ERROR trying to Direct write out of memory range!\n");
 		return 1;
 	}
 
-	verbose_printk(KERN_INFO"		<direct_write>: writing:%x \n", *(u32*)buf);
+	verbose_direct_write_printk(KERN_INFO"		<direct_write>: writing:to 0x%llx value 0x%x \n", axi_address,*(u32*)buf);
 
 	offset = 0;
 	len = count/4;
@@ -936,8 +937,7 @@ int direct_write(u64 axi_address, void *buf, size_t count, int transfer_type)
 		write_value = *newaddr_src;
 		newaddr_dest = (u32 *)(virt_addr + offset);
 		iowrite32(write_value, newaddr_dest);
-		//		*newaddr_dest = write_value;   *this works too*
-		verbose_printk(KERN_INFO"		<direct_write>: wrote:%x to virtual address:('%p')\n", write_value, newaddr_dest);
+		verbose_direct_write_printk(KERN_INFO"		<direct_write>: wrote:%x to virtual address:('%p')\n", write_value, newaddr_dest);
 		if (transfer_type != KEYHOLE_WRITE)
 			offset += 4;
 	}
@@ -962,10 +962,10 @@ int direct_read(u64 axi_address, void *buf, size_t count, int transfer_type)
 	/* Also does a final check to make sure you are writing in range */
 	if ((axi_address + count) < (bar_0_axi_offset + pci_bar_size) && 
 			(axi_address >= bar_0_axi_offset)) {
-		verbose_printk(KERN_INFO"		<direct_read>: Direct reading from BAR 0\n");
+		verbose_direct_read_printk(KERN_INFO"		<direct_read>: Direct reading from BAR 0\n");
 		virt_addr = (axi_address - bar_0_axi_offset) + pci_bar_vir_addr;
 	} else {
-		verbose_printk(KERN_INFO"		<direct_read>: ERROR trying to Direct read out of memory range!\n");
+		verbose_direct_read_printk(KERN_INFO"		<direct_read>: ERROR trying to Direct read out of memory range!\n");
 		return 1;
 	}
 
@@ -977,11 +977,11 @@ int direct_read(u64 axi_address, void *buf, size_t count, int transfer_type)
 		//		kern_buf[i] = *newaddr_src;  *this works too*
 		if (transfer_type != KEYHOLE_READ)
 			offset += 4;
-		verbose_printk(KERN_INFO"		<direct_read>: read: %x from kernel address %p.\n", kern_buf[i], newaddr_src);
+		verbose_direct_read_printk(KERN_INFO"		<direct_read>: read: %x from kernel address %p.\n", kern_buf[i], newaddr_src);
 	}
 
 	memcpy(buf, (const void*)kern_buf, count);
-	verbose_printk(KERN_INFO"		<direct_read>: Leaving Direct Read\n");
+	verbose_direct_read_printk(KERN_INFO"		<direct_read>: Leaving Direct Read\n");
 
 	return 0;
 }
@@ -1209,8 +1209,7 @@ int cdma_ack(cdma_num)
 	int ret;
 	u64 axi_cdma_loc;
 
-	switch(cdma_num)
-	{
+	switch(cdma_num) {
 		case 1:
 			axi_cdma_loc = axi_cdma;
 			break;
@@ -1233,12 +1232,10 @@ int cdma_ack(cdma_num)
 	/* Check the status of the CDMA to see if successful */
 	ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
 	verbose_printk(KERN_INFO"	<cdma_ack>: CDMA status:%x\n", status);
-	if ((u32)status != 0x2)    //this is the expected status report
-	{
+	if ((u32)status != 0x2)  {  //this is the expected status report
 		printk(KERN_INFO"	<cdma_ack>: CDMA %d status ERROR\n", cdma_num);
 		printk(KERN_INFO"	<cdma_ack>: CDMA %d status:%x\n", cdma_num, status);
-		if (status == 0x4042)
-		{
+		if (status == 0x4042) {
 			printk(KERN_INFO"	<cdma_ack>: This is an AXI slave response error\n");
 			printk(KERN_INFO"       <cdma_ack>: commonly due to incorrect setting in pcie ip for axi to bar translation high address\n");
 			printk(KERN_INFO"       <cdma_ack>: Must set this value to be the DMA buffer size allocation.\n");
@@ -1408,7 +1405,7 @@ size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc)
 		return -1;
 	}
 	read_reg = (*(mod_desc->kernel_reg_read))|buf;   
-	verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_d2r>: RLR value = %d\n",read_reg);
+	verbose_axi_fifo_d2r_printk(KERN_INFO"<axi_stream_fifo_d2r>: RDFO value = %d\n",read_reg);
 	mod_desc->axi_fifo_rdfo = read_reg & 0x7fffffff; // remember the read
 
 	/*Read FIFO Fill level RLR (byte count)*/
@@ -1422,7 +1419,7 @@ size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc)
 		return -1;
 	}
 	read_reg = (*(mod_desc->kernel_reg_read))|buf;   
-	verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_d2r>: RLR value = %d\n",read_reg);
+	verbose_axi_fifo_d2r_printk(KERN_INFO"<axi_stream_fifo_d2r>: RLR value = %d\n",read_reg);
 	mod_desc->axi_fifo_rlr = read_reg; // remember the read
 
 	count = read_reg & 0x7fffffff;	
@@ -1449,7 +1446,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_p
 
 	/*debug stuff*/
 	//Read CTL interface
-	verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_read>: Reading the AXI Stream FIFO\n");
+	//verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_read>: Reading the AXI Stream FIFO\n");
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
 
 	//reset interrupts on CTL interface
@@ -1476,7 +1473,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_p
 			printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Read FIFO fill level\n");
 			return -1;
 		} 
-		fill_level = ((*(mod_desc->kernel_reg_read))|buf) & 0x7fffffff;
+		fill_level = ((*(mod_desc->kernel_reg_read))|buf);
 
 		/*Read FIFO Fill level (RLR) */
 		axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RLR;
@@ -1487,18 +1484,21 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_p
 			printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Read FIFO fill level\n");
 			return -1;
 		}
-		  //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
-		read_reg = (*(mod_desc->kernel_reg_read))|buf;
+		//this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+		read_reg = ((*(mod_desc->kernel_reg_read))|buf) ;
 		
+		verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_read>: RLR value = 0x%x fill_level = 0x%x ,count %d\n",
+					read_reg, fill_level, (int)count);
+		fill_level &= 0x7fffffff;
+		read_reg   &= 0x7fffffff;
 	}
 	fill_level *= dma_byte_width;
-	verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_read>: RLR value = 0x%x fill_level = %d ,count %d\n",read_reg,fill_level, count);
 
 	/*we are masking off the 32nd bit because the FIFO is in cut through mode
 	 *and sets the LSB to 1 to indicate a partial packet.*/
-	read_bytes = (0x7fffffff & read_reg);
+	read_bytes = read_reg;
 	if (read_bytes == 0) {
-	 	verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_read> There is either no data to read, or less than 8 bytes.\n"); 
+	 	//verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_read> There is either no data to read, or less than 8 bytes.\n"); 
 		return 0; // nothing to read
 	}
 
@@ -1516,8 +1516,8 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_p
 	// fill level is number of entries * width
 	if (fill_level  < count) {
 		verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_read>: FIFO fill level (%d) less than expected (%d)\n",
-					read_reg, count);
-		count = (read_reg * dma_byte_width);
+					fill_level, count);
+		count = read_reg;
 	}
 	verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_read>: FIFO fill level %d \n", read_reg);
 	if (read_reg == 0) return 0;
