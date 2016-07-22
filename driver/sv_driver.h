@@ -50,7 +50,7 @@
 //#define verbose_axi_fifo_d2r_printk printk
 //#define verbose_direct_write_printk printk
 //#define verbose_direct_read_printk printk
-#define verbose_llseek_printk printk
+//#define verbose_llseek_printk printk
 //#define verbose_printk printk
 #ifndef verbose_llseek_printk
 #define verbose_llseek_printk(...)
@@ -295,7 +295,7 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num);
  * for any failures.
  * @param cdma_num Instructs which CDMA to use (Assumes it has been locked)
 */
-int cdma_ack(int cdma_num);
+int cdma_ack(int cdma_num, u64 sa, u64 da, u32 btt);
 /**
  * @brief This asserts or deasserts hte keyhole setting in the CDMA register.
  * @param cdma_num Instructs which CDMA to use (Assumes it has been locked)

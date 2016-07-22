@@ -208,10 +208,7 @@ int read_data(struct mod_desc * mod_desc)
 			}
 		} else {
 			verbose_printk(KERN_INFO"<user_peripheral_read>: maximum read amount: %d\n", max_can_read);
-
 			read_count = axi_stream_fifo_read((size_t)max_can_read, mod_desc, (u64)rfh);
-			//printk("READ_COUNT: Just read %d bytes from HW\n", read_count);
-
 			if (read_count < 0) {
 				printk(KERN_INFO"<user_peripheral_read>: ERROR reading data from axi stream fifo\n");
 			}
@@ -306,8 +303,7 @@ int read_thread(void *in_param)
 							} else
 								printk(KERN_INFO"<read_thread>: kfifo is full, not writing mod desc\n");
 
-						}
-						else
+						} else
 							verbose_read_printk(KERN_INFO"<read_thread>: identical file struct in fifo, not writing.\n");
 					} else {
 						verbose_read_printk(KERN_INFO"<read_thread>: writing file struct back to fifo.....\n");
@@ -748,6 +744,7 @@ int cdma_init(int cdma_num, uint cdma_addr, u32 dma_addr_base)
 	verbose_cdma_printk(KERN_INFO"<cdma_%x_init>: sending a soft reset to the CDMA\n", cdma_num);
 	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE, 0);
 
+
 	/*Check the current status*/
 	axi_dest = axi_cdma_loc + CDMA_SR;
 	//			direct_read(axi_dest, (void*)&cdma_status, 4, NORMAL_READ);
@@ -779,8 +776,8 @@ int cdma_init(int cdma_num, uint cdma_addr, u32 dma_addr_base)
 	/*Check the current config*/
 	axi_dest = axi_cdma_loc + CDMA_CR;
 	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0);
-	verbose_cdma_printk(KERN_INFO"<cdma_%x_init>: CDMA config after configuring:%x\n", cdma_num, cdma_status);
-
+	verbose_cdma_printk(KERN_INFO"<cdma_%x_init>: CDMA config after configuring:%x pcie_ctl:%d\n", 
+			    cdma_num, cdma_status, pcie_ctl_set);
 
 	/*This checks to see if the user has set the pcie_ctl base address
 	 * if so, we can go ahead and write the dma_addr to the pcie translation
@@ -838,11 +835,14 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 	if ((axi_address + (u64)count) < (bar_0_axi_offset + pci_bar_size) &&
 	    (axi_address >= bar_0_axi_offset)) {
 		in_range = 1;
+		verbose_write_printk(KERN_INFO"<data_transfer> address 0x%llx in range going direct\n",axi_address);
+		verbose_read_printk(KERN_INFO"<data_transfer> address 0x%llx  in range going direct\n",axi_address);
 	} else {
 		in_range = 0;
 		verbose_write_printk(KERN_INFO"<data_transfer> address 0x%llx out of range using DMA %d\n",axi_address,cdma_capable);
 		verbose_read_printk(KERN_INFO"<data_transfer> address 0x%llx out of range using DMA %d\n",axi_address,cdma_capable);
 	}
+
 	//if  data is small or the cdma is not initialized and in range
 	if (in_range == 1) {// ((count < 16) | (cdma_capable == 0)) & 
 		if ((transfer_type == NORMAL_READ) | (transfer_type == KEYHOLE_READ))
@@ -868,15 +868,11 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 		if ((transfer_type == NORMAL_READ) || (transfer_type == KEYHOLE_READ)) {
 			status = cdma_transfer(axi_address, dma_axi_address, (u32)count, transfer_type, cdma_num);
 			if (status != 0)   //unsuccessful CDMA transmission
-				verbose_printk(KERN_INFO"ERROR on CDMA READ!!!.\n");
-			//			memcpy(buf, (const void*)dma_p, count);
+				printk(KERN_INFO"ERROR on CDMA READ!!!.\n");
 
 		} else if ((transfer_type == NORMAL_WRITE) | (transfer_type == KEYHOLE_WRITE)) {
 			//Transfer data from user space to kernal space at the allocated DMA region
-			//		memcpy(dma_p, (const void*)buf, count);
 			status = cdma_transfer(dma_axi_address, axi_address, (u32)count, transfer_type, cdma_num);
-			//			test = 0xDEADBEEF;
-			//			memcpy(dma_p, (const void*)&test, 4);
 		} else
 			verbose_printk(KERN_INFO"<data_transfer>: error no transfer type specified\n");
 
@@ -1049,7 +1045,7 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 		ret = cdma_config_set(bit_vec, 1, cdma_num);   //value of one means we want to SET the register
 			break;
 			
-	default:printk(KERN_INFO"	<keyhole_setting> no keyhole swtting will be used.\n");
+	default:verbose_printk(KERN_INFO"	<keyhole_setting> no keyhole setting will be used.\n");
 	}
 	
 	switch(cdma_num) {
@@ -1096,7 +1092,7 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 	cdma_idle_poll(cdma_num);
 
 	// Acknowledge the CDMA and check for error status
-	ack_status = cdma_ack(cdma_num);
+	ack_status = cdma_ack(cdma_num,SA,DA,BTT);
 
 	if ((keyhole_en == KEYHOLE_READ) | (keyhole_en == KEYHOLE_WRITE)) {
 		bit_vec = 0x20 | 0x10;      // "0x30" unset both CDMA keyhole read and write
@@ -1201,7 +1197,7 @@ int cdma_config_set(u32 bit_vec, int set_unset, int cdma_num)
 	return 0;
 }
 
-int cdma_ack(cdma_num)
+int cdma_ack(int cdma_num, u64 sa, u64 da, u32 btt)
 {
 	u32 cdma_status;
 	u32 status;
@@ -1236,7 +1232,7 @@ int cdma_ack(cdma_num)
 		printk(KERN_INFO"	<cdma_ack>: CDMA %d status ERROR\n", cdma_num);
 		printk(KERN_INFO"	<cdma_ack>: CDMA %d status:%x\n", cdma_num, status);
 		if (status == 0x4042) {
-			printk(KERN_INFO"	<cdma_ack>: This is an AXI slave response error\n");
+		  printk(KERN_INFO"	<cdma_ack>: This is an AXI slave response error SA:0x%llx DA:0x%llx Bytes:%d\n",sa,da,btt);
 			printk(KERN_INFO"       <cdma_ack>: commonly due to incorrect setting in pcie ip for axi to bar translation high address\n");
 			printk(KERN_INFO"       <cdma_ack>: Must set this value to be the DMA buffer size allocation.\n");
 		}		
@@ -1251,7 +1247,6 @@ int cdma_ack(cdma_num)
 		ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE, 0);
 		/*Check the current status*/
 		axi_dest = axi_cdma_loc + CDMA_SR;
-		//			direct_read(axi_dest, (void*)&cdma_status, 4, NORMAL_READ);
 		ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0);
 		printk(KERN_INFO"<cdma_%x_init>: CDMA status before configuring:%x\n", cdma_num, cdma_status);
 		/*Check the current config*/
@@ -1420,7 +1415,7 @@ size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc)
 	}
 	read_reg = (*(mod_desc->kernel_reg_read))|buf;   
 	verbose_axi_fifo_d2r_printk(KERN_INFO"<axi_stream_fifo_d2r>: RLR value = %d\n",read_reg);
-	mod_desc->axi_fifo_rlr = read_reg; // remember the read
+	mod_desc->axi_fifo_rlr = read_reg & 0x7fffffff; // remember the read
 
 	count = read_reg & 0x7fffffff;	
 	return count;  	
@@ -1463,6 +1458,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_p
 		fill_level = mod_desc->axi_fifo_rdfo;
 		read_reg   = mod_desc->axi_fifo_rlr;
 		mod_desc->axi_fifo_rlr = mod_desc->axi_fifo_rdfo = 0;
+		ret = 1;
 	} else {
 		// read the FIFO fill level RDFO
 		axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RDFO;
@@ -1491,6 +1487,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_p
 					read_reg, fill_level, (int)count);
 		fill_level &= 0x7fffffff;
 		read_reg   &= 0x7fffffff;
+		ret = 2;
 	}
 	fill_level *= dma_byte_width;
 
@@ -1525,7 +1522,7 @@ size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_p
 	keyhole_en = KEYHOLE_READ;
 
 	axi_dest = mod_desc->axi_addr + AXI_STREAM_RDFD;
-	verbose_axi_fifo_printk(KERN_INFO"<axi_stream_fifo_read> AXI Address of FIFO:%llx\n", mod_desc->axi_addr);
+	verbose_printk(KERN_INFO"<axi_stream_fifo_read> AXI Address of FIFO:%llx len 0x%x (%d)\n", mod_desc->axi_addr,read_reg,ret);
 	ret = data_transfer(axi_dest, 0, read_reg, keyhole_en, dma_offset_read);
 	if (ret > 0) {
 		printk(KERN_INFO"<axi_stream_fifo_read>: ERROR reading Data from Read FIFO\n");
