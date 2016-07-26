@@ -467,13 +467,11 @@ int write_data(struct mod_desc * mod_desc)
 	//d2w = data_to_write(mod_desc);
 	d2w =  data_to_transfer(mod_desc, wth, wtk, priority);
 
-	while(d2w>0)
-	{
+	while(d2w>0) {
 
 		not_rdy_count = 0;
-
-		while (write_fifo_ready(mod_desc) == 0)
-		{
+		while (write_fifo_ready(mod_desc) == 0) {
+			verbose_write_printk("<write_data> the write fifo NOT ready\n");
 			/*Here we still have more data to write to the hardware but the fifo
 			 * is not ready, we must requeue the mod_desc in the write FIFO*/
 			not_rdy_count++;
@@ -493,8 +491,7 @@ int write_data(struct mod_desc * mod_desc)
 		verbose_write_printk("<write_data> the write fifo is ready, writing data...\n");
 		verbose_write_printk("<write_data> data to write is: %d\n", d2w);
 
-		if (d2w > (int)(mod_desc->file_size))
-		{
+		if (d2w > (int)(mod_desc->file_size)) {
 			verbose_write_printk("<write_data> Too much data for hardware fifo decreasing size\n");
 			d2w = (int)(mod_desc->file_size);
 			verbose_write_printk("<write_data> Updated data to write is: %d\n", d2w);
@@ -502,8 +499,7 @@ int write_data(struct mod_desc * mod_desc)
 
 		write_count = axi_stream_fifo_write((size_t)d2w, mod_desc, (u64)wth);
 		verbose_printk("<write_data> finished writing to hw, updating ring pointer.... \n");
-		if (write_count < 0)
-		{
+		if (write_count < 0) {
 			printk(KERN_INFO"<pci_write>: Write Error, exiting write routine...\n\n\n");
 			return -1;
 		}
@@ -579,8 +575,6 @@ int write_fifo_ready(struct mod_desc* mod_desc)
 	}
 
 	return 1;
-
-
 }
 
 struct task_struct* create_thread(struct mod_desc *mod_desc)
@@ -835,12 +829,12 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 	if ((axi_address + (u64)count) < (bar_0_axi_offset + pci_bar_size) &&
 	    (axi_address >= bar_0_axi_offset)) {
 		in_range = 1;
-		verbose_write_printk(KERN_INFO"<data_transfer> address 0x%llx in range going direct\n",axi_address);
-		verbose_read_printk(KERN_INFO"<data_transfer> address 0x%llx  in range going direct\n",axi_address);
+		verbose_write_printk(KERN_INFO"<data_transfer_write> address 0x%llx in range going direct\n",axi_address);
+		verbose_read_printk(KERN_INFO"<data_transfer_read>   address 0x%llx  in range going direct\n",axi_address);
 	} else {
 		in_range = 0;
-		verbose_write_printk(KERN_INFO"<data_transfer> address 0x%llx out of range using DMA %d\n",axi_address,cdma_capable);
-		verbose_read_printk(KERN_INFO"<data_transfer> address 0x%llx out of range using DMA %d\n",axi_address,cdma_capable);
+		verbose_write_printk(KERN_INFO"<data_transfer_write> address 0x%llx out of range using DMA %d\n",axi_address,cdma_capable);
+		verbose_read_printk(KERN_INFO"<data_transfer_read>   address 0x%llx out of range using DMA %d\n",axi_address,cdma_capable);
 	}
 
 	//if  data is small or the cdma is not initialized and in range
@@ -870,7 +864,7 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 			if (status != 0)   //unsuccessful CDMA transmission
 				printk(KERN_INFO"ERROR on CDMA READ!!!.\n");
 
-		} else if ((transfer_type == NORMAL_WRITE) | (transfer_type == KEYHOLE_WRITE)) {
+		} else if ((transfer_type == NORMAL_WRITE) || (transfer_type == KEYHOLE_WRITE)) {
 			//Transfer data from user space to kernal space at the allocated DMA region
 			status = cdma_transfer(dma_axi_address, axi_address, (u32)count, transfer_type, cdma_num);
 		} else
@@ -1325,8 +1319,7 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_
 	//fifo_empty_level = (((u32)(mod_desc->file_size))/32)-4;  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
 	//fifo_empty_level = (u32)(((u32)(mod_desc->file_size)/(u32)dma_byte_width)-4);  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
 
-	while (read_reg != fifo_empty_level)  //1fc is an empty 512 depth fifo
-	{
+	while (read_reg != fifo_empty_level) { //1fc is an empty 512 depth fifo
 		printk(KERN_INFO"<axi_streaming_fifo_write>: stuck waiting for hardware fifo....\n");
 
 		mod_desc->ip_not_ready = mod_desc->ip_not_ready + 1;
@@ -1357,8 +1350,7 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_
 
 	axi_dest = mod_desc->axi_addr + AXI_STREAM_TDFD;  //The data transfer to the FIFO
 	ret = data_transfer(axi_dest, 0, count, KEYHOLE_WRITE, dma_offset_write);
-	if (ret > 0)
-	{
+	if (ret > 0) {
 		printk(KERN_INFO"<pci_write>: ERROR writing to AXI Streaming FIFO\n");
 		return -1;
 	}
@@ -1369,8 +1361,7 @@ size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_
 	*(mod_desc->kernel_reg_write) = (u32)count;
 	buf = (u32)count;
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, dma_offset_internal_write);
-	if (ret > 0)
-	{
+	if (ret > 0) {
 		printk(KERN_INFO"<pci_write>: ERROR writing to AXI Streaming FIFO Control Interface\n");
 		return -1;
 	}
@@ -1624,19 +1615,17 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 		printk(KERN_INFO"<axi_stream_fifo_init>: ERROR\n");
 		return -1;
 	}
-	read_reg = (*(mod_desc->kernel_reg_read)|buf);    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
-	//read_reg = (*(mod_desc->kernel_reg_read));    
-	//read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+
+	//this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
+	read_reg = (*(mod_desc->kernel_reg_read)|buf);    
 
 	/*Check to see if the calculated fifo empty level via the DMA data byte width (aka the axi-s fifo byte width)
 	 * and file size (aka the fifo size) is equal to the actual fifo empty level when read */	
-	//fifo_empty_level = (u32)((((mod_desc->file_size))/(u32)dma_byte_width)-4);  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
 	fifo_empty_level = (((u32)(mod_desc->file_size))/8)-4;  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
 	printk(KERN_INFO"<axi_stream_fifo_init>: file size: 0x%x\n", (u32)mod_desc->file_size);
 	printk(KERN_INFO"<axi_stream_fifo_init>: calculated size: 0x%x\n", fifo_empty_level);
 	printk(KERN_INFO"<axi_stream_fifo_init>: register read size: 0x%x\n", read_reg);
 	if (read_reg > 0) {
-		//fifo_empty_level = (u32)((((mod_desc->file_size))/(u32)dma_byte_width)-4);  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
 		fifo_empty_level = (((u32)(mod_desc->file_size))/8)-4;  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
 		if (read_reg != fifo_empty_level) {	
 			printk(KERN_INFO"<axi_stream_fifo_init>: Error during initialization, the calculated axi-s fifo size is not equivalent to the actual size, Fix parameters\n");
