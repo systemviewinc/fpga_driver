@@ -54,7 +54,7 @@ int dma_system_size = 4194304;/**< Insmod Parameter - Size of DMA Allocation, ma
 int dma_file_size = 4096;/**< Insmod Parameter - Currently not used, the HW buffer size is now set on a file by file basis.*/
 int dma_byte_width = 8;   /**< Insmod Parameter - This parameter is the data width of the CDMA. It is used to calculate the FIFO empty value.*/
 int back_pressure = 1;/**< Insmod Parameter - This parameter sets whether the READ Ring Buffer should overwrite data or backpressure to HW.*/
-static char buffer[128];/**< Used to store the PCIe Device Name*/
+//static char buffer[128];/**< Used to store the PCIe Device Name*/
 //static char  *pci_devName = &buffer[0];/**< Insmod Parameter - the PCIe Device Name.*/
 //const char * pci_devName_const;
 const char pci_devName[] = "vsi_driver"; //name of the device
@@ -1309,7 +1309,6 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 loff_t pci_llseek( struct file *filp, loff_t off, int whence)
 {
-	struct mod_desc * mod_desc = filp->private_data;
 	loff_t newpos;
 	
 	switch(whence) {
