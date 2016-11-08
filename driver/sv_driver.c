@@ -516,7 +516,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 		return ERROR;
 	}
 
-	printk(KERN_INFO"<probe>register device complete going to alloc %d byte for dma\n",dma_buffer_size);
+	printk(KERN_INFO"<probe>register device complete going to alloc %lld byte for dma\n",dma_buffer_size);
 
 	/*allocate the DMA buffer*/
 	dma_buffer_base = dma_alloc_coherent(dev_struct, (size_t)dma_buffer_size, &dma_addr_base, GFP_KERNEL);
