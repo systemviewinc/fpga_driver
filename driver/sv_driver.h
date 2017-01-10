@@ -5,14 +5,14 @@
  * @date 11/10/2015
 
  * @author   System View Inc.
- 
+
  * @file  sv_driver.h
 
  * @brief         This driver is to be used to control the
  *                Xilinx interface IP created by System View Inc.
  ***********************************************************
  */
-	
+
 #include <linux/kthread.h>
 #include <linux/kfifo.h>
 
@@ -38,20 +38,27 @@
 #endif
 
 //#define BACK_PRESSURE 1
-#define RING_BUFF_SIZE_MULTIPLIER 2
+#define RING_BUFF_SIZE_MULTIPLIER 8
 /********* printk statements *********/
-//#define verbose_printk printk
+#define verbose_printk printk
 //#define verbose_read_printk printk
 //#define verbose_write_printk printk
-//#define verbose_cdma_printk printk
-//#define verbose_axi_fifo_printk printk
-//#define verbose_isr_printk printk
-//#define verbose_poll_printk printk
-//#define verbose_axi_fifo_d2r_printk printk
+#define verbose_cdma_printk printk
+#define verbose_axi_fifo_read_printk printk
+#define verbose_axi_fifo_write_printk printk
+#define verbose_isr_printk printk
+#define verbose_poll_printk printk
+//#define very_verbose_poll_printk printk
+#define verbose_axi_fifo_d2r_printk printk
 //#define verbose_direct_write_printk printk
 //#define verbose_direct_read_printk printk
 //#define verbose_llseek_printk printk
-//#define verbose_printk printk
+#define verbose_pci_read_printk printk
+#define verbose_pci_write_printk printk
+#define verbose_read_thread_printk printk
+#define verbose_write_thread_printk printk
+
+
 #ifndef verbose_llseek_printk
 #define verbose_llseek_printk(...)
 #endif
@@ -70,8 +77,11 @@
 #ifndef verbose_read_printk
 #define verbose_read_printk(...)
 #endif
-#ifndef verbose_axi_fifo_printk
-#define verbose_axi_fifo_printk(...)
+#ifndef verbose_axi_fifo_read_printk
+#define verbose_axi_fifo_read_printk(...)
+#endif
+#ifndef verbose_axi_fifo_write_printk
+#define verbose_axi_fifo_write_printk(...)
 #endif
 #ifndef verbose_axi_fifo_d2r_printk
 #define verbose_axi_fifo_d2r_printk(...)
@@ -82,9 +92,25 @@
 #ifndef verbose_poll_printk
 #define verbose_poll_printk(...)
 #endif
+#ifndef very_verbose_poll_printk
+#define very_verbose_poll_printk(...)
+#endif
 #ifndef verbose_printk
 #define verbose_printk(...)
 #endif
+#ifndef verbose_pci_read_printk
+#define verbose_pci_read_printk(...)
+#endif
+#ifndef verbose_pci_write_printk
+#define verbose_pci_write_printk(...)
+#endif
+#ifndef verbose_read_thread_printk
+#define verbose_read_thread_printk(...)
+#endif
+#ifndef verbose_write_thread_printk
+#define verbose_write_thread_printk(...)
+#endif
+
 /******************************/
 
 /*IOCTLS */
@@ -116,9 +142,10 @@
 
 /* MODE Types */
 #define SLAVE 0				/**< Mode Type : This is standard memory interface */
-#define AXI_STREAM_FIFO 1   /**< Mode Type : This is for axi streaming peripherals */
-#define MASTER 2			/**< Mode Type : This is for AXI Master devices (currently not supported) */ 
-//#define CDMA 3			 
+#define AXI_STREAM_FIFO 1   /**< Mode Type : This is for axi streaming peripherals with no last singal */
+#define MASTER 2			/**< Mode Type : This is for AXI Master devices (currently not supported) */
+#define AXI_STREAM_PACKET 4 /**< Mode Type : This is for axi streaming peripherals with a last signal */
+//#define CDMA 3
 
 
 #define MAX_NUM_MASTERS 2
@@ -128,6 +155,47 @@
 /*These are the Driver types that are matched through insmod parameter "driver_type" */
 #define PCI 1     /**< Driver Type */
 #define PLATFORM 2 /**< Driver Type */
+
+
+/******************************** Xilinx Register Offsets **********************************/
+
+extern const u32 AXI_STREAM_ISR;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+extern const u32 AXI_STREAM_IER;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+extern const u32 AXI_STREAM_TDFR;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+extern const u32 AXI_STREAM_TDFV;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+extern const u32 AXI_STREAM_TDFD;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+extern const u32 AXI_STREAM_TLR;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+extern const u32 AXI_STREAM_RDFR;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+extern const u32 AXI_STREAM_RDFO;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+extern const u32 AXI_STREAM_RDFD;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+extern const u32 AXI_STREAM_RLR;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+extern const u32 AXI_STREAM_SRR;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+extern const u32 AXI_STREAM_TDR;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+extern const u32 AXI_STREAM_RDR;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+extern const u32 AXI_STREAM_TXID;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+extern const u32 AXI_STREAM_TXUSER;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+extern const u32 AXI_STREAM_RXID;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+
+extern const u32 CDMA_CR;    /**< CDMA Register Offset (See Xilinx Doc) */
+extern const u32 CDMA_SR;    /**< CDMA Register Offset (See Xilinx Doc) */
+extern const u32 CDMA_DA;    /**< CDMA Register Offset (See Xilinx Doc) */
+extern const u32 CDMA_DA_MSB;    /**< CDMA Register Offset (See Xilinx Doc) */
+extern const u32 CDMA_SA;    /**< CDMA Register Offset (See Xilinx Doc) */
+extern const u32 CDMA_SA_MSB;    /**< CDMA Register Offset (See Xilinx Doc) */
+extern const u32 CDMA_BTT;    /**< CDMA Register Offset (See Xilinx Doc) */
+
+extern const u32 AXIBAR2PCIEBAR_0L;    /**< AXI PCIe Subsystem Offset (See Xilinx Doc) */
+extern const u32 AXIBAR2PCIEBAR_1L;    /**< AXI PCIe Subsystem Offset (See Xilinx Doc) */
+
+extern const u32 INT_CTRL_IER;  /**< Interrupt Controller Register Offset, see Xilinx doc. */
+extern const u32 INT_CTRL_MER;	 /**< Interrupt Controller Register Offset, see Xilinx doc. */
+extern const u32 INT_CTRL_ISR;	 /**< Interrupt Controller Register Offset, see Xilinx doc. */
+extern const u32 INT_CTRL_IAR;	 /**< Interrupt Controller Register Offset, see Xilinx doc. */
+
+/********************************************************************************************/
+
+
+
 
 /* Shared Global Variables */
 typedef unsigned int uint;
@@ -151,6 +219,7 @@ extern atomic_t cdma_q;
 
 extern u32 dma_current_offset;
 extern u32 dma_garbage_offset;
+extern u32 dma_garbage_size;
 /*these are used in the data_transfer function to check for out of range memory r/w */
 extern unsigned long pci_bar_size;
 extern unsigned long pci_bar_1_size;
@@ -168,7 +237,7 @@ extern uint pcie_m_address;
 /*These are the interrupt and mutex wait variables */
 extern wait_queue_head_t wq;
 extern wait_queue_head_t wq_periph;
-extern wait_queue_head_t thread_q_head;
+extern wait_queue_head_t thread_q_head_write;
 extern wait_queue_head_t thread_q_head_read;
 extern wait_queue_head_t pci_write_head;
 /*this is the CDMA wait condition variable*/
@@ -176,19 +245,14 @@ extern int cdma_comp[5];
 extern atomic_t cdma_atom[5];
 
 extern atomic_t thread_q_read;
-extern atomic_t thread_q;
-extern spinlock_t fifo_lock;
+extern atomic_t thread_q_write;
+extern spinlock_t fifo_lock_read;
 extern spinlock_t fifo_lock_write;
 
 extern int cdma_usage_cnt;
 
-extern const u32 INT_CTRL_IER;
-extern const u32 INT_CTRL_MER;
-extern const u32 INT_CTRL_ISR;
-extern const u32 INT_CTRL_IAR;
-
-extern atomic_t driver_tx_bytes; 
-extern atomic_t driver_rx_bytes; 
+extern atomic_t driver_tx_bytes;
+extern atomic_t driver_rx_bytes;
 extern atomic_t driver_start_flag;
 extern atomic_t driver_stop_flag;
 extern struct timespec driver_start_time;
@@ -197,8 +261,6 @@ extern struct timespec driver_stop_time;
 extern void * dma_buffer_base;
 extern u32 dma_current_offset;
 extern u64 dma_buffer_size;
-
-
 
 /** Module Description Struct
  *	@brief This is the data structure that is stored inside the private section of each file
@@ -216,38 +278,46 @@ struct mod_desc
 	int master_num;             /**< For future master peripherals, currently UNUSED */
 	int keyhole_config;         /**< The Keyhole R/W configuration for associated IP */
 	u32 interrupt_vec;          /**< The Interrupt Vector */
-	u32 dma_offset_read;        /**< The Offset byte of the allocated DMA buffer for READ */
-	u32 dma_offset_write;		/**< The Offset byte of the allocated DMA buffer for WRITE */
+
+	atomic_t * in_read_fifo_count;		/**< The number of times the mod_desc is in the read fifo, once it reaches 0 we can kfree it */
+	atomic_t * in_write_fifo_count;		/**< The number of times the mod_desc is in the write fifo, once it reaches 0 we can kfree it */
+
+	bool file_open;							/**< True if file is open, used to process the mod_desc (or throw it away) in read/write threads */
+
 	size_t dma_size;            /**< The size of allocated DMA buffer */
-	void * dma_write;			/**< This is the pointer to the start of DMA buffer for WRITE */
-	void * dma_read;			/**< This is the pointer to the start of DMA buffer for READ */
-	u32 * kernel_reg_write;     /**< This is the pointer to the  DMA accessible 32b buffer for register WRITEs */
-	u32 * kernel_reg_read;      /**< This is the pointer to the  DMA accessible 32b buffer for register READs */
-	u32 dma_offset_internal_read; /**< The Offset byte of the DMA accessible buffer for register READs */
-	u32 dma_offset_internal_write; /**< The Offset byte of the DMA accessible buffer for register WRITEs */
+
+	u32 dma_offset_read;        /**< The Offset byte of the allocated DMA buffer for READ from dma_buffer_base */
+	u32 dma_offset_write;				/**< The Offset byte of the allocated DMA buffer for WRITE from dma_buffer_base */
+	void * dma_write_addr;			/**< This is the pointer to the start of DMA buffer for WRITE in virtual address space */
+	void * dma_read_addr;			/**< This is the pointer to the start of DMA buffer for READ in virtual address space */
+
 	loff_t file_size;   /**< This is the size of the axi_streaming FIFO for streaming peripherals or size of ram for memory peripherals */
-	int tx_bytes;				/**< This is the TX byte count for statistics generation */   
+	int tx_bytes;				/**< This is the TX byte count for statistics generation */
 	int rx_bytes;				/**< This is the RX byte count for statistics generation */
 	struct timespec * start_time;   /**< This holds the start time for statistics generation */
 	struct timespec * stop_time;    /**< This holds the stop time for statistics generation */
 	int start_flag;             /**< This is used internally by the driver for starting the timer */
-	int stop_flag;				/**< This is used internally by the driver for stopping the timer */
-	int cdma_attempt;		    /**< This is a statictic collected to count number of failed cdma semaphore lock attempts */
+	int stop_flag;							/**< This is used internally by the driver for stopping the timer */
+	int cdma_attempt;		    		/**< This is a statictic collected to count number of failed cdma semaphore lock attempts */
 	int ip_not_ready;           /**< This is a statistic collected to count the number of times the IP was not ready to accept new data */
 	atomic_t * atomic_poll;     /**< this atomic variable is used in the Poll() function to note if the peripheral is ready to be read */
 	int set_dma_flag;			/**< This flag is set by the driver to indicate that a DMA region has been allocated */
+
 	atomic_t * wth;				/**< Write to Hardware pointer for WRITE Ring Buffer */
 	atomic_t * wtk;				/**< Write to Kernel pointer for WRITE Ring Buffer */
-	atomic_t * ring_buf_pri;    /**< Handshake variable for priority on WRITE Ring Buffer when wth == wtk */
-	atomic_t * rfh;				/**< Read from Hardware pointer for READ Ring Buffer */
-	atomic_t * rfu;				/**< Read from User pointer for READ Ring Buffer */
-	atomic_t * ring_buf_pri_read;    /**< Handshake variable for priority on READ Ring Buffer when rfu == rfh */
+	atomic_t * write_ring_buf_full;    /**< WRITE Ring Buffer is full and wth == wtk */
+
+	atomic_t * rfh;				/**< Read from Hardware pointer for READ Ring Buffer - HW DMAs data in read_data_thread*/
+	atomic_t * rfu;				/**< Read from User pointer for READ Ring Buffer - user copies data into pci_read */
+	atomic_t * read_ring_buf_full;    /**< READ Ring Buffer is full, and rfu == rfh */
+
 	spinlock_t * ring_pointer_write;  /**< Spinlock variable to lock code section for updating ring pointer variables */
 	spinlock_t * ring_pointer_read;   /**< Spinlock variable to lock code section for updating ring pointer variables */
+
 	atomic_t * pci_write_q;     /**< Used as a wait variable to wake up a sleeping pci_write function */
-	spinlock_t * in_fifo;		/**< Spinlock variable to proect code for writing in_fifo flag*/
+	spinlock_t * in_fifo_read;		/**< Spinlock variable to proect code for writing in_fifo flag*/
 	spinlock_t * in_fifo_write; /**< Spinlock variable to protect code for writing in_fifo flag */
-	int in_fifo_flag;			/**< Flag variable to tell if it already exists in the READ FIFO */
+	int in_fifo_read_flag;			/**< Flag variable to tell if it already exists in the READ FIFO */
 	int in_fifo_write_flag;     /**< Flag variable to tell if it already exists in the WRITE FIFO */
 	int has_interrupt_vec;	/**< This file has an interrupt associated with it */
 	int axi_fifo_rlr;	/**< Last read RLR  value if non-zero this has to be used */
@@ -281,7 +351,7 @@ struct statistics
 
 /**
  * @brief This function is used to initiate a CDMA Transfer. It requires
- * a locked CDMA resource an AXI Start Address, AXI Destination Address, 
+ * a locked CDMA resource an AXI Start Address, AXI Destination Address,
  * and a Keyhole setting.
  * @param SA 64bit Starting Address of DMA transfer.
  * @param DA 64bit Destination Address of DMA transfer.
@@ -331,7 +401,7 @@ int direct_write(u64 axi_address, void *buf, size_t count, int transfer_type);
 */
 int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u64 dma_offset);
 /**
- * @brief This function is used for interrupt processing. it returns the integer value of the 
+ * @brief This function is used for interrupt processing. it returns the integer value of the
  * least significant set bit position.
  * @param vec The 32b vector to convert to an integer (converts to integer of least sig set bit)
 */
@@ -342,7 +412,7 @@ int vec2num(u32 vec);
 */
 int cdma_query(void);
 /**
- * @brief This function is used for interrupt processing. it returns the one-hot vector value 
+ * @brief This function is used for interrupt processing. it returns the one-hot vector value
  * of the input num as a position.
  * @param num converts this number to one hot vector
 */
@@ -356,79 +426,77 @@ u32 num2vec(int num);
 int cdma_init(int cdma_num, uint cdma_address, u32 dma_addr_base);
 /**
  * @brief This function writes the translation address (The DMA Hardware base address) to the
- * PCIe control register. 
- * @param axi_address The 64b AXI address of the PCIe Control interface (set through insmod). 
+ * PCIe control register.
+ * @param axi_address The 64b AXI address of the PCIe Control interface (set through insmod).
  * @param dma_addr_base Used to set the dma translation address to the PCIe control reg.
 */
 int pcie_ctl_init(u64 axi_address, u32 dma_addr_base);
 //void pcie_m_init(int cdma_num);
 /**
  * @brief This function initialized the interrupt controller in the FPGA.
- * @param axi_address The 64b AXI address of the Interrupt Controller (set through insmod). 
+ * @param axi_address The 64b AXI address of the Interrupt Controller (set through insmod).
 */
 void int_ctlr_init(u64 axi_address);
 /**
- * @brief This function allocates the DMA regions for the peripheral. 
+ * @brief This function allocates the DMA regions for the peripheral.
  * @param mod_desc the struct containing all the file variables.
  * @param dma_buffer_base the current DMA allocated region offset to be assigned
- * @param dma_buffer_size The size of the DMA buffer. 
+ * @param dma_buffer_size The size of the DMA buffer.
 */
 int dma_file_init(struct mod_desc *mod_desc, void *dma_buffer_base, u64 dma_buffer_size);
 /**
- * @brief This function performs calls appropriate functions for writing to the AXI Streaming FIFO. 
- * @param count The number of bytes to write to the AXI streaming FIFO.
- * @param mod_desc The struct containing all the file variables.
- * @param ring_pointer_offset The current offset of the ring pointer in memory for data to write.
-*/
-size_t axi_stream_fifo_write(size_t count, struct mod_desc * mod_desc, u64 ring_pointer_offset);
-/**
- * @brief This function performs calls appropriate functions for Reading from the AXI Streaming FIFO. 
+ * @brief This function performs calls appropriate functions for Reading from the AXI Streaming FIFO.
  * @param count The number of bytes to read from the AXI streaming FIFO.
  * @param mod_desc The struct containing all the file variables.
  * @param ring_pointer_offset The current offset of the ring pointer in memory to store data.
 */
-size_t axi_stream_fifo_read(size_t count, struct mod_desc * mod_desc, u64 ring_pointer_offset);
+size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr, struct mod_desc * mod_desc, int ring_pointer_offset, size_t buf_size);
+
 /**
- * @brief This function initializes the AXI Streaming FIFO. 
+ * @brief This function initializes the AXI Streaming FIFO.
  * @param mod_desc The struct containing all the file variables.
 */
 int axi_stream_fifo_init(struct mod_desc * mod_desc);
+
+int axi_stream_fifo_deinit(struct mod_desc * mod_desc);
+
 /**
- * @brief This function causes the process to block (sleep) until CDMA completion interrupt is 
- * received.  It is currently not being uses because we found polling operates much faster. 
+ * @brief This function causes the process to block (sleep) until CDMA completion interrupt is
+ * received.  It is currently not being uses because we found polling operates much faster.
  * @param cdma_num Instructs which CDMA to use (Assumes it has been locked)
 */
 void cdma_wait_sleep(int cdma_num);
 /**
- * @brief This function continuously polls the CDMA until the completion bit is read. 
+ * @brief This function continuously polls the CDMA until the completion bit is read.
  * @param cdma_num Instructs which CDMA to use (Assumes it has been locked)
 */
 void cdma_idle_poll(int cdma_num);
 /**
  * @brief This function operates on it's own thread after insmod. It is used to handle all AXI-Streaming
  * write transfers.  It reads from the write ring buffers and writes the data to hardware.
- * @param write_fifo the kernel FIFO data structure for the global write FIFO. 
+ * @param write_fifo the kernel FIFO data structure for the global write FIFO.
 */
 int write_thread(void *in_param);
 /**
  * @brief This function operates on it's own thread after insmod. It is used to handle all AXI-Streaming
- * read transfers.  It reads from the hardware and stores data in the Read Ring Buffer. It wakes up the 
- * poll method for the file upon receiving new data. 
- * @param read_fifo the kernel FIFO data structure for the global read FIFO. 
+ * read transfers.  It reads from the hardware and stores data in the Read Ring Buffer. It wakes up the
+ * poll method for the file upon receiving new data.
+ * @param read_fifo the kernel FIFO data structure for the global read FIFO.
 */
 int read_thread(void *in_param);
 /**
- * @brief This function is called by the driver to create the write thread. 
+ * @brief This function is called by the driver to create the write thread.
  * @param mod_desc The struct containing all the file variables.
 */
-struct task_struct* create_thread(struct mod_desc *mod_desc);
+struct task_struct* create_thread_write(struct kfifo * write_fifo);
 /**
- * @brief This function is called by the driver to create the read thread. 
- * @param read_fifo the kernel FIFO data structure for the global read FIFO. 
+ * @brief This function is called by the driver to create the read thread.
+ * @param read_fifo the kernel FIFO data structure for the global read FIFO.
 */
-struct task_struct* create_thread_read(struct kfifo* read_fifo);
+struct task_struct* create_thread_read(struct kfifo * read_fifo);
 /**
- * @brief This function is called by the write thread to write data to the FPGA. 
+ * @brief This function is called by the write thread to write data to the FPGA.
+ *  This function performs calls appropriate functions for writing to the AXI Streaming FIFO.
  * @param mod_desc The struct containing all the file variables.
 */
 int write_data(struct mod_desc* mod_desc);
@@ -436,34 +504,37 @@ int write_data(struct mod_desc* mod_desc);
  * @brief This function is will update a ring pointer given the amount of bytes written or read.
  * @param bytes_written The number of bytes to advance the ring pointer
  * @param ring_pointer_offset The current ring pointer offset.
- * @param file_size The size of the ring buffer to handle wrap around cases. 
+ * @param file_size The size of the ring buffer to handle wrap around cases.
 */
 int get_new_ring_pointer(int bytes_written, int ring_pointer_offset, int file_size);
 /**
- * @brief This function will determine if the data size has room in the ring buffer 
- * @param mod_desc The struct containing all the file variables.
- * @param size The amount of data required to store to ring buffer.
-*/
-int query_ring_buff(struct mod_desc* mod_desc, size_t size); 
-/**
- * @brief This function returns the amount of data/space available in the ring buffer 
+ * @brief This function returns the amount of space available in the ring buffer
  * @param mod_desc The struct containing all the file variables.
  * @param tail The ring pointer offset at the tail of the ring buffer (starting point)
  * @param head The ring pointer offset at the head of the ring buffer (ending point)
  * @param priorty setting this to 1 gives priority if head==tail.
 */
-int data_to_transfer(struct mod_desc *mod_desc, int tail, int head, int priority);
+int room_in_buffer(int head, int tail, int full, size_t dma_size);
 /**
- * @brief This function checks if there is any available data to be read from an axi stream fifo. 
+ * @brief This function returns the amount of data available in the ring buffer
+ * @param mod_desc The struct containing all the file variables.
+ * @param tail The ring pointer offset at the tail of the ring buffer (starting point)
+ * @param head The ring pointer offset at the head of the ring buffer (ending point)
+ * @param priorty setting this to 1 gives priority if head==tail.
+*/
+int data_in_buffer(int head, int tail, int full, size_t dma_size);
+/**
+ * @brief This function checks if there is any available data to be read from an axi stream fifo.
  * @param mod_desc The struct containing all the file variables.
 */
 size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc);
 /**
- * @brief This function is called by the read thread to read data from the FPGA. 
+ * @brief This function is called by the read thread to read data from the FPGA.
 */
-int read_data(struct mod_desc * mod_desc);
+//int read_data(struct mod_desc * mod_desc);
+int read_data(struct mod_desc * mod_desc, int read_size);
 /**
- * @brief This function checks to see if the axi streaming fifo is empty. 
+ * @brief This function checks to see if the axi streaming fifo is empty.
  * @param mod_desc The struct containing all the file variables.
 */
 int write_fifo_ready(struct mod_desc* mod_desc);
