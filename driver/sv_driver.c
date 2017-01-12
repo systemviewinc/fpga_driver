@@ -363,7 +363,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	verbose_printk(KERN_INFO"[probe]pci enabled msi interrupt\n");
 #endif
 	//request IRQ
-	if(0 > request_irq(pci_dev_struct->irq, &pci_isr, IRQF_SHARED, pci_devName, pci_dev_struct)){
+	if(0 > request_irq(pci_dev_struct->irq, &pci_isr, IRQF_TRIGGER_RISING | IRQF_SHARED, pci_devName, pci_dev_struct)){
 		printk(KERN_INFO"%s:[probe]request IRQ error\n", pci_devName);
 		return ERROR;
 	}
@@ -511,13 +511,6 @@ static int sv_plat_probe(struct platform_device *pdev)
 	irq_num = platform_get_irq(pdev, 0);
 	printk(KERN_INFO"[probe]IRQ number is:%d\n", irq_num);
 
-	//request IRQ
-	/*if(0 > request_irq(irq_num, &pci_isr, IRQF_SHARED, pci_devName, pdev)){
-	if(0 > request_irq(irq_num, &pci_isr, IRQF_TRIGGER_RISING, pci_devName, pdev)){				//MM
-		printk(KERN_INFO"%s:[probe]request IRQ error\n", pci_devName);
-		return ERROR;
-	}
-*/
 	printk(KERN_INFO"[probe]IRQ request complete\n");
 
 	//register the char device
@@ -580,8 +573,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 	 * mapping is 1-1 and should be written directly to the returned DMA handle */
 
 	//request IRQ last
-	//if(0 > request_irq(irq_num, &pci_isr, IRQF_SHARED, pci_devName, pdev)){
-	if(0 > request_irq(irq_num, &pci_isr, IRQF_TRIGGER_HIGH | IRQF_SHARED, pci_devName, pdev)){				//MM
+	if(0 > request_irq(irq_num, &pci_isr, IRQF_TRIGGER_RISING  | IRQF_SHARED, pci_devName, pdev)){
 		printk(KERN_INFO"%s:[probe]request IRQ error\n", pci_devName);
 		return ERROR;
 	}
@@ -1628,7 +1620,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	}
 
 	/*Stay until requested transmission is complete*/
-	while (bytes_written < count) {
+	while (bytes_written < count && mod_desc->file_open) {
 
 		if (mod_desc->mode == AXI_STREAM_FIFO || mod_desc->mode == AXI_STREAM_PACKET) {
 
@@ -1644,7 +1636,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			full = atomic_read(mod_desc->write_ring_buf_full);
 
 			//we are going to write the whole count + header
-			while((count + sizeof(count)) > room_in_buffer(wtk, wth, full, mod_desc->dma_size) ) {
+			while( (count + sizeof(count)) > room_in_buffer(wtk, wth, full, mod_desc->dma_size) && mod_desc->file_open ) {
 				/*sleep until the write thread signals priority to pci_write
 				 *  (ie there is no more data for the write thread to write)
 				 *  (ie there MUST be room in the ring buffer now)*/
@@ -1870,20 +1862,20 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: ******************** READ TRANSACTION BEGIN  **************************\n", minor);
    switch(mod_desc->mode){
       case AXI_STREAM_FIFO :
-         verbose_pci_write_printk(KERN_INFO"[pci_%x_read]:                   Attempting to transfer %zu bytes : mode AXI_STREAM_FIFO \n", minor, count);
+         verbose_pci_read_printk(KERN_INFO"[pci_%x_read]:                   Attempting to transfer %zu bytes : mode AXI_STREAM_FIFO \n", minor, count);
          break;
 
       case AXI_STREAM_PACKET :
-         verbose_pci_write_printk(KERN_INFO"[pci_%x_read]:                   Attempting to transfer %zu bytes : mode AXI_STREAM_PACKET \n", minor, count);
+         verbose_pci_read_printk(KERN_INFO"[pci_%x_read]:                   Attempting to transfer %zu bytes : mode AXI_STREAM_PACKET \n", minor, count);
          break;
 
       case MASTER :
       case SLAVE :
-         verbose_pci_write_printk(KERN_INFO"[pci_%x_read]:                   Attempting to transfer %zu bytes : mode DIRECT \n", minor, count);
+         verbose_pci_read_printk(KERN_INFO"[pci_%x_read]:                   Attempting to transfer %zu bytes : mode DIRECT \n", minor, count);
          break;
 
       default :
-         verbose_pci_write_printk(KERN_INFO"[pci_%x_read]:                   Attempting to transfer %zu bytes : mode UNKNOWN \n", minor, count);
+         verbose_pci_read_printk(KERN_INFO"[pci_%x_read]:                   Attempting to transfer %zu bytes : mode UNKNOWN \n", minor, count);
 
    }
 	verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: ************************************************************************\n", minor);
@@ -1937,7 +1929,9 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
       case AXI_STREAM_PACKET:
 			// if AXI streaming fifo set with  no interrupt then just read
 			if (!mod_desc->has_interrupt_vec) {
-				bytes = axi_stream_fifo_read(count, mod_desc->dma_read_addr, axi_pcie_m+mod_desc->dma_offset_read, mod_desc, 0, mod_desc->dma_size);
+
+            bytes = axi_stream_fifo_d2r(mod_desc);
+
 				if (bytes <= 0) {
 					if (bytes < 0) {
 						printk(KERN_INFO"[pci_%x_read]: ERROR reading data from axi stream fifo\n" ,minor);
@@ -1945,11 +1939,16 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 					ret = bytes;
 				}
 				else {
-					if (bytes < count){
-						count = bytes;
+					if (bytes <= count){
+                  bytes = axi_stream_fifo_read_no_header((size_t)bytes, mod_desc->dma_read_addr, axi_pcie_m + mod_desc->dma_offset_read, mod_desc, 0, mod_desc->dma_size);
+                  count = bytes;
 					}
-					ret = copy_to_user(buf, mod_desc->dma_read_addr, count);
-					verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: Read %d bytes from AXI FIFO 0x%x\n" ,minor ,bytes,*(u32*)buf);
+               else if(count < bytes) {
+                  bytes = axi_stream_fifo_read_no_header((size_t)count, mod_desc->dma_read_addr, axi_pcie_m+mod_desc->dma_offset_read, mod_desc, 0, mod_desc->dma_size);
+               }
+               verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: copy_to_user (0x%p, 0x%p + 0x%x, 0x%zx)\n" ,minor, &buf, mod_desc->dma_read_addr, 0, count);
+               ret = copy_to_user(buf, mod_desc->dma_read_addr, count);
+					verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: Read %d bytes from AXI FIFO\n" ,minor ,count);
 				}
 				break;
 			}

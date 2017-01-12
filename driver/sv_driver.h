@@ -38,7 +38,7 @@
 #endif
 
 //#define BACK_PRESSURE 1
-#define RING_BUFF_SIZE_MULTIPLIER 8
+#define RING_BUFF_SIZE_MULTIPLIER 2
 /********* printk statements *********/
 #define verbose_printk printk
 //#define verbose_read_printk printk
@@ -451,6 +451,7 @@ int dma_file_init(struct mod_desc *mod_desc, void *dma_buffer_base, u64 dma_buff
  * @param ring_pointer_offset The current offset of the ring pointer in memory to store data.
 */
 size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr, struct mod_desc * mod_desc, int ring_pointer_offset, size_t buf_size);
+size_t axi_stream_fifo_read_no_header(size_t count, void * buf_base_addr, u64 hw_base_addr, struct mod_desc * mod_desc, int ring_pointer_offset, size_t buf_size);
 
 /**
  * @brief This function initializes the AXI Streaming FIFO.

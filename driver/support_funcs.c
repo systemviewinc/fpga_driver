@@ -217,7 +217,7 @@ int read_data(struct mod_desc * mod_desc, int read_size)
 		verbose_read_thread_printk(KERN_INFO"[read_data]: maximum read amount: %d\n", max_can_read);
 		verbose_read_thread_printk(KERN_INFO"[read_data]: read size: %d\n", read_size);
 
-		read_count = axi_stream_fifo_read((size_t)read_size, mod_desc->dma_read_addr, axi_pcie_m+mod_desc->dma_offset_read, mod_desc, rfh, mod_desc->dma_size);
+		read_count = axi_stream_fifo_read((size_t)read_size, mod_desc->dma_read_addr, axi_pcie_m + mod_desc->dma_offset_read, mod_desc, rfh, mod_desc->dma_size);
 
 		if (read_count < 0) {
 			printk(KERN_INFO"[read_data]: ERROR reading data from axi stream fifo\n");
@@ -381,7 +381,7 @@ int write_thread(void *in_param) {
 				while(d2w != 0 && !kthread_should_stop()) {
 					write_incomplete = write_data(mod_desc);
 					//if read_data needs back_pressure
-					if (write_incomplete == 1 || write_incomplete == ERROR) {
+					if ((write_incomplete == 1 || write_incomplete == ERROR) && mod_desc->file_open) {
 						//write the mod_desc back in if the fifo is not full and it isn't already in the fifo
 						if(!kfifo_is_full(write_fifo)) {
 								atomic_inc(mod_desc->in_write_fifo_count);
@@ -499,7 +499,7 @@ int write_data(struct mod_desc * mod_desc)
 		return ERROR;
 	}
 
-	read_reg = buf*dma_byte_width;
+	read_reg = (buf+4)*dma_byte_width;
 
 
 	if(write_header_size > d2w) {
@@ -1529,7 +1529,7 @@ size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc)
 			return ERROR;
 		}
 		verbose_axi_fifo_d2r_printk(KERN_INFO"[axi_stream_fifo_d2r]: RDFO value = 0x%08x\n",buf);
-		mod_desc->axi_fifo_rdfo = buf; //no more partial_count & 0x7fffffff; // remember the read
+		mod_desc->axi_fifo_rdfo = buf;
 
 		//verify that the occupancy is not zero	MM
 		if(buf == 0){
@@ -1716,6 +1716,93 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
 
 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: Leaving the READ AXI Stream FIFO routine %zd\n",count);
 	return count+2*sizeof(read_header_size);
+}
+
+
+
+
+/**
+ * This function performs calls appropriate functions for Reading from the AXI Streaming FIFO.
+ * count: The number of bytes to read from the AXI streaming FIFO.
+ * mod_desc: The struct containing all the file variables.
+ * ring_pointer_offset: The current offset of the ring pointer in memory to store data.
+ * returns the number of bytes read
+*/
+size_t axi_stream_fifo_read_no_header(size_t count, void * buf_base_addr, u64 hw_base_addr, struct mod_desc * mod_desc, int ring_pointer_offset, size_t buf_size) {
+	int ret;
+	int keyhole_en;
+	size_t room_till_end;
+	size_t remaining;
+	int cdma_num = 0;
+	u64 axi_dest;
+
+	//clear values in mod_desc
+	mod_desc->axi_fifo_rlr = mod_desc->axi_fifo_rdfo = 0;
+
+	if (count == 0) {
+	 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: There is either no data to read, or less than 8 bytes.\n");
+		return 0; // nothing to read
+	}
+	else{
+	 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: count = %zd.\n", count);
+	}
+
+	keyhole_en = KEYHOLE_READ;
+
+	// Find an available CDMA to use and wait if both are in use
+	while (cdma_num == 0) {
+		cdma_num = cdma_query();
+		if (cdma_num == 0  ) {
+			schedule();
+		}
+	}
+
+	room_till_end = buf_size - 4 - ring_pointer_offset;
+	axi_dest = mod_desc->axi_addr + AXI_STREAM_RDFD;
+
+	if (count > room_till_end) {			//needs to be 2 cdma transfers
+      remaining = count-room_till_end;
+
+		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: cdma_transfer 1 AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset, room_till_end);
+      ret = cdma_transfer(axi_dest, hw_base_addr+(u64)ring_pointer_offset, room_till_end, keyhole_en, cdma_num);
+		if (ret != 0) {  //unsuccessful CDMA transmission
+			printk(KERN_INFO"[axi_stream_fifo_read]: ERROR on CDMA READ!!!.\n");
+		}
+		ring_pointer_offset = 0;
+																																											//end of buffer reached
+		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: cdma_transfer 2 AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset, remaining);
+		ret = cdma_transfer(axi_dest, hw_base_addr+(u64)ring_pointer_offset, remaining, keyhole_en, cdma_num);
+		ring_pointer_offset = get_new_ring_pointer(remaining, ring_pointer_offset, (int)buf_size);
+
+	}
+	else {														//only 1 cdma transfer
+		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: cdma_transfer AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset , count);
+		ret = cdma_transfer(axi_dest, ((u64)hw_base_addr+ring_pointer_offset), count, keyhole_en, cdma_num);
+		ring_pointer_offset = get_new_ring_pointer(count, ring_pointer_offset, (int)buf_size);
+	}
+
+
+	if (ret != 0) {  //unsuccessful CDMA transmission
+		printk(KERN_INFO"[axi_stream_fifo_read]: ERROR on CDMA READ!!!.\n");
+	}
+
+	/*Release Mutex on CDMA*/
+	switch(cdma_num) {
+	case 1:
+		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: Releasing Mutex on CDMA 1\n");
+		mutex_unlock(&CDMA_sem);
+		break;
+	case 2:
+		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: Releasing Mutex on CDMA 2\n");
+		mutex_unlock(&CDMA_sem_2);
+		break;
+	default:
+		verbose_printk(KERN_INFO"[axi_stream_fifo_read]: ERROR: unknown cdma number detected.\n");
+		return(0);
+	}
+
+	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: Leaving the READ AXI Stream FIFO routine %zd\n",count);
+	return count;
 }
 
 
