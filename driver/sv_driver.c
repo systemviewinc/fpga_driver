@@ -848,7 +848,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 		//check to see if axi stream fifo is set_interrupt
 				//todo should be only for steam fifo interupt
 		if (!mod_desc_arr[interrupt_num]) {
-			isr_status = isr_status && !num2vec(interrupt_num);					//don't service this one, clear it from isr_status
+			isr_status = isr_status && ~num2vec(interrupt_num);					//don't service this one, clear it from isr_status
 			interrupt_num = 0;																					//don't service this one
 			//vec_serviced = vec_serviced | num2vec(interrupt_num);
 			verbose_isr_printk(KERN_INFO"[pci_isr]: 	returning early ISR null axi stream fifo \n");
@@ -916,7 +916,11 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 		vec_serviced = vec_serviced | num2vec(interrupt_num);
 
 		//get next interrupt number
-		isr_status = isr_status && !num2vec(interrupt_num);
+		isr_status = isr_status & ~num2vec(interrupt_num);
+      verbose_isr_printk(KERN_INFO"[pci_isr]: vectors serviced is: ('0x%08x')\n", vec_serviced);
+      verbose_isr_printk(KERN_INFO"[pci_isr]: not intterupt number is: ('0x%08x')\n", ~num2vec(interrupt_num));
+
+      verbose_isr_printk(KERN_INFO"[pci_isr]: interrupt status register vector is: ('0x%08x')\n", isr_status);
 		interrupt_num = vec2num(isr_status);
 	}
 
