@@ -1610,7 +1610,7 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
 	keyhole_en = KEYHOLE_READ;
 
 	//copy the count to the ring buffer to act as the "header"
-	room_till_end = buf_size - ring_pointer_offset;
+   room_till_end = buf_size - ring_pointer_offset;
 	if (sizeof(count) > room_till_end) {		//if header size is larger than room till the end, write in two steps
 		remaining = sizeof(count)-room_till_end;
 		//write the room_till_end
@@ -1642,7 +1642,7 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
 		}
 	}
 
-	room_till_end = buf_size - 4 - ring_pointer_offset;
+   room_till_end = ( (buf_size - ring_pointer_offset) & ~(dma_byte_width-1));              //make it divisible by dma_byte_width
 	axi_dest = mod_desc->axi_addr + AXI_STREAM_RDFD;
 
 	if (count > room_till_end) {			//needs to be 2 cdma transfers
@@ -1757,7 +1757,7 @@ size_t axi_stream_fifo_read_no_header(size_t count, void * buf_base_addr, u64 hw
 		}
 	}
 
-	room_till_end = buf_size - 4 - ring_pointer_offset;
+	room_till_end = buf_size - ring_pointer_offset;
 	axi_dest = mod_desc->axi_addr + AXI_STREAM_RDFD;
 
 	if (count > room_till_end) {			//needs to be 2 cdma transfers

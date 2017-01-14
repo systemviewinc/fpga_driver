@@ -2006,7 +2006,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 					//if there is a packet to read
 					if (count > 0) {
 
-						room_till_end = mod_desc->dma_size - 4 - rfu;
+						room_till_end = ( (mod_desc->dma_size - rfu) & ~(dma_byte_width-1));              //make it divisible by dma_byte_width
 
 						if(count > room_till_end) { //need to do two read since we are at the edge
 							remaining = count - room_till_end;
