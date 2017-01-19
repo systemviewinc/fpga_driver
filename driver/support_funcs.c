@@ -168,7 +168,8 @@ int read_data(struct mod_desc * mod_desc, int read_size)
 
 	max_can_read = room_in_buffer(rfh, rfu, full, mod_desc->dma_size);
 
-	if (( read_size + 2*sizeof(size_t) ) > max_can_read) {																								//ring buffer is full, cannot fit in our read
+   //make sure there is room in our buffer for the read
+	if (( read_size + dma_byte_width + 4*sizeof(size_t) ) > max_can_read) {																								//ring buffer is full, cannot fit in our read
 		if (back_pressure) {
 			verbose_printk(KERN_INFO"[read_data]: Needing to backpressure, max_can_read: %d < read_size: %d \n", max_can_read, read_size);
 			return 1;
@@ -224,17 +225,6 @@ int read_data(struct mod_desc * mod_desc, int read_size)
 			//break;
 			return ERROR;
 		}
-
-		/*update rfh pointer*/
-		rfh = get_new_ring_pointer(read_count, rfh, (int)(mod_desc->dma_size));
-		atomic_set(mod_desc->rfh, rfh);
-		//We increased the rfh (head) if it is now equal to the rfu (tail) then the buffer is full
-		if(atomic_read(mod_desc->rfu) == rfh) {
-			atomic_set(mod_desc->read_ring_buf_full, 1);
-			verbose_printk(KERN_INFO"[read_data]: ring_point: Read Full: %d\n", atomic_read(mod_desc->read_ring_buf_full));
-		}
-		verbose_printk(KERN_INFO"[read_data]: read ring_buffer: RFU : %d RFH %d\n", atomic_read(mod_desc->rfu), rfh);
-
 
 	}
 	//send signal to userspace poll()
@@ -431,12 +421,12 @@ int write_thread(void *in_param) {
 	return 0;
 }
 /**
- * @brief This function is called by the write thread to write data to the FPGA.
+ * @brief This function is called by the write thread to write data to the FPGA that is in the ring buffer.
  * @param mod_desc The struct containing all the file variables.
 */
 int write_data(struct mod_desc * mod_desc)
 {
-	int write_count;
+
 	int wtk, wth, full;
 	int d2w;
 	int minor;
@@ -454,29 +444,18 @@ int write_data(struct mod_desc * mod_desc)
 	wtk = atomic_read(mod_desc->wtk);
 	full = atomic_read(mod_desc->write_ring_buf_full);
 
-	//d2w = data_to_write(mod_desc);
-	//d2w =  data_to_transfer(mod_desc, wth, wtk, priority);
 	d2w = data_in_buffer(wtk, wth, full, mod_desc->dma_size);
 
 	if( d2w > sizeof(write_header_size)) {
 
 		room_till_end = mod_desc->dma_size - wth;
-		if (sizeof(write_header_size) > room_till_end) {			//needs to be 2 copy
-			remaining = sizeof(write_header_size)-room_till_end;
-			verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: memcpy 1 (0x%p, 0x%p, 0x%zx)\n", &write_header_size, mod_desc->dma_write_addr+wth, room_till_end);
-			memcpy(&write_header_size, mod_desc->dma_write_addr+wth, room_till_end);
-			wth = 0;
+		if (sizeof(write_header_size) > room_till_end) {		//If the header will not fit in 1 chuck of the ring buffer (in the room till end) then just get it at the start
+         wth = 0;
+      }
 
-			verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: memcpy 2 (0x%p, 0x%p, 0x%zx)\n", &write_header_size, mod_desc->dma_write_addr+wth, remaining);
-			memcpy(&write_header_size+room_till_end, mod_desc->dma_write_addr+wth, remaining);
-			wth = get_new_ring_pointer(remaining, wth, (int)(mod_desc->dma_size));
-
-		}
-		else {														//only 1 copy
-			verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: memcpy (0x%p, 0x%p, 0x%zx)\n", &write_header_size, mod_desc->dma_write_addr+wth, sizeof(write_header_size));
-			memcpy(&write_header_size, mod_desc->dma_write_addr+wth, sizeof(write_header_size));
-			wth = get_new_ring_pointer(sizeof(write_header_size), wth, (int)(mod_desc->dma_size));
-		}
+		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: header memcpy (0x%p, 0x%p, 0x%zx)\n", &write_header_size, mod_desc->dma_write_addr+wth, sizeof(write_header_size));
+		memcpy(&write_header_size, mod_desc->dma_write_addr+wth, sizeof(write_header_size));
+		wth = get_new_ring_pointer(sizeof(write_header_size), wth, (int)(mod_desc->dma_size));
 
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: header: (%zx)\n", write_header_size);
 		d2w -= sizeof(write_header_size);
@@ -486,8 +465,6 @@ int write_data(struct mod_desc * mod_desc)
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data] no data to read\n");
 		return 1;
 	}
-
-
 
 	//check the tx vacancy
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFV;  // the transmit FIFO vacancy
@@ -537,6 +514,11 @@ int write_data(struct mod_desc * mod_desc)
 
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: cdma_transfer 1 ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n", axi_pcie_m+mod_desc->dma_offset_write, wth, axi_dest, room_till_end);
 		ret = cdma_transfer(axi_pcie_m+mod_desc->dma_offset_write+wth, axi_dest, room_till_end, KEYHOLE_WRITE, cdma_num);
+
+      //extra verbose debug message
+      verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: first 4 bytes 0x%x\n", *((u32*)(mod_desc->dma_write_addr+wth)));
+
+
 		if (ret != 0) {  //unsuccessful CDMA transmission
 			verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: ERROR on CDMA READ!!!.\n");
 		}
@@ -550,6 +532,9 @@ int write_data(struct mod_desc * mod_desc)
 	else {														//only 1 copy
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: cdma_transfer ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n", axi_pcie_m+mod_desc->dma_offset_write, wth, axi_dest, write_header_size);
 		ret = cdma_transfer(axi_pcie_m+mod_desc->dma_offset_write+wth, axi_dest, write_header_size, KEYHOLE_WRITE, cdma_num);
+
+      //extra verbose debug message
+      verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: first 4 bytes 0x%x\n", *((u32*)(mod_desc->dma_write_addr+wth)));
 		wth = get_new_ring_pointer(write_header_size, wth, (int)(mod_desc->dma_size));
 	}
 
@@ -585,8 +570,8 @@ int write_data(struct mod_desc * mod_desc)
 	}
 
 	//update wth pointer
-	wth = get_new_ring_pointer(write_count, wth, (int)(mod_desc->dma_size));
 	atomic_set(mod_desc->wth, wth);
+   //if the ring buffer was full it is no longer
 	if(full)
 	{
 		atomic_set(mod_desc->write_ring_buf_full, 0);
@@ -604,40 +589,6 @@ int write_data(struct mod_desc * mod_desc)
 
 }
 
-/*
-*
-*
-*
-*/
-int write_fifo_ready(struct mod_desc* mod_desc)
-{
-	u64 axi_dest;
-	int ret;
-	u32 buf, read_reg;
-	u32 fifo_empty_level;
-
-	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFV;  // the transmit FIFO vacancy
-
-	buf = 0x0;
-
-	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, 0); //mod_desc->dma_read_offset);
-	if (ret > 0) {
-		printk(KERN_INFO"[write_fifo_ready]: ERROR reading from AXI Streaming FIFO control interface\n");
-		return ERROR;
-	}
-	read_reg = buf;    //this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
-
-	verbose_write_thread_printk(KERN_INFO"[write_fifo_ready]: Initial Transmit Data FIFO Fill Level: ('0x%08x')\n", buf);
-
-	fifo_empty_level = (((u32)(mod_desc->file_size))/dma_byte_width)-4;  //(Byte size / 8 bytes per word) - 4)   this value is the empty fill level of the tx fifo.
-	verbose_write_thread_printk(KERN_INFO"[write_fifo_ready]: FIFO empty Level:  ('0x%08x') read_reg ('0x%08x')\n", fifo_empty_level,read_reg);
-
-	if (read_reg != fifo_empty_level) {
-		return 0;
-	}
-
-	return 1;
-}
 
 /*
 *
@@ -931,28 +882,17 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 	int cdma_num = 0;
 	u64 dma_axi_address = 0;
 	//	void * dma_p;
-	if ((transfer_type == NORMAL_READ) | (transfer_type == KEYHOLE_READ)) {
-		verbose_read_printk(KERN_INFO"[data_transfer]: reading to base address 0x%llx %zd 0x%llx 0x%llx 0x%lx\n", axi_address,count,dma_off,bar_0_axi_offset,pci_bar_size);
-		/*determine if the axi range is in direct accessible memory space*/
-		if ((axi_address + (u64)count) < (bar_0_axi_offset + pci_bar_size) && (axi_address >= bar_0_axi_offset)) {
-			in_range = 1;
-			verbose_read_printk(KERN_INFO"[data_transfer]: address 0x%llx  in range going direct\n",axi_address);
-		} else {
-			in_range = 0;
-			verbose_read_printk(KERN_INFO"[data_transfer]: address 0x%llx out of range using DMA %d\n",axi_address,cdma_capable);
-		}
+   verbose_read_printk(KERN_INFO"[data_transfer]: reading to base address 0x%llx %zd 0x%llx 0x%llx 0x%lx\n", axi_address,count,dma_off,bar_0_axi_offset,pci_bar_size);
+
+	/*determine if the axi range is in direct accessible memory space*/
+	if ((axi_address + (u64)count) < (bar_0_axi_offset + pci_bar_size) && (axi_address >= bar_0_axi_offset)) {
+		in_range = 1;
+		verbose_write_printk(KERN_INFO"[data_transfer]: address 0x%llx in range going direct\n",axi_address);
+	} else {
+		in_range = 0;
+		verbose_write_printk(KERN_INFO"[data_transfer]: address 0x%llx out of range using DMA %d\n",axi_address,cdma_capable);
 	}
-	else if ((transfer_type == NORMAL_WRITE) | (transfer_type == KEYHOLE_WRITE)) {
-		verbose_write_printk(KERN_INFO"[data_transfer]: writing to base address 0x%llx %zd 0x%llx 0x%llx 0x%lx\n", axi_address,count,dma_off,bar_0_axi_offset,pci_bar_size);
-		/*determine if the axi range is in direct accessible memory space*/
-		if ((axi_address + (u64)count) < (bar_0_axi_offset + pci_bar_size) && (axi_address >= bar_0_axi_offset)) {
-			in_range = 1;
-			verbose_write_printk(KERN_INFO"[data_transfer]: address 0x%llx in range going direct\n",axi_address);
-		} else {
-			in_range = 0;
-			verbose_write_printk(KERN_INFO"[data_transfer]: address 0x%llx out of range using DMA %d\n",axi_address,cdma_capable);
-		}
-	}
+
 
 	//if  data is small or the cdma is not initialized and in range
 	if (in_range == 1) {// ((count < 16) | (cdma_capable == 0)) &
@@ -1306,10 +1246,10 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 }
 
 
-/*
-*
-*
-*
+/**
+ * @brief This function causes the process to block (sleep) until CDMA completion interrupt is
+ * received.  It is currently not being uses because we found polling operates much faster.
+ * @param cdma_num Instructs which CDMA to use (Assumes it has been locked)
 */
 void cdma_wait_sleep(int cdma_num)
 {
@@ -1533,7 +1473,7 @@ size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc)
 
 		//verify that the occupancy is not zero	MM
 		if(buf == 0){
-			printk(KERN_INFO"[axi_stream_fifo_d2r]: ERROR receive occupancy is zero\n");
+			verbose_axi_fifo_d2r_printk(KERN_INFO"[axi_stream_fifo_d2r]: Receive occupancy is zero, nothing to read\n");
 			return 0;
 		}
 
@@ -1583,7 +1523,7 @@ size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc)
  * count: The number of bytes to read from the AXI streaming FIFO.
  * mod_desc: The struct containing all the file variables.
  * ring_pointer_offset: The current offset of the ring pointer in memory to store data.
- * returns the number of bytes read
+ * returns the new ring_pointer_offset
 */
 size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr, struct mod_desc * mod_desc, int ring_pointer_offset, size_t buf_size) {
 	int ret;
@@ -1611,28 +1551,16 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
 
 	//copy the count to the ring buffer to act as the "header"
    room_till_end = buf_size - ring_pointer_offset;
-	if (sizeof(count) > room_till_end) {		//if header size is larger than room till the end, write in two steps
-		remaining = sizeof(count)-room_till_end;
-		//write the room_till_end
-		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: header copy_from_user 1(0x%p + 0x%x, 0x%p, 0x%zx)\n", buf_base_addr, ring_pointer_offset, (void * )&count, room_till_end);
-		memcpy(buf_base_addr+ring_pointer_offset, (void * )&count, room_till_end);
+	if (sizeof(count) > room_till_end) {		//If the header will not fit in 1 chuck of the ring buffer (in the room till end) then just put it at the start
+      ring_pointer_offset = 0;
+   }
 
-		//now write the remaining length at the start of the offset
-		ring_pointer_offset = 0;																																										//end of buffer reached
+	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: header copy_from_user(0x%p + 0x%x, 0x%p, 0x%zx)\n", buf_base_addr, ring_pointer_offset, (void * )&count, sizeof(read_header_size));
 
-		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: header copy_from_user 2(0x%p + 0x%x, 0x%p, 0x%zx)\n", buf_base_addr, ring_pointer_offset, (void * )&count+room_till_end, remaining);
-		memcpy(buf_base_addr+ring_pointer_offset, (void * )&count+room_till_end, remaining);
-		ring_pointer_offset = get_new_ring_pointer(remaining, ring_pointer_offset, (int)buf_size);
+	memcpy(buf_base_addr+ring_pointer_offset, (void * )&count, sizeof(count));
+	ring_pointer_offset = get_new_ring_pointer(sizeof(count), ring_pointer_offset, (int)buf_size);
 
-
-	}
-	else {
-		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: header copy_from_user(0x%p + 0x%x, 0x%p, 0x%zx)\n", buf_base_addr, ring_pointer_offset, (void * )&count, sizeof(read_header_size));
-
-		memcpy(buf_base_addr+ring_pointer_offset, (void * )&count, sizeof(count));
-		ring_pointer_offset = get_new_ring_pointer(sizeof(count), ring_pointer_offset, (int)buf_size);
-
-	}
+	//}
 
 	// Find an available CDMA to use and wait if both are in use
 	while (cdma_num == 0) {
@@ -1653,6 +1581,11 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
 		if (ret != 0) {  //unsuccessful CDMA transmission
 			printk(KERN_INFO"[axi_stream_fifo_read]: ERROR on CDMA READ!!!.\n");
 		}
+
+
+      //extra verbose debug message
+      verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: first 4 bytes 0x%x\n", *((u32*)(mod_desc->dma_read_addr+ring_pointer_offset)));
+
 		ring_pointer_offset = 0;
 																																											//end of buffer reached
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: cdma_transfer 2 AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset, remaining);
@@ -1663,6 +1596,12 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
 	else {														//only 1 cdma transfer
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: cdma_transfer AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset , count);
 		ret = cdma_transfer(axi_dest, ((u64)hw_base_addr+ring_pointer_offset), count, keyhole_en, cdma_num);
+
+
+      //extra verbose debug message
+      verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: first 4 bytes 0x%x\n", *((u32*)(mod_desc->dma_read_addr+ring_pointer_offset)));
+
+
 		ring_pointer_offset = get_new_ring_pointer(count, ring_pointer_offset, (int)buf_size);
 	}
 
@@ -1691,31 +1630,26 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
 
 	//copy the 0 to the ring buffer to act as a "0 header" to mark inbetween packets
 	room_till_end = buf_size - ring_pointer_offset;
-	if (sizeof(zero) > room_till_end) {		//if header size is larger than room till the end, write in two steps
-		remaining = sizeof(zero)-room_till_end;
-		//write the room_till_end
-		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: trailer copy_from_user 1(0x%p + 0x%x, 0x%p, 0x%zx)\n", buf_base_addr, ring_pointer_offset, (void * )&zero, room_till_end);
-		memcpy(buf_base_addr+ring_pointer_offset, (void * )&zero, room_till_end);
+	if (sizeof(zero) > room_till_end) {		//If the trailer will not fit in 1 chuck of the ring buffer (in the room till end) then just put it at the start
+      ring_pointer_offset = 0;
+   }
 
-		//now write the remaining length at the start of the offset
-		ring_pointer_offset = 0;																																										//end of buffer reached
-		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: trailer copy_from_user 2(0x%p + 0x%x, 0x%p, 0x%zx)\n", buf_base_addr, ring_pointer_offset, (void * )&zero+room_till_end, remaining);
-		memcpy(buf_base_addr+ring_pointer_offset, (void * )&zero+room_till_end, remaining);
-		ring_pointer_offset = get_new_ring_pointer(remaining, ring_pointer_offset, (int)buf_size);
+	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: trailer copy_from_user(0x%p + 0x%x, 0x%p, 0x%zx)\n", buf_base_addr, ring_pointer_offset, (void * )&zero, sizeof(zero));
+	memcpy(buf_base_addr+ring_pointer_offset, (void * )&zero, sizeof(zero));
+	ring_pointer_offset = get_new_ring_pointer(sizeof(zero), ring_pointer_offset, (int)buf_size);
 
+   /*update rfh pointer*/
+   atomic_set(mod_desc->rfh, ring_pointer_offset);
+   //We increased the rfh (head) if it is now equal to the rfu (tail) then the buffer is full
+   if(atomic_read(mod_desc->rfu) == ring_pointer_offset) {
+      atomic_set(mod_desc->read_ring_buf_full, 1);
+      verbose_printk(KERN_INFO"[axi_stream_fifo_read]: ring_point: Read Full: %d\n", atomic_read(mod_desc->read_ring_buf_full));
+   }
+   verbose_printk(KERN_INFO"[axi_stream_fifo_read]: read ring_buffer: RFU : %d RFH %d\n", atomic_read(mod_desc->rfu), ring_pointer_offset);
 
-	}
-	else {
-		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: trailer copy_from_user(0x%p + 0x%x, 0x%p, 0x%zx)\n", buf_base_addr, ring_pointer_offset, (void * )&zero, sizeof(zero));
-		memcpy(buf_base_addr+ring_pointer_offset, (void * )&zero, sizeof(zero));
-		ring_pointer_offset = get_new_ring_pointer(sizeof(zero), ring_pointer_offset, (int)buf_size);
-
-	}
-
-	//------------------------------------------------------------------------------------------------------------------------------MM ADD END
 
 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: Leaving the READ AXI Stream FIFO routine %zd\n",count);
-	return count+2*sizeof(read_header_size);
+	return ring_pointer_offset;
 }
 
 
@@ -1728,11 +1662,9 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
  * ring_pointer_offset: The current offset of the ring pointer in memory to store data.
  * returns the number of bytes read
 */
-size_t axi_stream_fifo_read_no_header(size_t count, void * buf_base_addr, u64 hw_base_addr, struct mod_desc * mod_desc, int ring_pointer_offset, size_t buf_size) {
+size_t axi_stream_fifo_read_direct(size_t count, void * buf_base_addr, u64 hw_base_addr, struct mod_desc * mod_desc, size_t buf_size) {
 	int ret;
 	int keyhole_en;
-	size_t room_till_end;
-	size_t remaining;
 	int cdma_num = 0;
 	u64 axi_dest;
 
@@ -1740,11 +1672,11 @@ size_t axi_stream_fifo_read_no_header(size_t count, void * buf_base_addr, u64 hw
 	mod_desc->axi_fifo_rlr = mod_desc->axi_fifo_rdfo = 0;
 
 	if (count == 0) {
-	 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: There is either no data to read, or less than 8 bytes.\n");
+	 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: There is either no data to read, or less than 8 bytes.\n");
 		return 0; // nothing to read
 	}
 	else{
-	 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: count = %zd.\n", count);
+	 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: count = %zd.\n", count);
 	}
 
 	keyhole_en = KEYHOLE_READ;
@@ -1756,52 +1688,40 @@ size_t axi_stream_fifo_read_no_header(size_t count, void * buf_base_addr, u64 hw
 			schedule();
 		}
 	}
-
-	room_till_end = buf_size - ring_pointer_offset;
 	axi_dest = mod_desc->axi_addr + AXI_STREAM_RDFD;
 
-	if (count > room_till_end) {			//needs to be 2 cdma transfers
-      remaining = count-room_till_end;
-
-		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: cdma_transfer 1 AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset, room_till_end);
-      ret = cdma_transfer(axi_dest, hw_base_addr+(u64)ring_pointer_offset, room_till_end, keyhole_en, cdma_num);
-		if (ret != 0) {  //unsuccessful CDMA transmission
-			printk(KERN_INFO"[axi_stream_fifo_read]: ERROR on CDMA READ!!!.\n");
-		}
-		ring_pointer_offset = 0;
-																																											//end of buffer reached
-		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: cdma_transfer 2 AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset, remaining);
-		ret = cdma_transfer(axi_dest, hw_base_addr+(u64)ring_pointer_offset, remaining, keyhole_en, cdma_num);
-		ring_pointer_offset = get_new_ring_pointer(remaining, ring_pointer_offset, (int)buf_size);
+	if (count > buf_size) {			//needs to be 2 cdma transfers
+      //there is not enough room in the buffer
+      printk(KERN_INFO"[axi_stream_fifo_read_direct]: not enough room in the buffer!!!.\n");
+      return 0;
 
 	}
-	else {														//only 1 cdma transfer
-		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: cdma_transfer AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset , count);
-		ret = cdma_transfer(axi_dest, ((u64)hw_base_addr+ring_pointer_offset), count, keyhole_en, cdma_num);
-		ring_pointer_offset = get_new_ring_pointer(count, ring_pointer_offset, (int)buf_size);
-	}
+												//only 1 cdma transfer
+	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: cdma_transfer AXI Address: 0x%llx, ring_buff address: 0x%llx, len: 0x%zx\n", axi_dest, hw_base_addr , count);
+	ret = cdma_transfer(axi_dest, ((u64)hw_base_addr), count, keyhole_en, cdma_num);
+
 
 
 	if (ret != 0) {  //unsuccessful CDMA transmission
-		printk(KERN_INFO"[axi_stream_fifo_read]: ERROR on CDMA READ!!!.\n");
+		printk(KERN_INFO"[axi_stream_fifo_read_direct]: ERROR on CDMA READ!!!.\n");
 	}
 
 	/*Release Mutex on CDMA*/
 	switch(cdma_num) {
 	case 1:
-		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: Releasing Mutex on CDMA 1\n");
+		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: Releasing Mutex on CDMA 1\n");
 		mutex_unlock(&CDMA_sem);
 		break;
 	case 2:
-		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: Releasing Mutex on CDMA 2\n");
+		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: Releasing Mutex on CDMA 2\n");
 		mutex_unlock(&CDMA_sem_2);
 		break;
 	default:
-		verbose_printk(KERN_INFO"[axi_stream_fifo_read]: ERROR: unknown cdma number detected.\n");
+		verbose_printk(KERN_INFO"[axi_stream_fifo_read_direct]: ERROR: unknown cdma number detected.\n");
 		return(0);
 	}
 
-	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: Leaving the READ AXI Stream FIFO routine %zd\n",count);
+	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: Leaving the READ AXI Stream FIFO routine %zd\n",count);
 	return count;
 }
 

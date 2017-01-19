@@ -371,6 +371,7 @@ int cdma_ack(int cdma_num, u64 sa, u64 da, u32 btt);
  * @param cdma_num Instructs which CDMA to use (Assumes it has been locked)
  * @param bit_vec 32b bit vector to set the CDMA register
  * @param set (1) or unset (0) the bits.
+ * @param cdma_num Instructs which CDMA to use (Assumes it has been locked)
 */
 int cdma_config_set(u32 bit_vec, int set_unset, int cdma_num);
 /**
@@ -407,16 +408,16 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 */
 int vec2num(u32 vec);
 /**
- * @brief This function determines if a CDMA is available. if it is, it locks the semaphore and returns
- * the CDMA number.
-*/
-int cdma_query(void);
-/**
  * @brief This function is used for interrupt processing. it returns the one-hot vector value
  * of the input num as a position.
  * @param num converts this number to one hot vector
 */
 u32 num2vec(int num);
+/**
+ * @brief This function determines if a CDMA is available. if it is, it locks the semaphore and returns
+ * the CDMA number.
+*/
+int cdma_query(void);
 /**
  * @brief This function initializes the CDMA.
  * @param cdma_num Instructs which CDMA to use (Assumes it has been locked)
@@ -431,7 +432,6 @@ int cdma_init(int cdma_num, uint cdma_address, u32 dma_addr_base);
  * @param dma_addr_base Used to set the dma translation address to the PCIe control reg.
 */
 int pcie_ctl_init(u64 axi_address, u32 dma_addr_base);
-//void pcie_m_init(int cdma_num);
 /**
  * @brief This function initialized the interrupt controller in the FPGA.
  * @param axi_address The 64b AXI address of the Interrupt Controller (set through insmod).
@@ -445,20 +445,30 @@ void int_ctlr_init(u64 axi_address);
 */
 int dma_file_init(struct mod_desc *mod_desc, void *dma_buffer_base, u64 dma_buffer_size);
 /**
- * @brief This function performs calls appropriate functions for Reading from the AXI Streaming FIFO.
+ * @brief This function performs calls appropriate functions for Reading from the AXI Streaming FIFO and puts the data into the ring buffer.
  * @param count The number of bytes to read from the AXI streaming FIFO.
  * @param mod_desc The struct containing all the file variables.
  * @param ring_pointer_offset The current offset of the ring pointer in memory to store data.
 */
 size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr, struct mod_desc * mod_desc, int ring_pointer_offset, size_t buf_size);
-size_t axi_stream_fifo_read_no_header(size_t count, void * buf_base_addr, u64 hw_base_addr, struct mod_desc * mod_desc, int ring_pointer_offset, size_t buf_size);
+/**
+ * @brief This function performs calls appropriate functions for Reading from the AXI Streaming FIFO and copies it into the dma area to be copied to user.
+ * It does not use the dma area as a ring buffer
+ * @param count The number of bytes to read from the AXI streaming FIFO.
+ * @param mod_desc The struct containing all the file variables.
+ * @param ring_pointer_offset The current offset of the ring pointer in memory to store data.
+*/
+size_t axi_stream_fifo_read_direct(size_t count, void * buf_base_addr, u64 hw_base_addr, struct mod_desc * mod_desc, size_t buf_size);
 
 /**
  * @brief This function initializes the AXI Streaming FIFO.
  * @param mod_desc The struct containing all the file variables.
 */
 int axi_stream_fifo_init(struct mod_desc * mod_desc);
-
+/**
+ * @brief This function deinitializes the AXI Streaming FIFO.
+ * @param mod_desc The struct containing all the file variables.
+*/
 int axi_stream_fifo_deinit(struct mod_desc * mod_desc);
 
 /**
@@ -534,9 +544,4 @@ size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc);
 */
 //int read_data(struct mod_desc * mod_desc);
 int read_data(struct mod_desc * mod_desc, int read_size);
-/**
- * @brief This function checks to see if the axi streaming fifo is empty.
- * @param mod_desc The struct containing all the file variables.
-*/
-int write_fifo_ready(struct mod_desc* mod_desc);
 // ******************************************************************

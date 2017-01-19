@@ -1193,7 +1193,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	//	u32 kern_reg;
 	int interrupt_num;
 	int ret;
-	struct statistics * statistics; //= kmalloc(sizeof(struct statistics), GFP_KERNEL);
+	struct statistics * stats; //= kmalloc(sizeof(struct statistics), GFP_KERNEL);
 	struct timespec diff;
 	int minor;
 	ret = copy_from_user(&arg_loc, argp, sizeof(u64));
@@ -1327,22 +1327,22 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			break;
 
 		case GET_FILE_STATISTICS:
-			statistics = kmalloc(sizeof(struct statistics), GFP_KERNEL);
-			ret = copy_from_user(statistics, (void *)arg, sizeof(struct statistics));
+			stats = (struct statistics *)kmalloc(sizeof(struct statistics), GFP_KERNEL);
+			ret = copy_from_user(stats, (void *)arg, sizeof(struct statistics));
 
 			//statistics = (struct statistics *)arg;
-			statistics->tx_bytes = mod_desc->tx_bytes;
-			statistics->rx_bytes = mod_desc->rx_bytes;
-			statistics->cdma_attempt = mod_desc->cdma_attempt;
-			statistics->ip_not_ready = mod_desc->ip_not_ready;
-			statistics->cdma_usage_cnt = cdma_usage_cnt;
+			stats->tx_bytes = mod_desc->tx_bytes;
+			stats->rx_bytes = mod_desc->rx_bytes;
+			stats->cdma_attempt = mod_desc->cdma_attempt;
+			stats->ip_not_ready = mod_desc->ip_not_ready;
+			stats->cdma_usage_cnt = cdma_usage_cnt;
 			cdma_usage_cnt = 0;
 
 			if (mod_desc->stop_flag == 1) {
 				mod_desc->stop_flag = 0;
 				diff = timespec_sub(*(mod_desc->stop_time), *(mod_desc->start_time));
-				statistics->seconds = (unsigned long)diff.tv_sec;
-				statistics->ns = (unsigned long)diff.tv_nsec;
+				stats->seconds = (unsigned long)diff.tv_sec;
+				stats->ns = (unsigned long)diff.tv_nsec;
 			}
 
 			/*reset the counters*/
@@ -1350,29 +1350,29 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			mod_desc->rx_bytes = 0;
 			mod_desc->ip_not_ready = 0;
 
-			ret = copy_to_user((void *)arg, statistics, sizeof(struct statistics));
+			ret = copy_to_user((void *)arg, stats, sizeof(struct statistics));
 
 			break;
 
 		case GET_DRIVER_STATISTICS:
-
-			ret = copy_from_user(statistics, (void *)arg, sizeof(struct statistics));
+         stats = (struct statistics *)kmalloc(sizeof(struct statistics), GFP_KERNEL);
+			ret = copy_from_user(stats, (void *)arg, sizeof(struct statistics));
 			//	statistics = (struct statistics *)arg;
-			statistics->tx_bytes = atomic_read(&driver_tx_bytes);
-			statistics->rx_bytes = atomic_read(&driver_rx_bytes);
+			stats->tx_bytes = atomic_read(&driver_tx_bytes);
+			stats->rx_bytes = atomic_read(&driver_rx_bytes);
 
 			if (atomic_read(&driver_stop_flag) == 1) {
 				atomic_set(&driver_stop_flag, 0);
 				diff = timespec_sub((driver_stop_time), (driver_start_time));
-				statistics->seconds = (unsigned long)diff.tv_sec;
-				statistics->ns = (unsigned long)diff.tv_nsec;
+				stats->seconds = (unsigned long)diff.tv_sec;
+				stats->ns = (unsigned long)diff.tv_nsec;
 			}
 
 			/*reset the counters*/
 			atomic_set(&driver_tx_bytes, 0);
 			atomic_set(&driver_rx_bytes, 0);
 			//driver_ip_not_ready = 0;
-			ret = copy_to_user((void *)arg, statistics, sizeof(struct statistics));
+			ret = copy_to_user((void *)arg, stats, sizeof(struct statistics));
 			break;
 
 		case START_FILE_TIMER:
@@ -1640,7 +1640,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			full = atomic_read(mod_desc->write_ring_buf_full);
 
 			//we are going to write the whole count + header
-			while( (count + sizeof(count)) > room_in_buffer(wtk, wth, full, mod_desc->dma_size) && mod_desc->file_open ) {
+			while( (count + dma_byte_width + 2*sizeof(count)) > room_in_buffer(wtk, wth, full, mod_desc->dma_size) && mod_desc->file_open ) {
 				/*sleep until the write thread signals priority to pci_write
 				 *  (ie there is no more data for the write thread to write)
 				 *  (ie there MUST be room in the ring buffer now)*/
@@ -1669,22 +1669,13 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 			//copy the count to the ring buffer to act as the "header"
 			room_till_end = (int)mod_desc->dma_size - wtk;
-			if (sizeof(count) > room_till_end) {		//if header size is larger than room till the end, write in two steps
-				remaining = sizeof(count)-room_till_end;
-				//write the room_till_end
-				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: header memcpy 1(0x%p + 0x%x, 0x%p, 0x%zx)\n", minor, mod_desc->dma_write_addr, wtk, (void * )&count, room_till_end);
-				memcpy(mod_desc->dma_write_addr+wtk, (void * )&count, room_till_end);
-				wtk = 0;																																										//end of buffer reached
+			if (sizeof(count) > room_till_end) {		//If the header will not fit in 1 chuck of the ring buffer (in the room till end) then just get it at the start
+            wtk = 0;
+         }
 
-				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: header memcpy 2(0x%p + 0x%x, 0x%p, 0x%zx)\n", minor, mod_desc->dma_write_addr, wtk, (void * )&count+room_till_end, remaining);
-				memcpy(mod_desc->dma_write_addr+wtk, (void * )&count+room_till_end, remaining);
-				wtk = get_new_ring_pointer((int)remaining, wtk, (int)mod_desc->dma_size);
-			}
-			else {
-				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: header memcpy(0x%p + 0x%x, 0x%p, 0x%zx)\n", minor, mod_desc->dma_write_addr, wtk, (void * )&count, sizeof(count));
-				memcpy(mod_desc->dma_write_addr+wtk, (void * )&count, sizeof(count));
-				wtk = get_new_ring_pointer((int)sizeof(count), wtk, (int)mod_desc->dma_size);
-			}
+			verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: header memcpy(0x%p + 0x%x, 0x%p, 0x%zx)\n", minor, mod_desc->dma_write_addr, wtk, (void * )&count, sizeof(count));
+			memcpy(mod_desc->dma_write_addr+wtk, (void * )&count, sizeof(count));
+			wtk = get_new_ring_pointer((int)sizeof(count), wtk, (int)mod_desc->dma_size);
 
 			room_till_end = (int)( (mod_desc->dma_size - wtk) & ~(dma_byte_width-1));              //make it divisible by dma_byte_width
 			if (count > room_till_end) {		//if header size is larger than room till the end, write in two steps
@@ -1944,15 +1935,15 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 				}
 				else {
 					if (bytes <= count){
-                  bytes = axi_stream_fifo_read_no_header((size_t)bytes, mod_desc->dma_read_addr, axi_pcie_m + mod_desc->dma_offset_read, mod_desc, 0, mod_desc->dma_size);
+                  bytes = axi_stream_fifo_read_direct((size_t)bytes, mod_desc->dma_read_addr, axi_pcie_m + mod_desc->dma_offset_read, mod_desc, mod_desc->dma_size);
                   count = bytes;
 					}
                else if(count < bytes) {
-                  bytes = axi_stream_fifo_read_no_header((size_t)count, mod_desc->dma_read_addr, axi_pcie_m+mod_desc->dma_offset_read, mod_desc, 0, mod_desc->dma_size);
+                  bytes = axi_stream_fifo_read_direct((size_t)count, mod_desc->dma_read_addr, axi_pcie_m+mod_desc->dma_offset_read, mod_desc, mod_desc->dma_size);
                }
-               verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: copy_to_user (0x%p, 0x%p + 0x%x, 0x%zx)\n" ,minor, &buf, mod_desc->dma_read_addr, 0, count);
+               verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: copy_to_user (0x%p, 0x%p, 0x%zx)\n" ,minor, &buf, mod_desc->dma_read_addr, count);
                ret = copy_to_user(buf, mod_desc->dma_read_addr, count);
-					verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: Read %d bytes from AXI FIFO\n" ,minor ,count);
+					verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: Read %zd bytes from AXI FIFO\n" ,minor ,count);
 				}
 				break;
 			}
@@ -1974,22 +1965,13 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 				if (d2r > 0) {
 					//read the packet header  read_header_size
 					room_till_end = mod_desc->dma_size - rfu;
-					if (sizeof(read_header_size) > room_till_end) {			//needs to be 2 copy
-						remaining = sizeof(read_header_size)-room_till_end;
-						verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: header copy_to_user 2 (0x%p, 0x%p + 0x%x, 0x%zx)\n" ,minor, &read_header_size, mod_desc->dma_read_addr, rfu, room_till_end);
-						memcpy(&read_header_size, mod_desc->dma_read_addr+rfu, room_till_end);
-						rfu = 0;
+					if (sizeof(read_header_size) > room_till_end) {			//If the header will not fit in 1 chuck of the ring buffer (in the room till end) then just put it at the start
+                  rfu = 0;
+               }
 
-						verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: header copy_to_user 1 (0x%p, 0x%p + 0x%x,0x%zx)\n" ,minor, &read_header_size, mod_desc->dma_read_addr, rfu, remaining);
-						memcpy(&read_header_size+room_till_end, mod_desc->dma_read_addr+rfu, remaining);
-						rfu = get_new_ring_pointer((int)remaining, rfu, (int)(mod_desc->dma_size));
-
-					}
-					else {														//only 1 copy
-						verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: header copy_to_user(0x%p, 0x%p + 0x%x, 0x%zx)\n" ,minor, &read_header_size, mod_desc->dma_read_addr, rfu, sizeof(read_header_size));
-						memcpy(&read_header_size, mod_desc->dma_read_addr+rfu, sizeof(read_header_size));
-						rfu = get_new_ring_pointer((int)sizeof(read_header_size), rfu, (int)(mod_desc->dma_size));
-					}
+					verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: header copy_to_user(0x%p, 0x%p + 0x%x, 0x%zx)\n", minor, &read_header_size, mod_desc->dma_read_addr, rfu, sizeof(read_header_size));
+					memcpy(&read_header_size, mod_desc->dma_read_addr+rfu, sizeof(read_header_size));
+					rfu = get_new_ring_pointer((int)sizeof(read_header_size), rfu, (int)(mod_desc->dma_size));
 
 					verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: header: (0x%zx)\n" ,minor, read_header_size);
 
@@ -2013,6 +1995,9 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 							verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: copy_to_user 1(0x%p, 0x%p + 0x%x, 0x%zx)\n", minor, &buf, mod_desc->dma_read_addr, rfu, room_till_end);
 							ret = copy_to_user(buf, mod_desc->dma_read_addr + rfu, room_till_end);
 
+                     //extra verbose debug message
+                     verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: first 4 bytes 0x%x\n", minor, *((u32*)(mod_desc->dma_read_addr+rfu)));
+
 							rfu = 0;
 																																									//end of buffer reached
 							verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: copy_to_user 2(0x%p, 0x%p + 0x%x, 0x%zx)\n", minor, &buf+room_till_end, mod_desc->dma_read_addr, rfu, remaining);
@@ -2023,6 +2008,10 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 						else { 		//else we can do it in 1 read
 							verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: copy_to_user(0x%p, 0x%p + 0x%x, 0x%zx)\n", minor, &buf, mod_desc->dma_read_addr, rfu, count);
 							ret = copy_to_user(buf, mod_desc->dma_read_addr + rfu, count);
+
+                     //extra verbose debug message
+                     verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: first 4 bytes 0x%x\n", minor, *((u32*)(mod_desc->dma_read_addr+rfu)));
+
 							rfu = get_new_ring_pointer((int)count, rfu, (int)mod_desc->dma_size);
 
 						}
@@ -2148,7 +2137,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 	verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: ************************************************************************\n", minor);
 	verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: ******************** READ TRANSACTION END  **************************\n", minor);
-	verbose_pci_read_printk(KERN_INFO"[pci_%x_read]:              					Bytes read : %d\n", minor, bytes);
+	verbose_pci_read_printk(KERN_INFO"[pci_%x_read]:              					Bytes read : %zd\n", minor, bytes);
 	verbose_pci_read_printk(KERN_INFO"[pci_%x_read]:                        Total Bytes read : %d\n", minor, mod_desc->rx_bytes);
 	verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: ************************************************************************\n", minor);
 
