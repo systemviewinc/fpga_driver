@@ -918,8 +918,6 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 		//get next interrupt number
 		isr_status = isr_status & ~num2vec(interrupt_num);
       verbose_isr_printk(KERN_INFO"[pci_isr]: vectors serviced is: ('0x%08x')\n", vec_serviced);
-      verbose_isr_printk(KERN_INFO"[pci_isr]: not intterupt number is: ('0x%08x')\n", ~num2vec(interrupt_num));
-
       verbose_isr_printk(KERN_INFO"[pci_isr]: interrupt status register vector is: ('0x%08x')\n", isr_status);
 		interrupt_num = vec2num(isr_status);
 	}
@@ -1047,14 +1045,11 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->has_interrupt_vec = 0;
 	s->axi_fifo_rlr  = 0;
 	s->axi_fifo_rdfo = 0;
+   s->read_header_size = 0;
 	s->keyhole_config = 0;
 	s->dma_offset_read = 0;
 	s->dma_offset_write = 0;
-	s->dma_size = 4096;
-	//s->dma_read_offset = 0;
-	//s->dma_write_offset = 0;
-	//s->kernel_reg_write = 0;
-	//s->kernel_reg_read = 0;
+	s->dma_size = dma_file_size;
 	s->file_size = 4096;   //default to 4K
 	s->tx_bytes = 0;
 	s->rx_bytes = 0;
@@ -1963,15 +1958,20 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 				//if there is data in the ring buffer
 				if (d2r > 0) {
-					//read the packet header  read_header_size
-					room_till_end = mod_desc->dma_size - rfu;
-					if (sizeof(read_header_size) > room_till_end) {			//If the header will not fit in 1 chuck of the ring buffer (in the room till end) then just put it at the start
-                  rfu = 0;
-               }
+					// if there is no left over raed_header size, read the packet header  read_header_size from the ring buffer
+               if(mod_desc->read_header_size == 0) {
+   					room_till_end = mod_desc->dma_size - rfu;
+   					if (sizeof(read_header_size) > room_till_end) {			//If the header will not fit in 1 chuck of the ring buffer (in the room till end) then just put it at the start
+                     rfu = 0;
+                  }
 
-					verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: header copy_to_user(0x%p, 0x%p + 0x%x, 0x%zx)\n", minor, &read_header_size, mod_desc->dma_read_addr, rfu, sizeof(read_header_size));
-					memcpy(&read_header_size, mod_desc->dma_read_addr+rfu, sizeof(read_header_size));
-					rfu = get_new_ring_pointer((int)sizeof(read_header_size), rfu, (int)(mod_desc->dma_size));
+   					verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: header copy_to_user(0x%p, 0x%p + 0x%x, 0x%zx)\n", minor, &read_header_size, mod_desc->dma_read_addr, rfu, sizeof(read_header_size));
+   					memcpy(&read_header_size, mod_desc->dma_read_addr+rfu, sizeof(read_header_size));
+   					rfu = get_new_ring_pointer((int)sizeof(read_header_size), rfu, (int)(mod_desc->dma_size));
+               }
+               else{
+                  read_header_size = mod_desc->read_header_size;
+               }
 
 					verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: header: (0x%zx)\n" ,minor, read_header_size);
 
@@ -1980,10 +1980,13 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 						count = 0;
 						bytes = 0;
 					}
-					else {
+					else if(read_header_size < count){
 						count = read_header_size;
 						verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: setting read count to 0x%zx\n" ,minor, read_header_size);
 					}
+               else {
+                  verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: buffer size 0x%zx <  read header size 0x%zx\n" ,minor, count, read_header_size);
+               }
 
 					//if there is a packet to read
 					if (count > 0) {
@@ -2022,6 +2025,21 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 					}
 					verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: bytes copied to user 0x%zx\n", minor, count);
 					bytes = count;
+
+               //if we didn't read the whole packet out then write a header back in for the next read
+                  //we need to write the header before the data read out, so rfu will need to be decreased
+                  //because we did not write the rfu yet, we do not have to worry about data being put there yet
+               if (count < read_header_size) {
+                  read_header_size -= count;
+                  mod_desc->read_header_size = read_header_size;
+                  verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: set mod_desc->read_header_size to (0x%zx)\n", minor, read_header_size);
+               }
+               else {
+                  mod_desc->read_header_size = 0;
+               }
+
+
+
 
 				}
 				else {

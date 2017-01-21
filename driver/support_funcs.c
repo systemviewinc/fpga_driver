@@ -180,10 +180,10 @@ int read_data(struct mod_desc * mod_desc, int read_size)
 
 			while (drop_count < read_size) { //also garbage the trailer
 				if (( read_size - drop_count + 2*sizeof(size_t) ) > dma_garbage_size){									//garbage buffer cannot fit in our read
-					drop_count_inc = axi_stream_fifo_read((size_t)(dma_garbage_size - 2*sizeof(size_t)), dma_buffer_base+dma_garbage_offset, axi_pcie_m + dma_garbage_offset,  mod_desc, 0, (size_t)dma_garbage_size);
+					drop_count_inc = axi_stream_fifo_read_direct((size_t)(dma_garbage_size - 2*sizeof(size_t)), dma_buffer_base+dma_garbage_offset, axi_pcie_m + dma_garbage_offset,  mod_desc, (size_t)dma_garbage_size);
 				}
 				else{																																		//read out the data
-					drop_count_inc = axi_stream_fifo_read((size_t)(read_size-drop_count), dma_buffer_base + dma_garbage_offset, axi_pcie_m + dma_garbage_offset, mod_desc, 0, (size_t)dma_garbage_size);
+					drop_count_inc = axi_stream_fifo_read_direct((size_t)(read_size-drop_count), dma_buffer_base + dma_garbage_offset, axi_pcie_m + dma_garbage_offset, mod_desc, (size_t)dma_garbage_size);
 				}
 				if(drop_count_inc == ERROR) {
 					//This seems to happen when removing the driver, return error so we don't get stuck in the loop
@@ -191,8 +191,7 @@ int read_data(struct mod_desc * mod_desc, int read_size)
 					printk(KERN_INFO"[read_data]: ERROR DROP_COUNT READ.....\n");
 					return ERROR;
 				}
-				drop_count_inc -= 2*sizeof(size_t); //subtract the header/trailer writen into the garbage buffer, doesn't count as data read out of the CDMA
-				//printk(KERN_INFO"[read_data]: drop loop DROP_COUNT_INC %d DROP COUNT: %d > READ_SIZE: %d.....\n",drop_count_inc, drop_count, read_size);					// extra debug message for drops
+				verbose_printk(KERN_INFO"[read_data]: drop loop DROP_COUNT_INC %d DROP COUNT: %d > READ_SIZE: %d.....\n",drop_count_inc, drop_count, read_size);					// extra debug message for drops
 				drop_count += drop_count_inc;
 			}
 
@@ -629,7 +628,7 @@ struct task_struct* create_thread_read(struct kfifo * read_fifo) {
 int dma_file_init(struct mod_desc *mod_desc, void *dma_buffer_base, u64 dma_buffer_size) {
 
 	int dma_file_size;
-	dma_file_size = (int)(mod_desc->file_size)*RING_BUFF_SIZE_MULTIPLIER;  //we want the ring buffer to be atleast 2 times the size of the file size (aka fifo size)
+	dma_file_size = (int)(mod_desc->dma_size)*RING_BUFF_SIZE_MULTIPLIER;  //we want the ring buffer to be atleast 2 times the size of the file size (aka fifo size)
 
 	printk(KERN_INFO"[dma_file_init]: Setting Peripheral DMA size:%d, current offset %lld\n", dma_file_size,(u64)dma_current_offset);
 	mod_desc->dma_size = (size_t)dma_file_size;

@@ -322,6 +322,7 @@ struct mod_desc
 	int has_interrupt_vec;	/**< This file has an interrupt associated with it */
 	int axi_fifo_rlr;	/**< Last read RLR  value if non-zero this has to be used */
 	int axi_fifo_rdfo;	/**< Last read RDFO value if non-zero this has to be used */
+   size_t read_header_size;  	/**< Last read_header_size  value if non-zero this has to be used */
 	wait_queue_head_t poll_wq; /**< waitq for events */
 };
 
