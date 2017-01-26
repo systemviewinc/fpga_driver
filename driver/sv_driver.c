@@ -1776,15 +1776,15 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			}
 
 			if (transfer_type == NORMAL_WRITE) {
-				*f_pos = *f_pos + partial_count;
+				//*f_pos = *f_pos + partial_count;
 
-				if (*f_pos == mod_desc->file_size) {
-					*f_pos = 0;
+				if (*f_pos + partial_count == mod_desc->file_size) {
+					//*f_pos = 0;
 					verbose_pci_write_printk(KERN_INFO"[user_peripheral_%x_write]: Resetting file pointer back to zero...\n", minor);
-				} else if (*f_pos > mod_desc->file_size) {
+				} else if (*f_pos +  partial_count > mod_desc->file_size) {
 					printk(KERN_INFO"[user_peripheral_%x_write]: ERROR! Wrote past the file size. This should not have happened...\n", minor);
 					printk(KERN_INFO"[user_peripheral_%x_write]: Resetting file pointer back to zero...\n", minor);
-					*f_pos = 0;
+					//*f_pos = 0;
 					return ERROR;
 				}
 				verbose_pci_write_printk(KERN_INFO"[user_peripheral_%x_write]: updated file offset is: %llx\n", minor, *f_pos);
@@ -2116,12 +2116,12 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 				//*f_pos = (loff_t)(*f_pos + (loff_t)count);
 				verbose_pci_read_printk(KERN_INFO"[user_peripheral_%x_read]: updated file offset after adding count(%zu) is: %llu\n", minor, count, *f_pos);
 				verbose_pci_read_printk(KERN_INFO"[user_peripheral_%x_read]: first 4 bytes 0x%x\n", minor,*(unsigned int *)mod_desc->dma_read_addr);
-				if (*f_pos == mod_desc->file_size) {
+				if (*f_pos + (loff_t)(*f_pos + (loff_t)count) == mod_desc->file_size) {
 					//*f_pos = 0;
 					verbose_pci_read_printk(KERN_INFO"[user_peripheral_%x_read]: End of file reached.\n", minor);
 					verbose_pci_read_printk(KERN_INFO"[user_peripheral_%x_read]: Resetting file pointer back to zero...\n", minor);
 					verbose_pci_read_printk(KERN_INFO"[user_peripheral_%x_read]: updated file offset is: %llu\n", minor, *f_pos);
-				} else if (*f_pos > mod_desc->file_size) {
+				} else if (*f_pos + (loff_t)(*f_pos + (loff_t)count) > mod_desc->file_size) {
 					printk(KERN_INFO"[user_peripheral_%x_read]: ERROR! Read past the file size. This should not have happened...\n", minor);
 					printk(KERN_INFO"[user_peripheral_%x_read]: the offset position is:%llu\n", minor, *f_pos);
 					printk(KERN_INFO"[user_peripheral_%x_read]: Resetting file pointer back to zero...\n", minor);
