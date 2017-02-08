@@ -191,7 +191,7 @@ int read_data(struct mod_desc * mod_desc, int read_size)
 					printk(KERN_INFO"[read_data]: ERROR DROP_COUNT READ.....\n");
 					return ERROR;
 				}
-				verbose_printk(KERN_INFO"[read_data]: drop loop DROP_COUNT_INC %d DROP COUNT: %d > READ_SIZE: %d.....\n",drop_count_inc, drop_count, read_size);					// extra debug message for drops
+				verbose_read_thread_printk(KERN_INFO"[read_data]: drop loop DROP_COUNT_INC %d DROP COUNT: %d > READ_SIZE: %d.....\n",drop_count_inc, drop_count, read_size);					// extra debug message for drops
 				drop_count += drop_count_inc;
 			}
 
@@ -577,7 +577,7 @@ int write_data(struct mod_desc * mod_desc)
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: ring_point_%d : write full: %d\n", minor, 0);
 	}
 
-	verbose_printk(KERN_INFO"[write_data]: write ring_buffer: WTH: %d  WTK: %d\n", wth, atomic_read(mod_desc->wtk));
+	verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: write ring_buffer: WTH: %d  WTK: %d\n", wth, atomic_read(mod_desc->wtk));
 
 	atomic_set(mod_desc->pci_write_q, 1);
 	wake_up_interruptible(&pci_write_head);
@@ -1163,7 +1163,7 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 		ret = cdma_config_set(bit_vec, 1, cdma_num);   //value of one means we want to SET the register
 		break;
 
-	default:verbose_printk(KERN_INFO"\t\t[cdma_transfer] no keyhole setting will be used.\n");
+	default:verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer] no keyhole setting will be used.\n");
 	}
 
 	switch(cdma_num) {
@@ -1526,7 +1526,6 @@ size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc)
 */
 size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr, struct mod_desc * mod_desc, int ring_pointer_offset, size_t buf_size) {
 	int ret;
-	int keyhole_en;
 	size_t room_till_end;
 	size_t remaining;
 	int cdma_num = 0;
@@ -1545,8 +1544,6 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
 	else{
 	 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: count = %zd.\n", count);
 	}
-
-	keyhole_en = KEYHOLE_READ;
 
 	//copy the count to the ring buffer to act as the "header"
    room_till_end = buf_size - ring_pointer_offset;
@@ -1576,7 +1573,7 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
       remaining = count-room_till_end;
 
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: cdma_transfer 1 AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset, room_till_end);
-      ret = cdma_transfer(axi_dest, hw_base_addr+(u64)ring_pointer_offset, room_till_end, keyhole_en, cdma_num);
+      ret = cdma_transfer(axi_dest, hw_base_addr+(u64)ring_pointer_offset, room_till_end, KEYHOLE_READ, cdma_num);
 		if (ret != 0) {  //unsuccessful CDMA transmission
 			printk(KERN_INFO"[axi_stream_fifo_read]: ERROR on CDMA READ!!!.\n");
 		}
@@ -1588,13 +1585,13 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
 		ring_pointer_offset = 0;
 																																											//end of buffer reached
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: cdma_transfer 2 AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset, remaining);
-		ret = cdma_transfer(axi_dest, hw_base_addr+(u64)ring_pointer_offset, remaining, keyhole_en, cdma_num);
+		ret = cdma_transfer(axi_dest, hw_base_addr+(u64)ring_pointer_offset, remaining, KEYHOLE_READ, cdma_num);
 		ring_pointer_offset = get_new_ring_pointer(remaining, ring_pointer_offset, (int)buf_size);
 
 	}
 	else {														//only 1 cdma transfer
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: cdma_transfer AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset , count);
-		ret = cdma_transfer(axi_dest, ((u64)hw_base_addr+ring_pointer_offset), count, keyhole_en, cdma_num);
+		ret = cdma_transfer(axi_dest, ((u64)hw_base_addr+ring_pointer_offset), count, KEYHOLE_READ, cdma_num);
 
 
       //extra verbose debug message
@@ -1644,7 +1641,7 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
       atomic_set(mod_desc->read_ring_buf_full, 1);
       verbose_printk(KERN_INFO"[axi_stream_fifo_read]: ring_point: Read Full: %d\n", atomic_read(mod_desc->read_ring_buf_full));
    }
-   verbose_printk(KERN_INFO"[axi_stream_fifo_read]: read ring_buffer: RFU : %d RFH %d\n", atomic_read(mod_desc->rfu), ring_pointer_offset);
+   verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: read ring_buffer: RFU : %d RFH %d\n", atomic_read(mod_desc->rfu), ring_pointer_offset);
 
 
 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: Leaving the READ AXI Stream FIFO routine %zd\n",count);
@@ -1663,7 +1660,6 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
 */
 size_t axi_stream_fifo_read_direct(size_t count, void * buf_base_addr, u64 hw_base_addr, struct mod_desc * mod_desc, size_t buf_size) {
 	int ret;
-	int keyhole_en;
 	int cdma_num = 0;
 	u64 axi_dest;
 
@@ -1677,8 +1673,6 @@ size_t axi_stream_fifo_read_direct(size_t count, void * buf_base_addr, u64 hw_ba
 	else{
 	 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: count = %zd.\n", count);
 	}
-
-	keyhole_en = KEYHOLE_READ;
 
 	// Find an available CDMA to use and wait if both are in use
 	while (cdma_num == 0) {
@@ -1697,7 +1691,7 @@ size_t axi_stream_fifo_read_direct(size_t count, void * buf_base_addr, u64 hw_ba
 	}
 												//only 1 cdma transfer
 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: cdma_transfer AXI Address: 0x%llx, ring_buff address: 0x%llx, len: 0x%zx\n", axi_dest, hw_base_addr , count);
-	ret = cdma_transfer(axi_dest, ((u64)hw_base_addr), count, keyhole_en, cdma_num);
+	ret = cdma_transfer(axi_dest, ((u64)hw_base_addr), count, KEYHOLE_READ, cdma_num);
 
 
 
