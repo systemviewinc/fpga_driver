@@ -54,6 +54,8 @@ int dma_system_size = 4194304;/**< Insmod Parameter - Size of DMA Allocation, ma
 int dma_file_size = 4096;/**< Insmod Parameter - Currently not used, the HW buffer size is now set on a file by file basis.*/
 int dma_byte_width = 8;   /**< Insmod Parameter - This parameter is the data width of the CDMA. It is used to calculate the FIFO empty value.*/
 int back_pressure = 0;/**< Insmod Parameter - This parameter sets whether the READ Ring Buffer should overwrite data or backpressure to HW.*/
+uint axi2pcie_bar0_size = 0xFFFFFFFF;/**< Insmod Parameter - This parameter sets the PCIE2AXI bar size for address translation parameters.*/
+
 //static char buffer[128];/**< Used to store the PCIe Device Name*/
 //static char  *pci_devName = &buffer[0];/**< Insmod Parameter - the PCIe Device Name.*/
 //const char * pci_devName_const;
@@ -100,6 +102,9 @@ MODULE_PARM_DESC(dma_byte_width, "DMAByteWidth");/**< Insmod Parameter */
 
 module_param(back_pressure, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
 MODULE_PARM_DESC(back_pressure, "BackPressure");/**< Insmod Parameter */
+
+module_param(axi2pcie_bar0_size, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
+MODULE_PARM_DESC(axi2pcie_bar0_size, "AXI2PCIE bar size");/**< Insmod Parameter */
 /*****************************************************************************/
 
 //char pci_devName_const[128] ;
@@ -304,11 +309,28 @@ static unsigned char skel_get_revision(struct pci_dev *dev)
 static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
 	int ret;
-	int pcie_m_set;
 	int int_ctrl_set;
 	/* Do probing type stuff here.
 	 * 	 * Like calling request_region();
 	 * 	 	 */
+
+
+    verbose_printk(KERN_INFO"%s:[probe]******************************** PROBE PARAMETERS *****************************************\n", pci_devName);
+
+    verbose_printk(KERN_INFO"%s:[probe] device_id: %d \n", pci_devName, device_id);
+    verbose_printk(KERN_INFO"%s:[probe] major: %d \n", pci_devName, major);
+    verbose_printk(KERN_INFO"%s:[probe] cdma_address: 0x%x \n", pci_devName, cdma_address);
+    verbose_printk(KERN_INFO"%s:[probe] cdma_2_address: 0x%x \n", pci_devName, cdma_2_address);
+    verbose_printk(KERN_INFO"%s:[probe] enable_cdma_2: %d \n", pci_devName, enable_cdma_2);
+    verbose_printk(KERN_INFO"%s:[probe] pcie_ctl_address: 0x%x \n", pci_devName, pcie_ctl_address);
+    verbose_printk(KERN_INFO"%s:[probe] pcie_m_address: 0x%x \n", pci_devName, pcie_m_address);
+    verbose_printk(KERN_INFO"%s:[probe] int_ctlr_address: 0x%x \n", pci_devName, int_ctlr_address);
+    verbose_printk(KERN_INFO"%s:[probe] driver_type: 0x%x \n", pci_devName, driver_type);
+    verbose_printk(KERN_INFO"%s:[probe] dma_system_size: %d \n", pci_devName, dma_system_size);
+    verbose_printk(KERN_INFO"%s:[probe] dma_file_size: %d \n", pci_devName, dma_file_size);
+    verbose_printk(KERN_INFO"%s:[probe] dma_byte_width: %d \n", pci_devName, dma_byte_width);
+    verbose_printk(KERN_INFO"%s:[probe] back_pressure: %d \n", pci_devName, back_pressure);
+    verbose_printk(KERN_INFO"%s:[probe] axi2pcie_bar0_size : 0x%x \n", pci_devName, axi2pcie_bar0_size);
 
 	verbose_printk(KERN_INFO"%s:[probe]******************************** BEGIN PROBE ROUTINE *****************************************\n", pci_devName);
 
@@ -399,41 +421,35 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	cdma_set[1] = 0;
 	cdma_set[2] = 0;
 	pcie_ctl_set = 0;
-	pcie_m_set = 0;
 	int_ctrl_set = 0;
+
 
 	if (cdma_address != 0xFFFFFFFF)
 	{
-		ret = cdma_init(1, cdma_address, (u32)dma_addr_base);  //cdma_num = 1
+		ret = cdma_init(1, cdma_address);  //cdma_num = 1
 	}
 
 	//	if (cdma_address_2 != 0xFFFFFFFF)
 	if (enable_cdma_2 != 0)
 	{
-		ret = cdma_init(2, cdma_2_address, (u32)dma_addr_base);  //cdma_num = 2
+		ret = cdma_init(2, cdma_2_address);  //cdma_num = 2
 	}
 
-	if (pcie_ctl_address != 0xFFFFFFFF)
+	if (axi2pcie_bar0_size != 0xFFFFFFFF && pcie_ctl_address != 0xFFFFFFFF)
 	{
-		ret = pcie_ctl_init((u64)pcie_ctl_address, (u32)dma_addr_base);
+      axi_pcie_m = dma_addr_base % axi2pcie_bar0_size;
+
+		ret = pcie_ctl_init((u64)pcie_ctl_address, (u64)(dma_addr_base - axi_pcie_m));
 		if (ret < 0)
 			return ERROR;
-		else
+		else {
 			pcie_ctl_set = 1;
+      }
 	}
-
-//	if (pcie_m_address != 0xFFFFFFFF)
-//	{
-		//pcie_m_init(1);
-//		pcie_m_set = 1;
-//	}
-
-	axi_pcie_m = 0;
-
-	//	if (pcie_m_address_2 != 0xFFFFFFFF)
-	//	{
-	//		pcie_m_init(2);
-	//	}
+   else {
+      printk(KERN_INFO"[sv_driver_init] ERROR axi2pcie_bar0_size or pcie_ctl_address was not set\n");
+      return ERROR;
+   }
 
 	if (int_ctlr_address != 0xFFFFFFFF) {
 		int_ctlr_init((u64)int_ctlr_address);
@@ -556,11 +572,11 @@ static int sv_plat_probe(struct platform_device *pdev)
 	int_ctlr_address &= 0xFFFFFFFF;
 
 	if (cdma_address != 0xFFFFFFFF) {
-		ret = cdma_init(1, cdma_address, (u32)dma_addr_base);
+		ret = cdma_init(1, cdma_address);
 	}
 
 	if (enable_cdma_2 != 0) {
-		ret = cdma_init(2, cdma_2_address, (u32)dma_addr_base);
+		ret = cdma_init(2, cdma_2_address);
 	}
 
 	if (int_ctlr_address != 0xFFFFFFFF) {
@@ -581,11 +597,11 @@ static int sv_plat_probe(struct platform_device *pdev)
 	printk(KERN_INFO"[probe]IRQ request complete\n");
 
 	if (cdma_address != 0xFFFFFFFF) {
-		ret = cdma_init(1, cdma_address, (u32)dma_addr_base);
+		ret = cdma_init(1, cdma_address);
 	}
 
 	if (enable_cdma_2 != 0) {
-		ret = cdma_init(2, cdma_2_address, (u32)dma_addr_base);
+		ret = cdma_init(2, cdma_2_address);
 	}
 
 	if (int_ctlr_address != 0xFFFFFFFF) {

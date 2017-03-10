@@ -37,6 +37,10 @@
 //#include <stdint.h>
 #include "sv_driver.h"
 
+//debug
+#include <linux/time.h>
+
+
 /******************************** Xilinx Register Offsets **********************************/
 
 const u32 AXI_STREAM_ISR    = 0x00;    /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
@@ -68,7 +72,14 @@ const u32 CDMA_DA           = 0x20;    /**< CDMA Register Offset (See Xilinx Doc
 const u32 CDMA_DA_MSB       = 0x24;    /**< CDMA Register Offset (See Xilinx Doc) */
 const u32 CDMA_BTT          = 0x28;    /**< CDMA Register Offset (See Xilinx Doc) */
 
+
+const u32 PCIE_BRIDGE_INFO = 0x134;    /**< AXI PCIe Subsystem Offset (See Xilinx Doc) */
+const u32 PCIE_ISR_INFO    = 0x138;    /**< AXI PCIe Subsystem Offset (See Xilinx Doc) */
+const u32 PCIE_PHY_STATUS  = 0x144;    /**< AXI PCIe Subsystem Offset (See Xilinx Doc) */
+
+const u32 AXIBAR2PCIEBAR_0U = 0x208;    /**< AXI PCIe Subsystem Offset (See Xilinx Doc) */
 const u32 AXIBAR2PCIEBAR_0L = 0x20c;    /**< AXI PCIe Subsystem Offset (See Xilinx Doc) */
+
 const u32 AXIBAR2PCIEBAR_1L = 0x214;    /**< AXI PCIe Subsystem Offset (See Xilinx Doc) */
 
 /******************************** Local Scope Globals ***************************************/
@@ -698,7 +709,7 @@ void int_ctlr_init(u64 axi_address)
 *
 *
 */
-int pcie_ctl_init(u64 axi_address, u32 dma_addr_base)
+int pcie_ctl_init(u64 axi_address, u64 dma_addr_base)
 {
 	u32 dma_addr_loc;
 	u64 axi_dest;
@@ -709,24 +720,47 @@ int pcie_ctl_init(u64 axi_address, u32 dma_addr_base)
 	axi_pcie_ctl = axi_address;
 
 	if(cdma_set[1] == 1) {
-		/*convert to u32 to send to CDMA*/
-		dma_addr_loc = (u32)dma_addr_base;
 
-		//update pcie_ctl_virt address with register offset
-		axi_dest = axi_pcie_ctl + AXIBAR2PCIEBAR_0L;
 
-		//write DMA addr to PCIe CTL for address translation
+      //update pcie_ctl_virt address with register offset
+		axi_dest = axi_pcie_ctl + AXIBAR2PCIEBAR_0U;
+
+      /*convert to upper u32 to send to CDMA*/
+      dma_addr_loc = (u32)(dma_addr_base>>32);
+
+      //write DMA addr to PCIe CTL upper for address translation
 		ret = data_transfer(axi_dest, (void *)(&dma_addr_loc), 4, NORMAL_WRITE, 0);
-		printk(KERN_INFO"[pci_ioctl_cdma_set]: writing dma address ('0x%08x') to pcie_ctl at AXI address:%llx\n", dma_addr_loc, axi_dest);
+		printk(KERN_INFO"[pci_ioctl_cdma_set]: writing dma address ('0x%08x') to pcie_ctl upper at AXI address:%llx\n", dma_addr_loc, axi_dest);
+
 
 		//check the pcie-ctl got the translation address
 		ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
-		printk(KERN_INFO"[pci_ioctl_cdma_set]: PCIe CTL register: ('0x%08x')\n", status);
-
-		if (status == dma_addr_loc)
-			verbose_printk(KERN_INFO"[pci_ioctl_cdma_set]: PCIe CTL register set SUCCESS: ('0x%08x')\n", status);
+      if (status == dma_addr_loc)
+			verbose_printk(KERN_INFO"[pci_ioctl_cdma_set]: PCIe CTL upper register set SUCCESS: ('0x%08x')\n", status);
 		else {
-			printk(KERN_INFO"[pci_ioctl_cdma_set]: !!!!!!!!!!! PCIe CTL register FAILURE !!!!!!!!!!!!!!!: ('0x%08x')\n", status);
+			printk(KERN_INFO"[pci_ioctl_cdma_set]: !!!!!!!!!!! PCIe CTL upper register FAILURE !!!!!!!!!!!!!!!: ('0x%08x')\n", status);
+			printk(KERN_INFO"[pci_ioctl_cdma_set]: Most likely due to incorrect setting in PCIe IP for AXI to BAR translation HIGH address\n");
+			printk(KERN_INFO"[pci_ioctl_cdma_set]: Must set this value to be the DMA buffer size allocation.\n");
+			return ERROR;
+		}
+
+
+		//update pcie_ctl_virt lower address with register offset
+		axi_dest = axi_pcie_ctl + AXIBAR2PCIEBAR_0L;
+
+      /*convert to lower u32 to send to CDMA*/
+      dma_addr_loc = (u32)dma_addr_base;
+
+		//write DMA addr to PCIe CTL for address translation
+		ret = data_transfer(axi_dest, (void *)(&dma_addr_loc), 4, NORMAL_WRITE, 0);
+		printk(KERN_INFO"[pci_ioctl_cdma_set]: writing dma address ('0x%08x') to pcie_ctl lower at AXI address:%llx\n", dma_addr_loc, axi_dest);
+
+		//check the pcie-ctl got the translation address
+		ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
+		if (status == dma_addr_loc)
+			verbose_printk(KERN_INFO"[pci_ioctl_cdma_set]: PCIe CTL register lower set SUCCESS: ('0x%08x')\n", status);
+		else {
+			printk(KERN_INFO"[pci_ioctl_cdma_set]: !!!!!!!!!!! PCIe CTL lower register FAILURE !!!!!!!!!!!!!!!: ('0x%08x')\n", status);
 			printk(KERN_INFO"[pci_ioctl_cdma_set]: Most likely due to incorrect setting in PCIe IP for AXI to BAR translation HIGH address\n");
 			printk(KERN_INFO"[pci_ioctl_cdma_set]: Must set this value to be the DMA buffer size allocation.\n");
 			return ERROR;
@@ -741,11 +775,10 @@ int pcie_ctl_init(u64 axi_address, u32 dma_addr_base)
  * cdma_address the AXI address of the CDMA
  * dma_addr_base Used to set the dma translation address to the PCIe control reg.
 */
-int cdma_init(int cdma_num, uint cdma_addr, u32 dma_addr_base)
+int cdma_init(int cdma_num, uint cdma_addr)
 {
 	u64 axi_dest;
 	u32 cdma_status;
-	u32 dma_addr_loc;
 	int ret;
 	u64 axi_cdma_loc;
 
@@ -766,7 +799,6 @@ int cdma_init(int cdma_num, uint cdma_addr, u32 dma_addr_base)
 	}
 
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: *******************Setting CDMA AXI Address:%llx ******************************************\n", cdma_num, axi_cdma_loc);
-	cdma_set[cdma_num] = 1;
 
 	/*Issue a Soft Reset*/
 	axi_dest = axi_cdma_loc + CDMA_CR;
@@ -780,7 +812,7 @@ int cdma_init(int cdma_num, uint cdma_addr, u32 dma_addr_base)
 	//			direct_read(axi_dest, (void*)&cdma_status, 4, NORMAL_READ);
 	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0);
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA status before configuring: ('0x%08x')\n", cdma_num, cdma_status);
-
+   
 	/*Check the current config*/
 	axi_dest = axi_cdma_loc + CDMA_CR;
 	//			direct_read(axi_dest, (void*)&cdma_status, 4, NORMAL_READ);
@@ -807,24 +839,9 @@ int cdma_init(int cdma_num, uint cdma_addr, u32 dma_addr_base)
 	axi_dest = axi_cdma_loc + CDMA_CR;
 	ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0);
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA config after configuring: ('0x%08x') pcie_ctl: ('0x%08x')\n", cdma_num, cdma_status, pcie_ctl_set);
+   verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: ****************Setting CDMA AXI Address:%llx Complete*************************************\n", cdma_num, axi_cdma_loc);
 
-	/*This checks to see if the user has set the pcie_ctl base address
-	 * if so, we can go ahead and write the dma_addr to the pcie translation
-	 * register.*/
-	if(pcie_ctl_set == 1) {
-		/*convert to u32 to send to CDMA*/
-		dma_addr_loc = (u32)dma_addr_base;
-		axi_dest = axi_pcie_ctl + AXIBAR2PCIEBAR_0L;
-
-		//write DMA addr to PCIe CTL for address translation
-		ret = data_transfer(axi_dest, (void *)(&dma_addr_loc), 4, NORMAL_WRITE, 0);
-		verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: writing dma address ('0x%08x') to pcie_ctl at AXI address:%llx\n", cdma_num, dma_addr_loc, axi_dest);
-		//check the pcie-ctl got the translation address
-		ret = data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0);
-		verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: PCIe CTL register: ('0x%08x')\n", cdma_num, cdma_status);
-		verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: ****************Setting CDMA AXI Address:%llx Complete*************************************\n", cdma_num, axi_cdma_loc);
-
-	}
+   cdma_set[cdma_num] = 1;
 
 	return 0;
 }
@@ -1293,6 +1310,7 @@ void cdma_idle_poll(int cdma_num)
 	ret = data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0);
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: CDMA status: ('0x%08x')\n",cdma_num, status);
 
+
 	while(((u32)status & 0x02) != 0x02) {  //this means while CDMA is NOT idle
 		schedule();
 		//Check the status of the CDMA to see if successful now
@@ -1531,8 +1549,6 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
 	int cdma_num = 0;
 	u64 axi_dest;
 	size_t zero = 0;
-	size_t read_header_size;
-
 
 	//clear values in mod_desc
 	mod_desc->axi_fifo_rlr = mod_desc->axi_fifo_rdfo = 0;
@@ -1551,7 +1567,7 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
       ring_pointer_offset = 0;
    }
 
-	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: header copy_from_user(0x%p + 0x%x, 0x%p, 0x%zx)\n", buf_base_addr, ring_pointer_offset, (void * )&count, sizeof(read_header_size));
+	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: header copy_from_user(0x%p + 0x%x, 0x%p, 0x%zx)\n", buf_base_addr, ring_pointer_offset, (void * )&count, sizeof(count));
 
 	memcpy(buf_base_addr+ring_pointer_offset, (void * )&count, sizeof(count));
 	ring_pointer_offset = get_new_ring_pointer(sizeof(count), ring_pointer_offset, (int)buf_size);

@@ -425,14 +425,13 @@ int cdma_query(void);
  * @param cdma_address the AXI address of the CDMA
  * @param dma_addr_base Used to set the dma translation address to the PCIe control reg.
 */
-int cdma_init(int cdma_num, uint cdma_address, u32 dma_addr_base);
+int cdma_init(int cdma_num, uint cdma_address);
 /**
  * @brief This function writes the translation address (The DMA Hardware base address) to the
  * PCIe control register.
  * @param axi_address The 64b AXI address of the PCIe Control interface (set through insmod).
- * @param dma_addr_base Used to set the dma translation address to the PCIe control reg.
 */
-int pcie_ctl_init(u64 axi_address, u32 dma_addr_base);
+int pcie_ctl_init(u64 axi_address, u64 dma_addr_base);
 /**
  * @brief This function initialized the interrupt controller in the FPGA.
  * @param axi_address The 64b AXI address of the Interrupt Controller (set through insmod).
