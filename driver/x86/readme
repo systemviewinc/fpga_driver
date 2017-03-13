@@ -1,0 +1,25 @@
+
+To create the boot loader for zynq: 
+
+ - Compile the FPGA .bit file
+ 
+ - in Vivado, File-> Export Hardware 
+
+ - in Vivado, File -> open SDK 
+
+ - Create an FSBL project
+
+ - 
+
+
+
+
+
+to compile the driver for zynq:
+
+ - run settings.sh  in /opt/xilinx/....
+
+ - git clone the xilinx-linux repo, I have it saved at ~/Desktop/repos/xilinx-linux 
+	- if you have it saved somewhere else, you need to update the Makefile in this directory
+
+ - compile using this command: make ARCH=arm CROSS_COMPILE=arm-xilinx-linux-gnueabi-

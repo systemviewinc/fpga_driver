@@ -1,0 +1,10 @@
+make -C ~/projects/petalinux/hdmi_vsi/build/linux/kernel/xlnx-4.4 M=/home/menezesm/projects/vsi/target/fpga_driver/driver/arm modules
+make[1]: Entering directory '/home/menezesm/projects/petalinux/hdmi_vsi/build/linux/kernel/xlnx-4.4'
+  CC [M]  /home/menezesm/projects/vsi/target/fpga_driver/driver/arm/sv_driver.o
+  CC [M]  /home/menezesm/projects/vsi/target/fpga_driver/driver/arm/support_funcs.o
+  LD [M]  /home/menezesm/projects/vsi/target/fpga_driver/driver/arm/vsi_driver.o
+  Building modules, stage 2.
+  MODPOST 1 modules
+  CC      /home/menezesm/projects/vsi/target/fpga_driver/driver/arm/vsi_driver.mod.o
+  LD [M]  /home/menezesm/projects/vsi/target/fpga_driver/driver/arm/vsi_driver.ko
+make[1]: Leaving directory '/home/menezesm/projects/petalinux/hdmi_vsi/build/linux/kernel/xlnx-4.4'
