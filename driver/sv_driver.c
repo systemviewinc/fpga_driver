@@ -293,6 +293,14 @@ static struct platform_driver sv_plat_driver = {
 	},
 };
 
+static struct pci_driver pci_driver = {
+	//.name = "vsi_driver",
+	.name = pci_devName,
+	.id_table = ids,
+	.probe = sv_pci_probe,
+	.remove = sv_pci_remove,
+};
+
 MODULE_DEVICE_TABLE(of, sv_driver_match);
 
 static unsigned char skel_get_revision(struct pci_dev *dev)
@@ -403,6 +411,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 	/*allocate the DMA buffer*/
 	dma_buffer_base = dma_alloc_coherent(dev_struct, (size_t)dma_buffer_size, &dma_addr_base, GFP_KERNEL);
+
 	if(NULL == dma_buffer_base)
 	{
 		printk(KERN_INFO"%s:[sv_driver_init]DMA buffer base allocation ERROR\n", pci_devName);
@@ -446,9 +455,15 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 			pcie_ctl_set = 1;
       }
 	}
+   else if (pcie_ctl_address != 0xFFFFFFFF) {
+      printk(KERN_INFO"[sv_driver_init] axi2pcie_bar0_size not set\n");
+      printk(KERN_INFO"[sv_driver_init] If this is a gen2 PCIE design address translation will fail\n");
+      axi_pcie_m = 0;
+      //return ERROR;
+   }
    else {
-      printk(KERN_INFO"[sv_driver_init] ERROR axi2pcie_bar0_size or pcie_ctl_address was not set\n");
-      return ERROR;
+      printk(KERN_INFO"[sv_driver_init] ERROR axi2pcie_bar0_size and pcie_ctl_address was not set\n");
+      axi_pcie_m = 0;
    }
 
 	if (int_ctlr_address != 0xFFFFFFFF) {
@@ -627,57 +642,54 @@ static void sv_pci_remove(struct pci_dev *dev)
 	 * 	 * like call release_region();
 	 * 	 	 */
 	//      release_mem_region(pci_bar_hw_addr, REG_SIZE);
+   printk(KERN_INFO"[sv_pci_remove]: PCIE remove\n");
 
-	iounmap(pci_bar_vir_addr);
-
-	free_irq(pci_dev_struct->irq, pci_dev_struct);
-
+   free_irq(pci_dev_struct->irq, pci_dev_struct);
 
 	/*Destroy the read thread*/
+   printk(KERN_INFO"[sv_pci_remove]: Stopping read thead\n");
 	atomic_set(&thread_q_read, 1);
 	wake_up_interruptible(&thread_q_head_read);
-	while(kthread_stop(thread_struct_read)<0)
-	{
-		atomic_set(&thread_q_read, 1);
-		wake_up_interruptible(&thread_q_head_read);
-	}
-	printk(KERN_INFO"Read Thread Destroyed\n");
+   if(thread_struct_read) {
+   	while(kthread_stop(thread_struct_read)<0)
+   	{
+         printk(KERN_INFO"[sv_pci_remove]: Read thread failed to stop, attemping again\n");
+   		atomic_set(&thread_q_read, 1);
+   		wake_up_interruptible(&thread_q_head_read);
+   	}
+   }
+	printk(KERN_INFO"[sv_pci_remove]: Read Thread Destroyed\n");
 
 	/*Destroy the write thread*/
+   printk(KERN_INFO"[sv_pci_remove]: Stopping read thead\n");
 	atomic_set(&thread_q_write, 1);
 	wake_up_interruptible(&thread_q_head_write);
-	while(kthread_stop(thread_struct_write)<0)
-	{
-		atomic_set(&thread_q_write, 1);
-		wake_up_interruptible(&thread_q_head_write);
-	}
-	printk(KERN_INFO"Write Thread Destroyed\n");
-
-
-
+   if(thread_struct_write) {
+   	while(kthread_stop(thread_struct_write)<0)
+   	{
+         printk(KERN_INFO"[sv_pci_remove]: Write thread failed to stop, attemping again\n");
+   		atomic_set(&thread_q_write, 1);
+   		wake_up_interruptible(&thread_q_head_write);
+   	}
+   }
+	printk(KERN_INFO"[sv_pci_remove]: Write Thread Destroyed\n");
 
 #if defined(CONFIG_PCI_MSI)
 	pci_disable_msi(pci_dev_struct);
 #endif
-	dma_free_coherent(dev_struct, (size_t)dma_buffer_size, dma_buffer_base, dma_addr_base);
-
-
 
 	unregister_chrdev(major, pci_devName);
+   iounmap(pci_bar_vir_addr);
+   dma_free_coherent(dev_struct, (size_t)dma_buffer_size, dma_buffer_base, dma_addr_base);
 
-	printk(KERN_INFO"[remove]***********************PCIe DEVICE REMOVED**************************************\n");
+	printk(KERN_INFO"[sv_pci_remove]: ***********************PCIE DEVICE REMOVED**************************************\n");
 
 }
 
 static int sv_plat_remove(struct platform_device *pdev)
 {
+   printk(KERN_INFO"[sv_plat_remove]: Platform remove\n");
 	free_irq(irq_num, platform_dev_struct);
-
-	/*Destroy the read thread*/
-
-	//atomic_set(&thread_q_read, 1);
-	//wake_up_interruptible(&thread_q_head_read);
-
 
 	/*Destroy the read thread*/
 	printk(KERN_INFO"[sv_plat_remove]: Stopping read thead\n");
@@ -692,7 +704,6 @@ static int sv_plat_remove(struct platform_device *pdev)
 		}
 	}
 	printk(KERN_INFO"[sv_plat_remove]: Read Thread Destroyed\n");
-
 
 	/*Destroy the write thread*/
 	printk(KERN_INFO"[sv_plat_remove]: Stopping write thead\n");
@@ -715,15 +726,6 @@ static int sv_plat_remove(struct platform_device *pdev)
 
 	return 0;
 }
-
-static struct pci_driver pci_driver = {
-	//.name = "vsi_driver",
-	.name = pci_devName,
-	.id_table = ids,
-	.probe = sv_pci_probe,
-	.remove = sv_pci_remove,
-};
-
 
 static int __init sv_driver_init(void)
 {
@@ -804,6 +806,8 @@ static void __exit sv_driver_exit(void)
 		case PCI:
 			printk(KERN_INFO"[sv_driver_exit]: pci_driver_unregister started \n");
 			pci_unregister_driver(&pci_driver);
+         printk(KERN_INFO"[sv_driver_exit]: pci_driver_unregister done \n");
+
 			break;
 
 		case PLATFORM:
