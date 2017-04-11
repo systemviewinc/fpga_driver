@@ -698,7 +698,7 @@ void int_ctlr_init(u64 axi_address)
  *
  *
  */
-int pcie_ctl_init(u64 axi_address, u64 dma_addr_base)
+int pcie_ctl_init(u64 axi_pcie_ctl, u64 dma_addr_base)
 {
 	u32 dma_addr_loc;
 	u64 axi_dest;
@@ -706,7 +706,6 @@ int pcie_ctl_init(u64 axi_address, u64 dma_addr_base)
 	int ret;
 	
 	verbose_printk(KERN_INFO"[pcie_ctl_init]: Setting PCIe Control Axi Address\n");
-	axi_pcie_ctl = axi_address;
 	
 	if(cdma_set[1] == 1) {
 		//update pcie_ctl_virt address with register offset
