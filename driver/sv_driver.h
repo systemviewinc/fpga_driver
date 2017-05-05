@@ -43,11 +43,12 @@
 #define verbose_printk printk
 //#define verbose_read_printk printk
 //#define verbose_write_printk printk
-//#define verbose_cdma_printk printk
-//#define verbose_axi_fifo_read_printk printk
-//#define verbose_axi_fifo_write_printk printk
-//#define verbose_isr_printk printk
-//#define verbose_poll_printk printk
+#define verbose_cdma_printk printk
+//#define verbose_cdmaq_printk printk
+#define verbose_axi_fifo_read_printk printk
+#define verbose_axi_fifo_write_printk printk
+#define verbose_isr_printk printk
+#define verbose_poll_printk printk
 //#define very_verbose_poll_printk printk
 //#define verbose_axi_fifo_d2r_printk printk
 //#define verbose_direct_write_printk printk
@@ -70,6 +71,9 @@
 #endif
 #ifndef verbose_cdma_printk
 #define verbose_cdma_printk(...)
+#endif
+#ifndef verbose_cdmaq_printk
+#define verbose_cdmaq_printk(...)
 #endif
 #ifndef verbose_write_printk
 #define verbose_write_printk(...)
@@ -155,7 +159,25 @@
 /*These are the Driver types that are matched through insmod parameter "driver_type" */
 #define PCI 1     /**< Driver Type */
 #define PLATFORM 2 /**< Driver Type */
+#define AWS 5      /**< Driver Type */
 
+enum xfer_type {
+	HOST_READ = 1,
+	HOST_WRITE= 2*HOST_READ,
+	INC_SA	  = 2*HOST_WRITE,
+	INC_DA	  = 2*INC_SA,
+	INC_BOTH  = INC_DA|INC_SA
+};
+
+/******************************** AWS XDMA related  **********************************/
+#include "libxdma.h"
+#include "libxdma_api.h"
+extern uint pcie_use_xdma;
+extern struct xdma_dev *xdma_dev_s;
+extern int xdma_num_channels;
+extern xdma_channel_tuple* xdma_channel_list;
+#define XDMA_TIMEOUT_IN_MSEC				(3 * 1000)
+extern dma_addr_t dma_addr_base;  /**< The hardware DMA Allocation Address */
 
 /******************************** Xilinx Register Offsets **********************************/
 
@@ -195,6 +217,8 @@ extern const u32 INT_CTRL_IAR;	 /**< Interrupt Controller Register Offset, see X
 /********************************************************************************************/
 
 
+extern int dma_max_write_size ;     /**< AWS PCI/e max write size   */
+extern int dma_max_read_size  ;     /**< AWS PCI/e max read  size   */
 
 
 /* Shared Global Variables */
@@ -232,7 +256,7 @@ extern void * pci_bar_2_vir_addr;        //hardware base virtual address
 /*this is the user peripheral address offset*/
 extern u64 bar_0_axi_offset;
 
-extern uint pcie_m_address;
+extern ulong pcie_m_address;
 
 /*These are the interrupt and mutex wait variables */
 extern wait_queue_head_t wq;
@@ -322,7 +346,7 @@ struct mod_desc
 	int has_interrupt_vec;	/**< This file has an interrupt associated with it */
 	int axi_fifo_rlr;	/**< Last read RLR  value if non-zero this has to be used */
 	int axi_fifo_rdfo;	/**< Last read RDFO value if non-zero this has to be used */
-   size_t read_header_size;  	/**< Last read_header_size  value if non-zero this has to be used */
+	size_t read_header_size;  	/**< Last read_header_size  value if non-zero this has to be used */
 	wait_queue_head_t poll_wq; /**< waitq for events */
 };
 
@@ -347,9 +371,19 @@ struct statistics
 	int cdma_usage_cnt;
 };
 
+/** Bar mapping structure
+ */
+struct bar_mapping {
+	resource_size_t bar_start;
+	resource_size_t bar_len;
+	resource_size_t map_len;
+	int is_config_bar;
+	void *__iomem   bar;
+};
 
 // ********************** support functions **************************
 
+int xdma_init_sv(int num_channels);
 /**
  * @brief This function is used to initiate a CDMA Transfer. It requires
  * a locked CDMA resource an AXI Start Address, AXI Destination Address,

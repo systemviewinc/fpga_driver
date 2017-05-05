@@ -36,7 +36,6 @@
 #include <linux/spinlock.h>
 //#include <stdint.h>
 #include "sv_driver.h"
-
 //debug
 #include <linux/time.h>
 
@@ -87,6 +86,13 @@ const u32 AXIBAR2PCIEBAR_1L = 0x214;    /**< AXI PCIe Subsystem Offset (See Xili
 u64 axi_cdma; /**< Holds AXI Base address of CDMA 1 */
 u64 axi_cdma_2; /**< Holds AXI Base address of CDMA 2 */
 
+static struct mutex xdma_h2c_sem[XDMA_CHANNEL_NUM_MAX];
+static struct mutex xdma_c2h_sem[XDMA_CHANNEL_NUM_MAX];
+static int xdma_query(int);
+static dma_addr_t xdma_h2c_buff;
+static dma_addr_t xdma_c2h_buff;
+static void * xdma_h2c_da;
+static void * xdma_c2h_da;
 /******************************** Support functions ***************************************/
 
 /**
@@ -421,6 +427,150 @@ int write_thread(void *in_param) {
 	verbose_printk(KERN_INFO"[write_thread]: Leaving write thread\n");
 	return 0;
 }
+
+/**
+ * @brief This function is used to initiate a CDMA Transfer. It requires
+ * a locked CDMA resource an AXI Start Address, AXI Destination Address,
+ * and a Keyhole setting. It breaks up the transfer into multiple transfers
+ * if the max_read / write sizes are non zero
+ * @param SA 64bit Starting Address of DMA transfer.
+ * @param DA 64bit Destination Address of DMA transfer.
+ * @param BTT Number of bytes to transfer.
+ * @param keyhole_en Instructs the CDMA to to a keyhole transaction or not
+*/
+static int dma_xfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, u32 xfer_type)
+{
+	u64 l_sa = SA;
+	u64 l_da = DA;
+	u32 l_btt = BTT;
+	u32 max_xfer_size ;
+	int ret, cdma_num = 0, xdma_channel = -1;
+
+	// if xdma to be used
+	if (pcie_use_xdma) {
+		struct sg_table sg_table;
+		struct scatterlist sg;
+		void  *xfer_mem;
+
+		if (xfer_type & HOST_READ) { // host to device
+			// get a free channel
+			while (xdma_channel == -1) {
+				xdma_channel = xdma_query(DMA_TO_DEVICE);
+				if (xdma_channel == -1) schedule();
+			}
+			
+			// break up transfers to size
+			do {
+				int xfer_size = l_btt > dma_max_read_size ? dma_max_read_size : l_btt;
+				// create the scatter gather list				
+				sg_init_table(&sg, 1);
+				sg_dma_len(&sg) = xfer_size;
+				sg_table.sgl = &sg;
+				sg_table.nents = 1;
+				xfer_mem = (char *)dma_buffer_base + ((char *)l_sa - (char *)dma_addr_base);
+				memcpy(xdma_h2c_da,xfer_mem,xfer_size);
+				sg_dma_address(&sg) = (dma_addr_t)xdma_h2c_buff;
+				
+				verbose_cdma_printk(KERN_INFO"vsi_driver:[%s] DMA_TO_DEVICE l_sa 0x%p l_da 0x%p xdma_b 0x%p xfer_size %d, BTT %d\n",
+						    __FUNCTION__ , (void*)l_sa, (void*)l_da, (void*)xdma_h2c_buff, xfer_size, l_btt);
+				
+				ret = xdma_xfer_submit(xdma_channel_list[xdma_channel].h2c,
+						       DMA_TO_DEVICE,
+						       l_da,
+						       &sg_table,
+						       true,
+						       XDMA_TIMEOUT_IN_MSEC);
+				if (ret < 0) {
+					mutex_unlock(&xdma_h2c_sem[xdma_channel]);
+					return ret;
+				}
+				if (xfer_type & INC_SA) l_sa += xfer_size;
+				if (xfer_type & INC_DA) l_da += xfer_size;
+				l_btt -= xfer_size;
+				verbose_cdma_printk(KERN_INFO"vsi_driver:[%s] tranfer complete DMA_TO_DEVICE remain %d\n",__FUNCTION__,l_btt);
+			} while (l_btt);
+			mutex_unlock(&xdma_h2c_sem[xdma_channel]);
+		} else if (xfer_type & HOST_WRITE) { // device to host
+			while (xdma_channel == -1) {
+				xdma_channel = xdma_query(DMA_FROM_DEVICE);
+				if (xdma_channel == -1) schedule();
+			}
+			// break up transfers to size
+			do {
+				int xfer_size = l_btt > dma_max_read_size ? dma_max_read_size : l_btt;
+				// create the scatter gather list
+				sg_init_table(&sg, 1);
+				sg_dma_len(&sg) = l_btt;
+				sg_table.sgl = &sg;
+				sg_table.nents = 1;
+				sg_dma_address(&sg) = (dma_addr_t)xdma_c2h_buff;
+				verbose_cdma_printk(KERN_INFO"vsi_driver:[%s] DMA_FROM_DEVICE l_sa 0x%p l_da 0x%p xfer_size %d\n",
+						    __FUNCTION__ , (void*)l_sa, (void*)l_da,xfer_size);
+				ret = xdma_xfer_submit(xdma_channel_list[xdma_channel].c2h,
+						       DMA_FROM_DEVICE,
+						       l_sa,
+						       &sg_table,
+						       true,
+						       XDMA_TIMEOUT_IN_MSEC);				
+				if (ret < 0) {
+					mutex_unlock(&xdma_c2h_sem[xdma_channel]);
+					return ret;
+				}
+				xfer_mem = (char *)dma_buffer_base + ((char *)l_da - (char *)dma_addr_base);
+				memcpy(xfer_mem, xdma_c2h_da,xfer_size); 
+				if (xfer_type & INC_SA) l_sa += xfer_size;
+				if (xfer_type & INC_DA) l_da += xfer_size;
+				l_btt -= xfer_size;
+				verbose_cdma_printk(KERN_INFO"vsi_driver:[%s] tranfer complete DMA_FROM_DEVICE\n",__FUNCTION__);
+			} while (l_btt);
+			mutex_unlock(&xdma_c2h_sem[xdma_channel]);
+		}
+		return (ret < 0 ? ret : 0);
+	}
+
+	/* Find an available CDMA to use and wait if both are in use */
+	while(cdma_num == 0) {
+		cdma_num = cdma_query();
+		if (cdma_num == 0  ) {
+			schedule();
+		}
+	}
+	// if write check required and dma max write is set 
+	if ((xfer_type & HOST_WRITE) && dma_max_write_size && BTT > dma_max_write_size) {
+		max_xfer_size = dma_max_write_size;
+	} else if ((xfer_type & HOST_READ) && dma_max_read_size && BTT > dma_max_read_size) {
+		max_xfer_size = dma_max_read_size;
+	} else {
+		max_xfer_size = BTT;
+	}
+	do {
+		int xfer_size = l_btt > max_xfer_size ? max_xfer_size : l_btt;
+		verbose_cdma_printk(KERN_INFO"vsi_driver:[%s] l_sa 0x%p l_da 0x%p xfer_size %d\n",
+				    __FUNCTION__ , (void*)l_sa, (void*)l_da,xfer_size);
+		ret = cdma_transfer(l_sa, l_da, xfer_size, keyhole_en, cdma_num);
+		if (ret != 0) return ret;
+		if (xfer_type & INC_SA) l_sa += xfer_size;
+		if (xfer_type & INC_DA) l_da += xfer_size;
+		l_btt -= xfer_size;
+	} while (l_btt);
+	/*Release Mutex on CDMA*/
+	switch(cdma_num) {
+	case 1:
+		verbose_cdma_printk(KERN_INFO"[data_transfer]: Releasing Mutex on CDMA 1\n");
+		mutex_unlock(&CDMA_sem);
+		break;
+		
+	case 2:
+		verbose_cdma_printk(KERN_INFO"[data_transfer]: Releasing Mutex on CDMA 2\n");
+		mutex_unlock(&CDMA_sem_2);
+		break;
+	default:
+		verbose_printk(KERN_INFO"[data_transfer]: ERROR: unknown cdma number detected.\n");
+		return(0);
+	}
+	return ret;
+}
+
 /**
  * @brief This function is called by the write thread to write data to the FPGA that is in the ring buffer.
  * @param mod_desc The struct containing all the file variables.
@@ -433,7 +583,6 @@ int write_data(struct mod_desc * mod_desc)
 	int minor;
 	size_t room_till_end;
 	size_t remaining;
-	int cdma_num = 0;
 	int ret;
 	size_t write_header_size;
 	u64 axi_dest;
@@ -472,12 +621,11 @@ int write_data(struct mod_desc * mod_desc)
 	buf = 0x0;
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, 0); //mod_desc->dma_read_offset);
 	if (ret > 0) {
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: ERROR reading from AXI Streaming FIFO control interface\n");
+		verbose_printk(KERN_INFO"[write_data]: ERROR reading from AXI Streaming FIFO control interface\n");
 		return ERROR;
 	}
 
 	read_reg = (buf+4)*dma_byte_width;
-
 
 	if(write_header_size > d2w) {
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data] header is bigger(%zd) than data to read(%d)! \n", write_header_size, d2w);
@@ -491,19 +639,6 @@ int write_data(struct mod_desc * mod_desc)
 	verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: vacancy: (0x%x)\n", (u32)read_reg);
 	verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: d2w: (0x%x)\n", (u32)d2w);
 
-
-
-
-	/* Find an available CDMA to use and wait if both are in use */
-
-	while(cdma_num == 0) {
-		cdma_num = cdma_query();
-		if (cdma_num == 0  ) {
-			schedule();
-		}
-	}
-
-
 	axi_dest = mod_desc->axi_addr + AXI_STREAM_TDFD;
 	//now we want to cdma write_header_size amount of data
 
@@ -511,28 +646,28 @@ int write_data(struct mod_desc * mod_desc)
 	if (write_header_size > room_till_end) {			//needs to be 2 copy
 		remaining = write_header_size-room_till_end;
 
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: cdma_transfer 1 ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
-					      axi_pcie_m+mod_desc->dma_offset_write, wth, axi_dest, room_till_end);
-		ret = cdma_transfer(axi_pcie_m+mod_desc->dma_offset_write+wth, axi_dest, room_till_end, KEYHOLE_WRITE, cdma_num);
+		verbose_axi_fifo_write_printk(KERN_INFO"[write_%d_data]: cdma_transfer 1 ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
+					      mod_desc->minor,axi_pcie_m+mod_desc->dma_offset_write, wth, axi_dest, room_till_end);
+		ret = dma_xfer(axi_pcie_m+mod_desc->dma_offset_write+wth, axi_dest, room_till_end, KEYHOLE_WRITE, (HOST_READ|INC_SA));
 
 		//extra verbose debug message
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: first 4 bytes 0x%x\n", *((u32*)(mod_desc->dma_write_addr+wth)));
 
 
 		if (ret != 0) {  //unsuccessful CDMA transmission
-			verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: ERROR on CDMA READ!!!.\n");
+			verbose_printk(KERN_INFO"[write_data]: ERROR on CDMA READ!!!.\n");
 		}
 		wth = 0;
 
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: cdma_transfer 2 ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
 					      axi_pcie_m+mod_desc->dma_offset_write, wth, axi_dest, remaining);
-		ret = cdma_transfer(axi_pcie_m+mod_desc->dma_offset_write+wth, axi_dest, remaining, KEYHOLE_WRITE, cdma_num);
+		ret = dma_xfer(axi_pcie_m+mod_desc->dma_offset_write+wth, axi_dest, remaining, KEYHOLE_WRITE, (HOST_READ|INC_SA));
 		wth = get_new_ring_pointer(remaining, wth, (int)(mod_desc->dma_size));
 
 	} else {														//only 1 copy
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: cdma_transfer ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
 					      axi_pcie_m+mod_desc->dma_offset_write, wth, axi_dest, write_header_size);
-		ret = cdma_transfer(axi_pcie_m+mod_desc->dma_offset_write+wth, axi_dest, write_header_size, KEYHOLE_WRITE, cdma_num);
+		ret = dma_xfer(axi_pcie_m+mod_desc->dma_offset_write+wth, axi_dest, write_header_size, KEYHOLE_WRITE,(HOST_READ|INC_SA));
 		//extra verbose debug message
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: first 4 bytes 0x%x\n", *((u32*)(mod_desc->dma_write_addr+wth)));
 		wth = get_new_ring_pointer(write_header_size, wth, (int)(mod_desc->dma_size));
@@ -551,22 +686,6 @@ int write_data(struct mod_desc * mod_desc)
 	if (ret > 0) {
 		printk(KERN_INFO"[write_data]: ERROR writing to AXI Streaming FIFO Control Interface\n");
 		return ERROR;
-	}
-
-
-	/*Release Mutex on CDMA*/
-	switch(cdma_num) {
-	case 1:
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: Releasing Mutex on CDMA 1\n");
-		mutex_unlock(&CDMA_sem);
-		break;
-	case 2:
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: Releasing Mutex on CDMA 2\n");
-		mutex_unlock(&CDMA_sem_2);
-		break;
-	default:
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: ERROR: unknown cdma number detected.\n");
-		return(0);
 	}
 
 	//update wth pointer
@@ -756,6 +875,29 @@ int pcie_ctl_init(u64 axi_pcie_ctl, u64 dma_addr_base)
 }
 
 /**
+ * This function will intiialize the XDMA channels
+ */
+int xdma_init_sv(int num_channels)
+{
+	int i;
+	for (i = 0 ; i < num_channels; i++) {
+		mutex_init(&xdma_h2c_sem[i]);
+		mutex_init(&xdma_c2h_sem[i]);
+	}
+	xdma_h2c_da = dma_alloc_coherent(NULL, (size_t)4096, &xdma_h2c_buff, GFP_KERNEL);
+	xdma_c2h_da = dma_alloc_coherent(NULL, (size_t)4096, &xdma_c2h_buff, GFP_KERNEL);
+	if (!xdma_c2h_da || !xdma_h2c_da) {
+		verbose_printk(KERN_INFO"vsi_driver:[xdma_init] cannot allocated xdma buffer 0x%p 0x%p\n",
+			       (void *)xdma_c2h_da, (void *)xdma_h2c_da);
+	} else {
+		verbose_printk(KERN_INFO"vsi_driver:[xdma_init] caallocated xdma buffer 0x%p 0x%p\n",
+			       (void *)xdma_c2h_da,(void *)xdma_h2c_da);
+	}
+	return 0;
+}
+
+
+/**
  * This function initializes the CDMA.
  * cdma_num Instructs which CDMA to use (Assumes it has been locked)
  * cdma_address the AXI address of the CDMA
@@ -881,7 +1023,6 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 	//	u32 test;
 	int in_range ;
 	int status = 0;
-	int cdma_num = 0;
 	u64 dma_axi_address = 0;
 	//	void * dma_p;
 	verbose_read_printk(KERN_INFO"[data_transfer]: reading to base address 0x%llx %zd 0x%llx 0x%llx 0x%lx\n", axi_address,count,dma_off,bar_0_axi_offset,pci_bar_size);
@@ -897,7 +1038,7 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 
 
 	//if  data is small or the cdma is not initialized and in range
-	if (in_range == 1) {// ((count < 16) | (cdma_capable == 0)) &
+	if (in_range == 1) {
 		if ((transfer_type == NORMAL_READ) | (transfer_type == KEYHOLE_READ)) {
 			status = direct_read(axi_address, buf, count, transfer_type);
 		} else if ((transfer_type == NORMAL_WRITE) | (transfer_type == KEYHOLE_WRITE)) {
@@ -907,28 +1048,19 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 		}
 
 
-	} else if (cdma_capable == 1) {
-		/* Find an available CDMA to use and wait if both are in use */
-		cdma_num = 0;
-		while (cdma_num == 0) {
-			cdma_num = cdma_query();
-			if (cdma_num == 0  ) {
-				//atomic_set(&cdma_q, 0);
-				//wait_event_interruptible(cdma_q_head, atomic_read(&cdma_q) == 1);
-				schedule();
-			}
-		}
-
+	} else if (cdma_capable == 1 || pcie_use_xdma) {
 		dma_axi_address = axi_pcie_m + dma_off;  //the AXI address written to the CDMA
 
 		if ((transfer_type == NORMAL_READ) || (transfer_type == KEYHOLE_READ)) {
-			status = cdma_transfer(axi_address, dma_axi_address, (u32)count, transfer_type, cdma_num);
+			u32 xfer_type = (HOST_WRITE|(transfer_type == KEYHOLE_READ ? INC_DA : INC_BOTH));
+			status = dma_xfer(axi_address, dma_axi_address, (u32)count, transfer_type, xfer_type);
 			if (status != 0) {  //unsuccessful CDMA transmission
 				printk(KERN_INFO"[data_transfer]: ERROR on CDMA READ!!!.\n");
 			}
 		} else if ((transfer_type == NORMAL_WRITE) || (transfer_type == KEYHOLE_WRITE)) {
+			u32 xfer_type = (HOST_READ|(transfer_type == KEYHOLE_WRITE ? INC_SA : INC_BOTH));
 			//Transfer data from user space to kernal space at the allocated DMA region
-			status = cdma_transfer(dma_axi_address, axi_address, (u32)count, transfer_type, cdma_num);
+			status = dma_xfer(dma_axi_address, axi_address, (u32)count, transfer_type, xfer_type);
 			if (status != 0) {  //unsuccessful CDMA transmission
 				printk(KERN_INFO"[data_transfer]: ERROR on CDMA WRITE!!!.\n");
 			}
@@ -937,28 +1069,14 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 			verbose_printk(KERN_INFO"[data_transfer]: error no transfer type specified\n");
 		}
 
-		/*Release Mutex on CDMA*/
-		switch(cdma_num) {
-		case 1:
-			verbose_cdma_printk(KERN_INFO"[data_transfer]: Releasing Mutex on CDMA 1\n");
-			mutex_unlock(&CDMA_sem);
-			break;
-
-		case 2:
-			verbose_cdma_printk(KERN_INFO"[data_transfer]: Releasing Mutex on CDMA 2\n");
-			mutex_unlock(&CDMA_sem_2);
-			break;
-		default:
-			verbose_printk(KERN_INFO"[data_transfer]: ERROR: unknown cdma number detected.\n");
-			return(0);
-		}
 
 		/*wake up any sleeping processes waiting on a CDMA */
 		//atomic_set(&cdma_q, 1);
 		//wake_up_interruptible(&cdma_q_head);
 
 	} else {
-		verbose_printk(KERN_INFO"[data_transfer]: ERROR: Address is out of range and CDMA is not initialized\n");
+		verbose_printk(KERN_INFO"[data_transfer]: ERROR: Address 0x%llx out of range and CDMA is not initialized\n",
+			       axi_address); 
 	}
 	return status;
 }
@@ -1055,6 +1173,27 @@ int direct_read(u64 axi_address, void *buf, size_t count, int transfer_type)
 	return 0;
 }
 
+/**
+ * This function will return the xdma channel that is available
+ */
+static int xdma_query(int direction)
+{
+	int i;
+	if (direction == DMA_TO_DEVICE) {
+		for (i = 0 ; i < xdma_num_channels; i++)
+			if (!mutex_is_locked(&xdma_h2c_sem[i])) {
+				mutex_lock_interruptible(&xdma_h2c_sem[i]);
+				return i;
+			}
+	} else if (direction == DMA_FROM_DEVICE) {
+		for (i = 0 ; i < xdma_num_channels; i++)
+			if (!mutex_is_locked(&xdma_c2h_sem[i])) {
+				mutex_lock_interruptible(&xdma_c2h_sem[i]);
+				return i;
+			}
+	}
+	return -1;
+}
 
 /**
  * This function determines if a CDMA is available. if it is, it locks the semaphore and returns
@@ -1066,23 +1205,23 @@ int cdma_query(void)
 
 	if (mutex_is_locked(&CDMA_sem)) {
 		if (mutex_is_locked(&CDMA_sem_2) | (cdma_set[2] == 0))
-			verbose_cdma_printk(KERN_INFO "\t\t\t[cdma_query]: !!!!!!!!! all CDMAs in use !!!!!!!!\n");
+			verbose_cdmaq_printk(KERN_INFO "\t\t\t[cdma_query]: !!!!!!!!! all CDMAs in use !!!!!!!!\n");
 		else {
 			if (mutex_lock_interruptible(&CDMA_sem_2)) {
-				verbose_cdma_printk(KERN_INFO"\t\t\t[cdma_query]: User interrupted while waiting for CDMA semaphore.\n");
+				verbose_cdmaq_printk(KERN_INFO"\t\t\t[cdma_query]: User interrupted while waiting for CDMA semaphore.\n");
 				return -ERESTARTSYS;
 			}
-			verbose_cdma_printk(KERN_INFO"\t\t\t[cdma_query]: CDMA Resource 2 is now locked!\n");
-			verbose_cdma_printk(KERN_INFO"\t\t\t[cdma_query]: cdma_set[2] = 0x%x\n", cdma_set[2]);
+			verbose_cdmaq_printk(KERN_INFO"\t\t\t[cdma_query]: CDMA Resource 2 is now locked!\n");
+			verbose_cdmaq_printk(KERN_INFO"\t\t\t[cdma_query]: cdma_set[2] = 0x%x\n", cdma_set[2]);
 			return 2;
 		}
 	} else {
 		if (mutex_lock_interruptible(&  /**< The atomic conditional variable for CDMA (if not polling) */CDMA_sem)) {
-			verbose_cdma_printk(KERN_INFO"\t\t\t[cdma_query]: User interrupted while waiting for CDMA semaphore.\n");
+			verbose_cdmaq_printk(KERN_INFO"\t\t\t[cdma_query]: User interrupted while waiting for CDMA semaphore.\n");
 			return -ERESTARTSYS;
 		}
 
-		verbose_cdma_printk(KERN_INFO"\t\t\t[cdma_query]: CDMA Resource 1 is now locked!\n");
+		verbose_cdmaq_printk(KERN_INFO"\t\t\t[cdma_query]: CDMA Resource 1 is now locked!\n");
 		return 1;
 	}
 
@@ -1523,7 +1662,6 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
 	int ret;
 	size_t room_till_end;
 	size_t remaining;
-	int cdma_num = 0;
 	u64 axi_dest;
 	size_t zero = 0;
 
@@ -1549,15 +1687,6 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
 	ring_pointer_offset = get_new_ring_pointer(sizeof(count), ring_pointer_offset, (int)buf_size);
 
 	//}
-
-	// Find an available CDMA to use and wait if both are in use
-	while (cdma_num == 0) {
-		cdma_num = cdma_query();
-		if (cdma_num == 0  ) {
-			schedule();
-		}
-	}
-
 	room_till_end = ( (buf_size - ring_pointer_offset) & ~(dma_byte_width-1));              //make it divisible by dma_byte_width
 	axi_dest = mod_desc->axi_addr + AXI_STREAM_RDFD;
 
@@ -1565,7 +1694,7 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
 		remaining = count-room_till_end;
 
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: cdma_transfer 1 AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset, room_till_end);
-		ret = cdma_transfer(axi_dest, hw_base_addr+(u64)ring_pointer_offset, room_till_end, KEYHOLE_READ, cdma_num);
+		ret = dma_xfer(axi_dest, hw_base_addr+(u64)ring_pointer_offset, room_till_end, KEYHOLE_READ, (HOST_WRITE|INC_DA));
 		if (ret != 0) {  //unsuccessful CDMA transmission
 			printk(KERN_INFO"[axi_stream_fifo_read]: ERROR on CDMA READ!!!.\n");
 		}
@@ -1577,12 +1706,12 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
 		ring_pointer_offset = 0;
 		//end of buffer reached
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: cdma_transfer 2 AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset, remaining);
-		ret = cdma_transfer(axi_dest, hw_base_addr+(u64)ring_pointer_offset, remaining, KEYHOLE_READ, cdma_num);
+		ret = dma_xfer(axi_dest, hw_base_addr+(u64)ring_pointer_offset, remaining, KEYHOLE_READ, (HOST_WRITE|INC_DA));
 		ring_pointer_offset = get_new_ring_pointer(remaining, ring_pointer_offset, (int)buf_size);
 
 	} else {														//only 1 cdma transfer
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: cdma_transfer AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset , count);
-		ret = cdma_transfer(axi_dest, ((u64)hw_base_addr+ring_pointer_offset), count, KEYHOLE_READ, cdma_num);
+		ret = dma_xfer(axi_dest, ((u64)hw_base_addr+ring_pointer_offset), count, KEYHOLE_READ, (HOST_WRITE|INC_DA));
 
 
 		//extra verbose debug message
@@ -1596,24 +1725,6 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
 	if (ret != 0) {  //unsuccessful CDMA transmission
 		printk(KERN_INFO"[axi_stream_fifo_read]: ERROR on CDMA READ!!!.\n");
 	}
-
-	/*Release Mutex on CDMA*/
-	switch(cdma_num) {
-	case 1:
-		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: Releasing Mutex on CDMA 1\n");
-		mutex_unlock(&CDMA_sem);
-		break;
-	case 2:
-		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: Releasing Mutex on CDMA 2\n");
-		mutex_unlock(&CDMA_sem_2);
-		break;
-	default:
-		verbose_printk(KERN_INFO"[axi_stream_fifo_read]: ERROR: unknown cdma number detected.\n");
-		return(0);
-	}
-
-
-
 
 	//copy the 0 to the ring buffer to act as a "0 header" to mark inbetween packets
 	room_till_end = buf_size - ring_pointer_offset;
@@ -1651,7 +1762,6 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
  */
 size_t axi_stream_fifo_read_direct(size_t count, void * buf_base_addr, u64 hw_base_addr, struct mod_desc * mod_desc, size_t buf_size) {
 	int ret;
-	int cdma_num = 0;
 	u64 axi_dest;
 
 	//clear values in mod_desc
@@ -1664,13 +1774,6 @@ size_t axi_stream_fifo_read_direct(size_t count, void * buf_base_addr, u64 hw_ba
 	 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: count = %zd.\n", count);
 	}
 
-	// Find an available CDMA to use and wait if both are in use
-	while (cdma_num == 0) {
-		cdma_num = cdma_query();
-		if (cdma_num == 0  ) {
-			schedule();
-		}
-	}
 	axi_dest = mod_desc->axi_addr + AXI_STREAM_RDFD;
 
 	if (count > buf_size) {			//needs to be 2 cdma transfers
@@ -1681,27 +1784,10 @@ size_t axi_stream_fifo_read_direct(size_t count, void * buf_base_addr, u64 hw_ba
 	}
 	//only 1 cdma transfer
 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: cdma_transfer AXI Address: 0x%llx, ring_buff address: 0x%llx, len: 0x%zx\n", axi_dest, hw_base_addr , count);
-	ret = cdma_transfer(axi_dest, ((u64)hw_base_addr), count, KEYHOLE_READ, cdma_num);
-
-
+	ret = dma_xfer(axi_dest, ((u64)hw_base_addr), count, KEYHOLE_READ, (HOST_WRITE|INC_DA));
 
 	if (ret != 0) {  //unsuccessful CDMA transmission
 		printk(KERN_INFO"[axi_stream_fifo_read_direct]: ERROR on CDMA READ!!!.\n");
-	}
-
-	/*Release Mutex on CDMA*/
-	switch(cdma_num) {
-	case 1:
-		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: Releasing Mutex on CDMA 1\n");
-		mutex_unlock(&CDMA_sem);
-		break;
-	case 2:
-		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: Releasing Mutex on CDMA 2\n");
-		mutex_unlock(&CDMA_sem_2);
-		break;
-	default:
-		verbose_printk(KERN_INFO"[axi_stream_fifo_read_direct]: ERROR: unknown cdma number detected.\n");
-		return(0);
 	}
 
 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: Leaving the READ AXI Stream FIFO routine %zd\n",count);
