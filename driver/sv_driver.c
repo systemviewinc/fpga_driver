@@ -128,7 +128,7 @@ void * pci_bar_1_vir_addr = NULL;        /**< hardware base virtual address for 
 void * pci_bar_2_vir_addr = NULL;        /**< hardware base virtual address for BAR 2 (not currently used) */
 
 /*this is the user peripheral address offset*/
-u64 bar_0_axi_offset = 0x0000000082000000ULL;         /**< The AXI  address of BAR 0 (ie common interface IP) */
+u64 bar_0_axi_offset = 0x0000000080000000ULL;         /**< The AXI  address of BAR 0 (ie common interface IP) */
 
 u64 axi_interr_ctrl = 0; /**< Global Variable that stores the Interrupt Controller AXI Address */
 u64 axi_pcie_m;  /**< Global Variable that stores the data transport IP Slave AXI Address as seen from the CDMA*/
