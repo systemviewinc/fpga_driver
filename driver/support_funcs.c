@@ -125,8 +125,7 @@ int room_in_buffer(int head, int tail, int full, size_t dma_size)
 		else
 			return dma_size;
 
-	}
-	else if(head > tail) {
+	} else if(head > tail) {
 		return dma_size-head+tail;
 	}
 	//else tail > head
@@ -150,11 +149,9 @@ int data_in_buffer(int head, int tail, int full, size_t dma_size)
 		else
 			return 0;
 
-	}
-	else if(head > tail) {
+	} else if(head > tail) {
 		return head-tail;
-	}
-	else if(head < tail)    //wrap around case, we will do another read call to come back and get wrap around data
+	} else if(head < tail)    //wrap around case, we will do another read call to come back and get wrap around data
 		return dma_size-tail+head;
 
 	return 0;
@@ -180,21 +177,45 @@ int read_data(struct mod_desc * mod_desc, int read_size)
 	max_can_read = room_in_buffer(rfh, rfu, full, mod_desc->dma_size);
 
    //make sure there is room in our buffer for the read
-	if (( read_size + dma_byte_width + 4*sizeof(size_t) ) > max_can_read) {																								//ring buffer is full, cannot fit in our read
+	if (( read_size + dma_byte_width + 4*sizeof(size_t) ) > max_can_read) {
+		//ring buffer is full, cannot fit in our read
 		if (back_pressure) {
-			verbose_printk(KERN_INFO"[read_data]: Needing to backpressure, max_can_read: %d < read_size: %d \n", max_can_read, read_size);
-			return 1;
-		}
-		else {
+         		//if this is a stream packet we cannot read out the whole packet return 1
+         		if(mod_desc->mode == AXI_STREAM_PACKET){
+            			verbose_printk(KERN_INFO"[read_data]: Packet size is larger than room in ring buffer, max_can_read: %d < read_size: %d \n", max_can_read, read_size);
+				return 1;
+			}
+         		//if this is not a stream packet read out what we can
+			else {
+            			verbose_read_thread_printk(KERN_INFO"[read_data]: maximum read amount: %d\n", max_can_read);
+            			read_size = max_can_read - 4*sizeof(size_t) - dma_byte_width;
+            			verbose_read_thread_printk(KERN_INFO"[read_data]: read size: %d\n", read_size);
+            			if(read_size > 0){
+               				read_count = axi_stream_fifo_read((size_t)read_size, mod_desc->dma_read_addr, axi_pcie_m + mod_desc->dma_offset_read, mod_desc, rfh, mod_desc->dma_size);
+               				if (read_count < 0) {
+         					printk(KERN_INFO"[read_data]: ERROR reading data from axi stream fifo\n");
+         					//break;
+         					return ERROR;
+         				}
+            			}
+            			else {
+               				printk(KERN_INFO"[read_data]: No room in ring buffer to read data.\n");
+               				//break;
+               				return ERROR;
+            			}
+         		}
+
+		} else {
 			//----------------------------------------------drop data----------------------------------------------
 			verbose_read_thread_printk(KERN_INFO"[read_data]: Needing to garbage data, max_can_read: %d < read_size: %d \n", max_can_read, read_size);
 
 			while (drop_count < read_size) { //also garbage the trailer
 				if (( read_size - drop_count + 2*sizeof(size_t) ) > dma_garbage_size){									//garbage buffer cannot fit in our read
-					drop_count_inc = axi_stream_fifo_read_direct((size_t)(dma_garbage_size - 2*sizeof(size_t)), dma_buffer_base+dma_garbage_offset, axi_pcie_m + dma_garbage_offset,  mod_desc, (size_t)dma_garbage_size);
-				}
-				else{																																		//read out the data
-					drop_count_inc = axi_stream_fifo_read_direct((size_t)(read_size-drop_count), dma_buffer_base + dma_garbage_offset, axi_pcie_m + dma_garbage_offset, mod_desc, (size_t)dma_garbage_size);
+					drop_count_inc = axi_stream_fifo_read_direct((size_t)(dma_garbage_size - 2*sizeof(size_t)),
+										     dma_buffer_base+dma_garbage_offset, axi_pcie_m + dma_garbage_offset,  mod_desc, (size_t)dma_garbage_size);
+				} else {	//read out the data
+					drop_count_inc = axi_stream_fifo_read_direct((size_t)(read_size-drop_count),
+										     dma_buffer_base + dma_garbage_offset, axi_pcie_m + dma_garbage_offset, mod_desc, (size_t)dma_garbage_size);
 				}
 				if(drop_count_inc == ERROR) {
 					//This seems to happen when removing the driver, return error so we don't get stuck in the loop
@@ -202,7 +223,8 @@ int read_data(struct mod_desc * mod_desc, int read_size)
 					printk(KERN_INFO"[read_data]: ERROR DROP_COUNT READ.....\n");
 					return ERROR;
 				}
-				verbose_read_thread_printk(KERN_INFO"[read_data]: drop loop DROP_COUNT_INC %d DROP COUNT: %d > READ_SIZE: %d.....\n",drop_count_inc, drop_count, read_size);					// extra debug message for drops
+				// extra debug message for drops
+				verbose_read_thread_printk(KERN_INFO"[read_data]: drop loop DROP_COUNT_INC %d DROP COUNT: %d > READ_SIZE: %d.....\n",drop_count_inc, drop_count, read_size);
 				drop_count += drop_count_inc;
 			}
 
@@ -214,17 +236,15 @@ int read_data(struct mod_desc * mod_desc, int read_size)
 
 			if (drop_count > 0) {
 				verbose_read_thread_printk(KERN_INFO"[read_data]: DROP_COUNT: Just dropped %d bytes from HW\n", drop_count);
-			}
-			else {
+			} else {
 				//this shouldn't happen
 				printk(KERN_INFO"[read_data]: ERROR DROP_COUNT: < 1.....\n");
 				//break;
 				return ERROR;
 			}
 		}
-	}
+	} else {
 	//the ring buffer has room!
-	else {
 		verbose_read_thread_printk(KERN_INFO"[read_data]: maximum read amount: %d\n", max_can_read);
 		verbose_read_thread_printk(KERN_INFO"[read_data]: read size: %d\n", read_size);
 
@@ -265,12 +285,14 @@ int read_thread(void *in_param) {
 	verbose_read_thread_printk(KERN_INFO"[read_thread]: started !!\n");
 	while(!kthread_should_stop()) {
 		verbose_read_thread_printk(KERN_INFO"[read_thread]: waiting in wait_event_interruptible for data!!\n");
-		ret = wait_event_interruptible(thread_q_head_read, ( atomic_read(&thread_q_read) == 1 || kthread_should_stop() ));														//waits until thread_q_read is true or we should stop the thread (previous methods of exitings weren't working -MM)
+		//waits until thread_q_read is true or we should stop the thread (previous methods of exitings weren't working -MM)
+		ret = wait_event_interruptible(thread_q_head_read, ( atomic_read(&thread_q_read) == 1 || kthread_should_stop() ));
 		atomic_set(&thread_q_read, 0); // the threaded way
 		verbose_read_thread_printk(KERN_INFO"[read_thread]: woke up the read thread have data!!\n");
 
 		// process reads as long as there is something in the read fifo
-		while (!kfifo_is_empty(read_fifo) && ! kthread_should_stop()) {																																																				//while the kfifo has data
+		while (!kfifo_is_empty(read_fifo) && ! kthread_should_stop()) {
+			//while the kfifo has data
 			verbose_read_thread_printk(KERN_INFO"[read_thread]: read_fifo size:%d\n", kfifo_size(read_fifo));
 			//read a mod_desc out of the fifo
 			ret=kfifo_out(read_fifo, &mod_desc, 1);
@@ -283,9 +305,8 @@ int read_thread(void *in_param) {
 				//Check if there is any data to be read
 				if(mod_desc->axi_fifo_rdfo > 0) {
 					d2r = mod_desc->axi_fifo_rlr;
-				}
+				} else {
 				//else read it from the register
-				else {
 					d2r = axi_stream_fifo_d2r(mod_desc);
 				}
 
@@ -298,37 +319,33 @@ int read_thread(void *in_param) {
 						if(!kfifo_is_full(read_fifo)) {
 							atomic_inc(mod_desc->in_read_fifo_count);
 							kfifo_in_spinlocked(read_fifo, &mod_desc, 1, &fifo_lock_read);
-						}
-						else {
+						} else {
 							printk(KERN_INFO"[read_thread]: kfifo is full, not writing mod desc\n");
 						}
 
 						//if we needed backpressure wait here for a read to take data out of the buffer so we have room -MM
 						verbose_read_thread_printk(KERN_INFO"[read_thread]: ring buffer is full waiting in wait_event_interruptible!!\n");
-						ret = wait_event_interruptible(thread_q_head_read, ( atomic_read(&thread_q_read) == 1 || kthread_should_stop() ));														//waits until thread_q_read is true or we should stop the thread (previous methods of exitings weren't working -MM)
+						ret = wait_event_interruptible(thread_q_head_read, ( atomic_read(&thread_q_read) == 1 || kthread_should_stop() ));
+						//waits until thread_q_read is true or we should stop the thread (previous methods of exitings weren't working -MM)
 						atomic_set(&thread_q_read, 0); 																																																								// the threaded way
 
 						schedule();
 						//set d2r to zero to get out of while loop
 						d2r = 0;
-					}
+					}  else if(mod_desc->file_open){
 					//read more data if the file is open
-					else if(mod_desc->file_open){
 						d2r = axi_stream_fifo_d2r(mod_desc);
 						verbose_read_thread_printk(KERN_INFO"[read_thread]: read more! mod_desc minor: %d d2r: %d\n",mod_desc->minor,d2r);
-					}
-					else {
+					} else {
 						d2r = 0;
 						verbose_read_thread_printk(KERN_INFO"[read_thread]: file is closed: %d d2r: %d\n",mod_desc->minor,d2r);
 					}
 				}
 				verbose_read_thread_printk(KERN_INFO"[read_thread]: No more data to read.....\n");
-			}
-			else if(ret == 1 && !mod_desc->file_open) {
+			} else if(ret == 1 && !mod_desc->file_open) {
 				verbose_read_thread_printk(KERN_INFO"[read_thread]: file is not open\n");
 				atomic_dec(mod_desc->in_read_fifo_count);
-			}
-			else {
+			} else {
 				printk(KERN_INFO"[read_thread]: ERROR kfifo_out returned zeron\n");
 			}
 		}
@@ -393,15 +410,15 @@ int write_thread(void *in_param) {
 
 						//if we needed backpressure wait here for a write to take data out of the buffer so we have room -MM
 						verbose_write_thread_printk(KERN_INFO"[write_thread]: waiting in wait_event_interruptible write buffer full!!\n");
-						ret = wait_event_interruptible(thread_q_head_write, ( atomic_read(&thread_q_write) == 1 || kthread_should_stop() ));														//waits until thread_q_write is true or we should stop the thread (previous methods of exitings weren't working -MM)
+						ret = wait_event_interruptible(thread_q_head_write, ( atomic_read(&thread_q_write) == 1 || kthread_should_stop() ));
+						//waits until thread_q_write is true or we should stop the thread (previous methods of exitings weren't working -MM)
 						atomic_set(&thread_q_write, 0); 																																																								// the threaded way
 
 						schedule();
 						//set d2w to zero to get out of while loop
 						d2w = 0;
-					}
+					} else if(mod_desc->file_open) {
 					//if write was complete and file is open write more data!
-					else if(mod_desc->file_open){
 						//Check if there is any data to be written
 						wth = atomic_read(mod_desc->wth);
 						wtk = atomic_read(mod_desc->wtk);
@@ -409,19 +426,16 @@ int write_thread(void *in_param) {
 
 						d2w = data_in_buffer(wtk, wth, full, mod_desc->dma_size);
 						verbose_write_thread_printk(KERN_INFO"[write_thread]: write more! mod_desc minor: %d d2w: %d\n",mod_desc->minor,d2w);
-					}
-					else{
+					} else {
 						d2w = 0;
 						verbose_write_thread_printk(KERN_INFO"[write_thread]: file is closed: %d d2w: %d\n",mod_desc->minor,d2w);
 					}
 				}
 				verbose_write_thread_printk(KERN_INFO"[write_thread]: No more data to write.....\n");
-			}
-			else if(ret == 1 && !mod_desc->file_open) {
+			} else if(ret == 1 && !mod_desc->file_open) {
 				verbose_write_thread_printk(KERN_INFO"[write_thread]: file is closed\n");
             atomic_dec(mod_desc->in_write_fifo_count);
-			}
-			else {
+			} else {
 				printk(KERN_INFO"[write_thread]: ERROR kfifo_out returned zero\n");
 			}
 		}
@@ -459,9 +473,10 @@ int write_data(struct mod_desc * mod_desc)
 	if( d2w > sizeof(write_header_size)) {
 
 		room_till_end = mod_desc->dma_size - wth;
-		if (sizeof(write_header_size) > room_till_end) {		//If the header will not fit in 1 chuck of the ring buffer (in the room till end) then just get it at the start
-         wth = 0;
-      }
+		//If the header will not fit in 1 chuck of the ring buffer (in the room till end) then just get it at the start
+		if (sizeof(write_header_size) > room_till_end) {
+         		wth = 0;
+      		}
 
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: header memcpy (0x%p, 0x%p, 0x%zx)\n", &write_header_size, mod_desc->dma_write_addr+wth, sizeof(write_header_size));
 		memcpy(&write_header_size, mod_desc->dma_write_addr+wth, sizeof(write_header_size));
@@ -470,8 +485,7 @@ int write_data(struct mod_desc * mod_desc)
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: header: (%zx)\n", write_header_size);
 		d2w -= sizeof(write_header_size);
 
-	}
-	else {
+	} else {
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data] no data to read\n");
 		return 1;
 	}
@@ -480,8 +494,7 @@ int write_data(struct mod_desc * mod_desc)
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFV;  // the transmit FIFO vacancy
 	buf = 0x0;
 	ret = data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, 0); //mod_desc->dma_read_offset);
-	if (ret > 0)
-	{
+	if (ret > 0) {
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: ERROR reading from AXI Streaming FIFO control interface\n");
 		return ERROR;
 	}
@@ -492,8 +505,7 @@ int write_data(struct mod_desc * mod_desc)
 	if(write_header_size > d2w) {
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data] header is bigger(%zd) than data to read(%d)! \n", write_header_size, d2w);
 		return 1;
-	}
-	else if(write_header_size > read_reg) {
+	} else if(write_header_size > read_reg) {
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data] header is bigger(%zd) than vacancy(%u)! \n", write_header_size, (u32)read_reg);
 		return 1;
 	}
@@ -522,7 +534,8 @@ int write_data(struct mod_desc * mod_desc)
 	if (write_header_size > room_till_end) {			//needs to be 2 copy
 		remaining = write_header_size-room_till_end;
 
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: cdma_transfer 1 ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n", axi_pcie_m+mod_desc->dma_offset_write, wth, axi_dest, room_till_end);
+		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: cdma_transfer 1 ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
+					      axi_pcie_m+mod_desc->dma_offset_write, wth, axi_dest, room_till_end);
 		ret = cdma_transfer(axi_pcie_m+mod_desc->dma_offset_write+wth, axi_dest, room_till_end, KEYHOLE_WRITE, cdma_num);
 
       //extra verbose debug message
@@ -534,13 +547,14 @@ int write_data(struct mod_desc * mod_desc)
 		}
 		wth = 0;
 
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: cdma_transfer 2 ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n", axi_pcie_m+mod_desc->dma_offset_write, wth, axi_dest, remaining);
+		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: cdma_transfer 2 ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
+					      axi_pcie_m+mod_desc->dma_offset_write, wth, axi_dest, remaining);
 		ret = cdma_transfer(axi_pcie_m+mod_desc->dma_offset_write+wth, axi_dest, remaining, KEYHOLE_WRITE, cdma_num);
 		wth = get_new_ring_pointer(remaining, wth, (int)(mod_desc->dma_size));
 
-	}
-	else {														//only 1 copy
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: cdma_transfer ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n", axi_pcie_m+mod_desc->dma_offset_write, wth, axi_dest, write_header_size);
+	} else {														//only 1 copy
+		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: cdma_transfer ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
+					      axi_pcie_m+mod_desc->dma_offset_write, wth, axi_dest, write_header_size);
 		ret = cdma_transfer(axi_pcie_m+mod_desc->dma_offset_write+wth, axi_dest, write_header_size, KEYHOLE_WRITE, cdma_num);
 
       //extra verbose debug message
@@ -582,8 +596,7 @@ int write_data(struct mod_desc * mod_desc)
 	//update wth pointer
 	atomic_set(mod_desc->wth, wth);
    //if the ring buffer was full it is no longer
-	if(full)
-	{
+	if(full) {
 		atomic_set(mod_desc->write_ring_buf_full, 0);
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: ring_point_%d : write full: %d\n", minor, 0);
 	}
@@ -709,7 +722,7 @@ void int_ctlr_init(u64 axi_address)
 *
 *
 */
-int pcie_ctl_init(u64 axi_address, u64 dma_addr_base)
+int pcie_ctl_init(u64 axi_pcie_ctl, u64 dma_addr_base)
 {
 	u32 dma_addr_loc;
 	u64 axi_dest;
@@ -717,11 +730,8 @@ int pcie_ctl_init(u64 axi_address, u64 dma_addr_base)
 	int ret;
 
 	verbose_printk(KERN_INFO"[pcie_ctl_init]: Setting PCIe Control Axi Address\n");
-	axi_pcie_ctl = axi_address;
 
 	if(cdma_set[1] == 1) {
-
-
       //update pcie_ctl_virt address with register offset
 		axi_dest = axi_pcie_ctl + AXIBAR2PCIEBAR_0U;
 
@@ -914,17 +924,14 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 	if (in_range == 1) {// ((count < 16) | (cdma_capable == 0)) &
 		if ((transfer_type == NORMAL_READ) | (transfer_type == KEYHOLE_READ)) {
 			status = direct_read(axi_address, buf, count, transfer_type);
-		}
-		else if ((transfer_type == NORMAL_WRITE) | (transfer_type == KEYHOLE_WRITE)) {
+		} else if ((transfer_type == NORMAL_WRITE) | (transfer_type == KEYHOLE_WRITE)) {
 			status = direct_write(axi_address, buf, count, transfer_type);
-		}
-		else {
+		} else {
 			verbose_printk(KERN_INFO"[data_transfer]: error no transfer type specified\n");
 		}
 
 
-	}
-	else if (cdma_capable == 1) {
+	} else if (cdma_capable == 1) {
 		/* Find an available CDMA to use and wait if both are in use */
 		cdma_num = 0;
 		while (cdma_num == 0) {
@@ -943,8 +950,7 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 			if (status != 0) {  //unsuccessful CDMA transmission
 				printk(KERN_INFO"[data_transfer]: ERROR on CDMA READ!!!.\n");
 			}
-		}
-		else if ((transfer_type == NORMAL_WRITE) || (transfer_type == KEYHOLE_WRITE)) {
+		} else if ((transfer_type == NORMAL_WRITE) || (transfer_type == KEYHOLE_WRITE)) {
 			//Transfer data from user space to kernal space at the allocated DMA region
 			status = cdma_transfer(dma_axi_address, axi_address, (u32)count, transfer_type, cdma_num);
 			if (status != 0) {  //unsuccessful CDMA transmission
@@ -975,8 +981,7 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 		//atomic_set(&cdma_q, 1);
 		//wake_up_interruptible(&cdma_q_head);
 
-	}
-	else {
+	} else {
 		verbose_printk(KERN_INFO"[data_transfer]: ERROR: Address is out of range and CDMA is not initialized\n");
 	}
 	return status;
@@ -1339,8 +1344,7 @@ int cdma_config_set(u32 bit_vec, int set_unset, int cdma_num)
 	int status;
 	u64 axi_cdma_loc;
 
-	switch(cdma_num)
-	{
+	switch(cdma_num) {
 		case 1:
 			axi_cdma_loc = axi_cdma;
 			break;
@@ -1355,14 +1359,11 @@ int cdma_config_set(u32 bit_vec, int set_unset, int cdma_num)
 	axi_dest = axi_cdma_loc + CDMA_CR;
 	status = data_transfer(axi_dest, (void *)&current_CR, 4, NORMAL_READ, 0);
 
-	if (set_unset == 1)   //we are setting the CR
-	{
+	if (set_unset == 1) {  //we are setting the CR
 		verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_config_set]: setting the keyhole config on CDMA.\n", cdma_num);
 		set_vec = (current_CR | bit_vec);
 		status = data_transfer(axi_dest, (void *)&set_vec, 4, NORMAL_WRITE, 0);
-	}
-	else    //We are unsetting bits in the CR
-	{
+	} else {    //We are unsetting bits in the CR
 		set_vec = (current_CR & (~bit_vec));
 		verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_config_set]: UNsetting the keyhole config on CDMA.\n", cdma_num);
 		status = data_transfer(axi_dest, (void *)&set_vec, 4, NORMAL_WRITE, 0);
@@ -1553,11 +1554,10 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
 	//clear values in mod_desc
 	mod_desc->axi_fifo_rlr = mod_desc->axi_fifo_rdfo = 0;
 
-	if (count == 0) {
+	if (count <= 0) {
 	 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: There is either no data to read, or less than 8 bytes.\n");
 		return 0; // nothing to read
-	}
-	else{
+	} else {
 	 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: count = %zd.\n", count);
 	}
 
@@ -1604,8 +1604,7 @@ size_t axi_stream_fifo_read(size_t count, void * buf_base_addr, u64 hw_base_addr
 		ret = cdma_transfer(axi_dest, hw_base_addr+(u64)ring_pointer_offset, remaining, KEYHOLE_READ, cdma_num);
 		ring_pointer_offset = get_new_ring_pointer(remaining, ring_pointer_offset, (int)buf_size);
 
-	}
-	else {														//only 1 cdma transfer
+	} else {														//only 1 cdma transfer
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: cdma_transfer AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset , count);
 		ret = cdma_transfer(axi_dest, ((u64)hw_base_addr+ring_pointer_offset), count, KEYHOLE_READ, cdma_num);
 
@@ -1685,8 +1684,7 @@ size_t axi_stream_fifo_read_direct(size_t count, void * buf_base_addr, u64 hw_ba
 	if (count == 0) {
 	 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: There is either no data to read, or less than 8 bytes.\n");
 		return 0; // nothing to read
-	}
-	else{
+	} else {
 	 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: count = %zd.\n", count);
 	}
 
