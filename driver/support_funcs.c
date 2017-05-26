@@ -195,7 +195,7 @@ int read_data(struct mod_desc * mod_desc, int read_size)
 				if(read_size > 0){
 					read_count = axi_stream_fifo_read((size_t)read_size, mod_desc->dma_read_addr, axi_pcie_m + mod_desc->dma_offset_read, mod_desc, rfh, mod_desc->dma_size);
 					if(read_count < 0) {
-						printk(KERN_INFO"[read_data]: ERROR reading data from axi stream fifo\n");
+						printk(KERN_INFO"[read_data]: !!!!!!!!ERROR reading data from axi stream fifo\n");
 						//break;
 						return ERROR;
 					}
@@ -222,7 +222,7 @@ int read_data(struct mod_desc * mod_desc, int read_size)
 				if(drop_count_inc == ERROR) {
 					//This seems to happen when removing the driver, return error so we don't get stuck in the loop
 					//look into the release code to fix
-					printk(KERN_INFO"[read_data]: ERROR DROP_COUNT READ.....\n");
+					printk(KERN_INFO"[read_data]: !!!!!!!!ERROR DROP_COUNT READ.....\n");
 					return ERROR;
 				}
 				// extra debug message for drops
@@ -231,7 +231,7 @@ int read_data(struct mod_desc * mod_desc, int read_size)
 			}
 
 			if(drop_count > read_size) {
-				printk(KERN_INFO"[read_data]: ERROR DROP COUNT: %d > READ_SIZE: %d.....\n", drop_count, read_size);
+				printk(KERN_INFO"[read_data]: !!!!!!!!ERROR DROP COUNT: %d > READ_SIZE: %d.....\n", drop_count, read_size);
 			}
 
 			mod_desc->axi_fifo_rlr = mod_desc->axi_fifo_rdfo = 0;
@@ -240,7 +240,7 @@ int read_data(struct mod_desc * mod_desc, int read_size)
 				verbose_read_thread_printk(KERN_INFO"[read_data]: DROP_COUNT: Just dropped %d bytes from HW\n", drop_count);
 			} else {
 				//this shouldn't happen
-				printk(KERN_INFO"[read_data]: ERROR DROP_COUNT: < 1.....\n");
+				printk(KERN_INFO"[read_data]: !!!!!!!!ERROR DROP_COUNT: < 1.....\n");
 				//break;
 				return ERROR;
 			}
@@ -253,7 +253,7 @@ int read_data(struct mod_desc * mod_desc, int read_size)
 		read_count = axi_stream_fifo_read((size_t)read_size, mod_desc->dma_read_addr, axi_pcie_m + mod_desc->dma_offset_read, mod_desc, rfh, mod_desc->dma_size);
 
 		if(read_count < 0) {
-			printk(KERN_INFO"[read_data]: ERROR reading data from axi stream fifo\n");
+			printk(KERN_INFO"[read_data]: !!!!!!!!ERROR reading data from axi stream fifo\n");
 			//break;
 			return ERROR;
 		}
@@ -354,7 +354,7 @@ int read_thread(void *in_param) {
 				verbose_read_thread_printk(KERN_INFO"[read_thread]: file is not open\n");
 				atomic_dec(mod_desc->in_read_fifo_count);
 			} else {
-				printk(KERN_INFO"[read_thread]: ERROR kfifo_out returned zeron\n");
+				printk(KERN_INFO"[read_thread]: !!!!!!!!ERROR kfifo_out returned zeron\n");
 			}
 		}
 		verbose_read_thread_printk(KERN_INFO"[read_thread]: read_fifo is empty!\n");
@@ -394,7 +394,7 @@ int write_thread(void *in_param) {
 
 			if(sz == 1 && mod_desc->file_open) {
 				atomic_dec(mod_desc->in_write_fifo_count);
-				verbose_write_thread_printk(KERN_INFO"[write_thread] kfifo_out returned non-zero\n");
+				verbose_write_thread_printk(KERN_INFO"[write_thread]: kfifo_out returned non-zero\n");
 
 				//Check if there is any data to be written
 				wth = atomic_read(mod_desc->wth);
@@ -448,7 +448,7 @@ int write_thread(void *in_param) {
 				verbose_write_thread_printk(KERN_INFO"[write_thread]: file is closed\n");
 				atomic_dec(mod_desc->in_write_fifo_count);
 			} else {
-				printk(KERN_INFO"[write_thread]: ERROR kfifo_out returned zero\n");
+				printk(KERN_INFO"[write_thread]: !!!!!!!!ERROR kfifo_out returned zero\n");
 			}
 		}
 		verbose_write_thread_printk(KERN_INFO"[write_thread]: write_fifo is empty!\n");
@@ -504,7 +504,7 @@ static int dma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, u32 xfer_type)
 				sg_dma_address(&sg) = (dma_addr_t)xdma_h2c_buff;
 
 				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: DMA_TO_DEVICE l_sa 0x%p l_da 0x%p xdma_b 0x%p xfer_size %d, BTT %d\n",
-							 __FUNCTION__ , (void*)l_sa, (void*)l_da, (void*)xdma_h2c_buff, xfer_size, l_btt);
+						(void*)l_sa, (void*)l_da, (void*)xdma_h2c_buff, xfer_size, l_btt);
 
 				ret = xdma_xfer_submit(xdma_channel_list[xdma_channel].h2c, DMA_TO_DEVICE, l_da, &sg_table, true, XDMA_TIMEOUT_IN_MSEC);
 				if(ret < 0) {
@@ -514,7 +514,7 @@ static int dma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, u32 xfer_type)
 				if(xfer_type & INC_SA) l_sa += xfer_size;
 				if(xfer_type & INC_DA) l_da += xfer_size;
 				l_btt -= xfer_size;
-				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: tranfer complete DMA_TO_DEVICE remain %d\n", __FUNCTION__, l_btt);
+				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: tranfer complete DMA_TO_DEVICE remain %d\n", l_btt);
 			} while (l_btt);
 			mutex_unlock(&xdma_h2c_sem[xdma_channel]);
 			verbose_dmaq_printk(KERN_INFO"\t\t\t[dma_queue]: unlock xdma_channel = %d \n", xdma_channel);
@@ -532,8 +532,7 @@ static int dma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, u32 xfer_type)
 				sg_table.sgl = &sg;
 				sg_table.nents = 1;
 				sg_dma_address(&sg) = (dma_addr_t)xdma_c2h_buff;
-				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: DMA_FROM_DEVICE l_sa 0x%p l_da 0x%p xfer_size %d\n",
-							 __FUNCTION__ , (void*)l_sa, (void*)l_da, xfer_size);
+				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: DMA_FROM_DEVICE l_sa 0x%p l_da 0x%p xfer_size %d\n", (void*)l_sa, (void*)l_da, xfer_size);
 				ret = xdma_xfer_submit(xdma_channel_list[xdma_channel].c2h, DMA_FROM_DEVICE, l_sa, &sg_table, true, XDMA_TIMEOUT_IN_MSEC);
 				if(ret < 0) {
 					mutex_unlock(&xdma_c2h_sem[xdma_channel]);
@@ -544,7 +543,7 @@ static int dma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, u32 xfer_type)
 				if(xfer_type & INC_SA) l_sa += xfer_size;
 				if(xfer_type & INC_DA) l_da += xfer_size;
 				l_btt -= xfer_size;
-				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: tranfer complete DMA_FROM_DEVICE\n", __FUNCTION__);
+				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: tranfer complete DMA_FROM_DEVICE\n");
 			} while (l_btt);
 			mutex_unlock(&xdma_c2h_sem[xdma_channel]);
 			verbose_dma_printk(KERN_INFO"\t\t\t[dma_transfer]: unlock xdma_channel = %d \n", xdma_channel);
@@ -570,8 +569,7 @@ static int dma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, u32 xfer_type)
 		}
 		do {
 			int xfer_size = l_btt > max_xfer_size ? max_xfer_size : l_btt;
-			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: l_sa 0x%p l_da 0x%p xfer_size %d\n",
-						 __FUNCTION__ , (void*)l_sa, (void*)l_da, xfer_size);
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: l_sa 0x%p l_da 0x%p xfer_size %d\n", (void*)l_sa, (void*)l_da, xfer_size);
 			ret = cdma_transfer(l_sa, l_da, xfer_size, keyhole_en, cdma_num);
 			if(ret != 0) return ret;
 			if(xfer_type & INC_SA) l_sa += xfer_size;
@@ -586,7 +584,7 @@ static int dma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, u32 xfer_type)
 		return ret;
 	}
 	else{
-		verbose_printk(KERN_INFO"\t\t[dma_transfer]: ERROR: unknown transfer type.\n");
+		verbose_printk(KERN_INFO"\t\t[dma_transfer]: !!!!!!!!ERROR: unknown transfer type.\n");
 		return ERROR;
 	}
 }
@@ -628,7 +626,7 @@ int write_data(struct mod_desc * mod_desc)
 		d2w -= sizeof(write_header_size);
 
 	} else {
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_data] no data to read\n");
+		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: no data to read\n");
 		return 1;
 	}
 
@@ -636,17 +634,17 @@ int write_data(struct mod_desc * mod_desc)
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFV; // the transmit FIFO vacancy
 	buf = 0x0;
 	if( data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, 0) ) {
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: ERROR reading from AXI Streaming FIFO control interface\n");
+		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: !!!!!!!!ERROR reading from AXI Streaming FIFO control interface\n");
 		return ERROR;
 	}
 
 	read_reg = (buf+4)*dma_byte_width;
 
 	if(write_header_size > d2w) {
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_data] header is bigger(%zd) than data to read(%d)! \n", write_header_size, d2w);
+		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: header is bigger(%zd) than data to read(%d)! \n", write_header_size, d2w);
 		return 1;
 	} else if(write_header_size > read_reg) {
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_data] header is bigger(%zd) than vacancy(%u)! \n", write_header_size, (u32)read_reg);
+		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: header is bigger(%zd) than vacancy(%u)! \n", write_header_size, (u32)read_reg);
 		return 1;
 	}
 
@@ -677,7 +675,7 @@ int write_data(struct mod_desc * mod_desc)
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_%d_data]: dma_transfer 1 ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
 							mod_desc->minor, axi_pcie_m+mod_desc->dma_offset_write, wth, axi_dest, room_till_end);
 		if(dma_transfer(axi_pcie_m+mod_desc->dma_offset_write+wth, axi_dest, room_till_end, KEYHOLE_WRITE, (HOST_READ|INC_SA))) { //unsuccessful CDMA transmission
-			verbose_printk(KERN_INFO"[write_data]: ERROR on CDMA READ!!!.\n");
+			verbose_printk(KERN_INFO"[write_data]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 		}
 		//extra verbose debug message
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: first 4 bytes 0x%x\n", *((u32*)(mod_desc->dma_write_addr+wth)));
@@ -691,7 +689,7 @@ int write_data(struct mod_desc * mod_desc)
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: dma_transfer 2 ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
 							axi_pcie_m+mod_desc->dma_offset_write, wth, axi_dest, remaining);
 		if(dma_transfer(axi_pcie_m+mod_desc->dma_offset_write+wth, axi_dest, remaining, KEYHOLE_WRITE, (HOST_READ|INC_SA))) { //unsuccessful CDMA transmission
-			verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: ERROR on CDMA READ!!!.\n");
+			verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 		}
 		wth = get_new_ring_pointer(remaining, wth, (int)(mod_desc->dma_size));
 
@@ -699,7 +697,7 @@ int write_data(struct mod_desc * mod_desc)
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: dma_transfer ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
 							axi_pcie_m+mod_desc->dma_offset_write, wth, axi_dest, write_header_size);
 		if(dma_transfer(axi_pcie_m+mod_desc->dma_offset_write+wth, axi_dest, write_header_size, KEYHOLE_WRITE, (HOST_READ|INC_SA))) { //unsuccessful CDMA transmission
-			verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: ERROR on CDMA READ!!!.\n");
+			verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 		}
 
 		//extra verbose debug message
@@ -713,7 +711,7 @@ int write_data(struct mod_desc * mod_desc)
 	buf = (u32)write_header_size;
 	verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: Wrote 0x%x to TLR!!.\n", (u32)write_header_size);
 	if( data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, 0) ) {
-		printk(KERN_INFO"[write_data]: ERROR writing to AXI Streaming FIFO Control Interface\n");
+		printk(KERN_INFO"[write_data]: !!!!!!!!ERROR writing to AXI Streaming FIFO Control Interface\n");
 		return ERROR;
 	}
 
@@ -748,7 +746,7 @@ struct task_struct* create_thread_write(struct kfifo * write_fifo) {
 	kthread_heap = kthread_create(write_thread, write_fifo, "vsi_write_thread");
 
 	if((kthread_heap)) {
-		printk(KERN_INFO"Write Thread Created\n");
+		printk(KERN_INFO"[vsi_init]: Write Thread Created\n");
 		wake_up_process(kthread_heap);
 	}
 	return kthread_heap;
@@ -760,7 +758,7 @@ struct task_struct* create_thread_read(struct kfifo * read_fifo) {
 	kthread_heap = kthread_create(read_thread, read_fifo, "vsi_read_thread");
 
 	if((kthread_heap)) {
-		printk(KERN_INFO"Read Thread Created\n");
+		printk(KERN_INFO"[vsi_init]: Read Thread Created\n");
 		wake_up_process(kthread_heap);
 	}
 	return kthread_heap;
@@ -783,7 +781,7 @@ int dma_file_init(struct mod_desc *mod_desc, char *dma_buffer_base, u64 dma_buff
 
 	//if(((u64)dma_current_offset + dma_file_size) > (u64)((char*)dma_buffer_base + dma_buffer_size))
 	if(((u64)dma_current_offset + (2*dma_file_size)) > (u64)dma_buffer_size) {
-		printk(KERN_INFO"[dma_file_init]: ERROR! DMA Buffer out of memory!\n");
+		printk(KERN_INFO"[dma_file_init]: !!!!!!!!ERROR! DMA Buffer out of memory!\n");
 		printk(KERN_INFO"[dma_file_init]: Decrease file sizes or increase dma size insmod parameter\n");
 		return ERROR;
 	} else {
@@ -823,7 +821,7 @@ void int_ctlr_init(u64 axi_address)
 	status = 0xFFFFFFFF;
 	axi_dest = axi_interr_ctrl + INT_CTRL_IER;
 	if( data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE, 0) ) {
-				printk(KERN_INFO"[int_ctlr_init]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n");
+				printk(KERN_INFO"[int_ctlr_init]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n");
 				return;
 		}
 
@@ -832,12 +830,12 @@ void int_ctlr_init(u64 axi_address)
 	status = 0x3;
 	axi_dest = axi_interr_ctrl + INT_CTRL_MER;
 	if( data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE, 0) ) {
-				printk(KERN_INFO"[int_ctlr_init]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n");
+				printk(KERN_INFO"[int_ctlr_init]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n");
 				return;
 		}
 
 	if( data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0) ) {
-				printk(KERN_INFO"[int_ctlr_init]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n");
+				printk(KERN_INFO"[int_ctlr_init]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n");
 				return;
 		}
 	printk(KERN_INFO"[int_ctlr_init]: read: ('0x%08x') from MER register\n", status);
@@ -846,7 +844,7 @@ void int_ctlr_init(u64 axi_address)
 	status = 0xFFFFFFFF;
 	axi_dest = axi_interr_ctrl + INT_CTRL_IAR;
 	if( data_transfer(axi_dest, (void *)&status, 4, NORMAL_WRITE, 0) ) {
-				printk(KERN_INFO"[int_ctlr_init]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n");
+				printk(KERN_INFO"[int_ctlr_init]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n");
 				return;
 		}
 }
@@ -873,7 +871,7 @@ int pcie_ctl_init(u64 axi_pcie_ctl, u64 dma_addr_base)
 
 		//write DMA addr to PCIe CTL upper for address translation
 		if( data_transfer(axi_dest, (void *)(&dma_addr_loc), 4, NORMAL_WRITE, 0) ) {
-					printk(KERN_INFO"[pcie_ctl_init]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n");
+					printk(KERN_INFO"[pcie_ctl_init]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n");
 					return ERROR;
 				}
 		printk(KERN_INFO"[pcie_ctl_init]: writing dma address ('0x%08x') to pcie_ctl upper at AXI address:%llx\n", dma_addr_loc, axi_dest);
@@ -881,13 +879,13 @@ int pcie_ctl_init(u64 axi_pcie_ctl, u64 dma_addr_base)
 
 		//check the pcie-ctl got the translation address
 		if( data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0) ) {
-					printk(KERN_INFO"[pcie_ctl_init]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n");
+					printk(KERN_INFO"[pcie_ctl_init]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n");
 					return ERROR;
 				}
 		if(status == dma_addr_loc)
 			verbose_printk(KERN_INFO"[pcie_ctl_init]: PCIe CTL upper register set SUCCESS: ('0x%08x')\n", status);
 		else {
-			printk(KERN_INFO"[pcie_ctl_init]: !!!!!!!!!!! PCIe CTL upper register FAILURE !!!!!!!!!!!!!!!: ('0x%08x')\n", status);
+			printk(KERN_INFO"[pcie_ctl_init]: \t!!!!!!!!!!! PCIe CTL upper register FAILURE !!!!!!!!!!!!!!!: ('0x%08x')\n", status);
 			printk(KERN_INFO"[pcie_ctl_init]: Most likely due to incorrect setting in PCIe IP for AXI to BAR translation HIGH address\n");
 			printk(KERN_INFO"[pcie_ctl_init]: Must set this value to be the DMA buffer size allocation.\n");
 			return ERROR;
@@ -902,20 +900,20 @@ int pcie_ctl_init(u64 axi_pcie_ctl, u64 dma_addr_base)
 
 		//write DMA addr to PCIe CTL for address translation
 		if( data_transfer(axi_dest, (void *)(&dma_addr_loc), 4, NORMAL_WRITE, 0) ) {
-					printk(KERN_INFO"[pcie_ctl_init]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n");
+					printk(KERN_INFO"[pcie_ctl_init]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n");
 					return ERROR;
 				}
 		printk(KERN_INFO"[pcie_ctl_init]: writing dma address ('0x%08x') to pcie_ctl lower at AXI address:%llx\n", dma_addr_loc, axi_dest);
 
 		//check the pcie-ctl got the translation address
 		if( data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0) ) {
-					printk(KERN_INFO"[pcie_ctl_init]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n");
+					printk(KERN_INFO"[pcie_ctl_init]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n");
 					return ERROR;
 				}
 		if(status == dma_addr_loc)
 			verbose_printk(KERN_INFO"[pci_ioctl_cdma_set]: PCIe CTL register lower set SUCCESS: ('0x%08x')\n", status);
 		else {
-			printk(KERN_INFO"[pcie_ctl_init]: !!!!!!!!!!! PCIe CTL lower register FAILURE !!!!!!!!!!!!!!!: ('0x%08x')\n", status);
+			printk(KERN_INFO"[pcie_ctl_init]: \t!!!!!!!!!!! PCIe CTL lower register FAILURE !!!!!!!!!!!!!!!: ('0x%08x')\n", status);
 			printk(KERN_INFO"[pcie_ctl_init]: Most likely due to incorrect setting in PCIe IP for AXI to BAR translation HIGH address\n");
 			printk(KERN_INFO"[pcie_ctl_init]: Must set this value to be the DMA buffer size allocation.\n");
 			return ERROR;
@@ -937,10 +935,10 @@ int xdma_init_sv(int num_channels)
 	xdma_h2c_da = dma_alloc_coherent(NULL, (size_t)4096, &xdma_h2c_buff, GFP_KERNEL);
 	xdma_c2h_da = dma_alloc_coherent(NULL, (size_t)4096, &xdma_c2h_buff, GFP_KERNEL);
 	if(!xdma_c2h_da || !xdma_h2c_da) {
-		verbose_printk(KERN_INFO"vsi_driver:[xdma_init] cannot allocated xdma buffer 0x%p 0x%p\n",
+		verbose_printk(KERN_INFO"[xdma_init]: cannot allocated xdma buffer 0x%p 0x%p\n",
 					 (void *)xdma_c2h_da, (void *)xdma_h2c_da);
 	} else {
-		verbose_printk(KERN_INFO"vsi_driver:[xdma_init] caallocated xdma buffer 0x%p 0x%p\n",
+		verbose_printk(KERN_INFO"[xdma_init]: can allocated xdma buffer 0x%p 0x%p\n",
 					 (void *)xdma_c2h_da, (void *)xdma_h2c_da);
 	}
 	return 0;
@@ -959,21 +957,21 @@ int cdma_init(int cdma_num, uint cdma_addr)
 	u32 cdma_status;
 
 	if( (cdma_num < 0) | (cdma_num > CDMA_MAX_NUM) ) {
-		printk(KERN_INFO"\t\t[cdma_0x%x_init]:\t !!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n", cdma_num);
+		printk(KERN_INFO"\t\t[cdma_0x%x_init]: \t!!!!!!!!ERROR: incorrect CDMA number detected!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
 
 	cdma_address[cdma_num] = cdma_addr;
 	mutex_init(&cdma_sem[cdma_num]);
 
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: *******************Setting CDMA AXI Address:%llx ******************************************\n", cdma_num, cdma_address[cdma_num]);
+	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: *******************Setting CDMA AXI Address:%x ******************************************\n", cdma_num, cdma_address[cdma_num]);
 
 	/*Issue a Soft Reset*/
 	axi_dest = cdma_addr + CDMA_CR;
 	cdma_status = 0x00000004;
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: sending a soft reset to the CDMA\n", cdma_num);
 	if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE, 0) ) {
-		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]:\t !!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
 
@@ -982,7 +980,7 @@ int cdma_init(int cdma_num, uint cdma_addr)
 	axi_dest = cdma_addr + CDMA_SR;
 	//			direct_read(axi_dest, (void*)&cdma_status, 4, NORMAL_READ);
 	if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0) ) {
-		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]:\t !!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
 
@@ -991,7 +989,7 @@ int cdma_init(int cdma_num, uint cdma_addr)
 	/*Check the current config*/
 	axi_dest = cdma_addr + CDMA_CR;
 	if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0) ) {
-		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]:\t !!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA config before configuring: ('0x%08x')\n", cdma_num, cdma_status);
@@ -1001,7 +999,7 @@ int cdma_init(int cdma_num, uint cdma_addr)
 	cdma_status = 0x00001000;
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: attempting to write: ('0x%08x') to cdma status reg\n", cdma_num, cdma_status);
 	if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE, 0) ) {
-		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]:\t !!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
 
@@ -1009,14 +1007,14 @@ int cdma_init(int cdma_num, uint cdma_addr)
 	//	cdma_status = 0x00001000;
 	//	axi_dest = cdma_addr + CDMA_CR;
 	//	if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE, 0) ) {
-		//			printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+		//			printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		//			return ERROR;
 		//	}
 
 	/*Check the current status*/
 	axi_dest = cdma_addr + CDMA_SR;
 	if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0) ) {
-		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA status after configuring: ('0x%08x')\n", cdma_num, cdma_status);
@@ -1024,11 +1022,11 @@ int cdma_init(int cdma_num, uint cdma_addr)
 	/*Check the current config*/
 	axi_dest = cdma_addr + CDMA_CR;
 	if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0) ) {
-		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA config after configuring: ('0x%08x') pcie_ctl: ('0x%08x')\n", cdma_num, cdma_status, pcie_ctl_set);
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: ****************Setting CDMA AXI Address:%llx Complete*************************************\n", cdma_num, cdma_addr);
+	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: ****************Setting CDMA AXI Address:%x Complete*************************************\n", cdma_num, cdma_addr);
 
 	cdma_set[cdma_num] = 1;
 
@@ -1102,14 +1100,14 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 	if(in_range == 1) {
 		if((transfer_type == NORMAL_READ) | (transfer_type == KEYHOLE_READ)) {
 			if( direct_read(axi_address, buf, count, transfer_type) ) { //unsuccessful CDMA transmission
-					verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: ERROR on CDMA READ!!!.\n");
+					printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR on direct_read!!!.\n");
 				}
 		} else if((transfer_type == NORMAL_WRITE) | (transfer_type == KEYHOLE_WRITE)) {
 			if( direct_write(axi_address, buf, count, transfer_type) ) { //unsuccessful CDMA transmission
-					verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: ERROR on CDMA READ!!!.\n");
+					printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR on direct_write!!!.\n");
 				}
 		} else {
-			verbose_printk(KERN_INFO"[data_transfer]: error no transfer type specified\n");
+			verbose_printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR no transfer type specified\n");
 		}
 
 
@@ -1120,21 +1118,21 @@ int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u
 			u32 xfer_type = (HOST_WRITE|(transfer_type == KEYHOLE_READ ? INC_DA : INC_BOTH));
 			status = dma_transfer(axi_address, dma_axi_address, (u32)count, transfer_type, xfer_type);
 			if(status != 0) { //unsuccessful CDMA transmission
-				printk(KERN_INFO"[data_transfer]: ERROR on CDMA READ!!!.\n");
+				printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 			}
 		} else if((transfer_type == NORMAL_WRITE) || (transfer_type == KEYHOLE_WRITE)) {
 			u32 xfer_type = (HOST_READ|(transfer_type == KEYHOLE_WRITE ? INC_SA : INC_BOTH));
 			//Transfer data from user space to kernal space at the allocated DMA region
 			status = dma_transfer(dma_axi_address, axi_address, (u32)count, transfer_type, xfer_type);
 			if(status != 0) { //unsuccessful CDMA transmission
-				printk(KERN_INFO"[data_transfer]: ERROR on CDMA WRITE!!!.\n");
+				printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR on CDMA WRITE!!!.\n");
 			}
 		}
 		else {
-			verbose_printk(KERN_INFO"[data_transfer]: error no transfer type specified\n");
+			verbose_printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR no transfer type specified\n");
 		}
 	} else {
-		verbose_printk(KERN_INFO"[data_transfer]: ERROR: Address 0x%llx out of range and CDMA is not initialized\n", axi_address);
+		verbose_printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR: Address 0x%llx out of range and CDMA is not initialized\n", axi_address);
 	}
 	return status;
 }
@@ -1163,7 +1161,7 @@ int direct_write(u64 axi_address, void *buf, size_t count, int transfer_type)
 	if((axi_address + count) < (bar_0_axi_offset + pci_bar_size) && (axi_address >= bar_0_axi_offset)) {
 		virt_addr = (axi_address - bar_0_axi_offset) + pci_bar_vir_addr;
 	} else {
-		verbose_direct_write_printk(KERN_INFO"		[direct_write]: ERROR trying to Direct write out of memory range!\n");
+		printk(KERN_INFO"		[direct_write]: !!!!!!!!ERROR trying to Direct write out of memory range!\n");
 		return 1;
 	}
 
@@ -1210,7 +1208,7 @@ int direct_read(u64 axi_address, void *buf, size_t count, int transfer_type)
 		virt_addr = (axi_address - bar_0_axi_offset) + pci_bar_vir_addr;
 	} else {
 		verbose_direct_read_printk(KERN_INFO"		[direct_read]: Entering Direct Read: address: 0x%llx count: ('0x%08x') \n", axi_address, (u32)count);
-		verbose_direct_read_printk(KERN_INFO"		[direct_read]: ERROR trying to Direct read out of memory range!\n");
+		verbose_direct_read_printk(KERN_INFO"		[direct_read]: !!!!!!!!ERROR trying to Direct read out of memory range!\n");
 		return 1;
 	}
 
@@ -1244,7 +1242,7 @@ static int xdma_query(int direction)
 					verbose_dmaq_printk(KERN_INFO"\t\t\t[dma_queue]: Mutex trylock failed.\n");
 					return -1;
 				}
-				verbose_dmaq_printk(KERN_INFO"\t\t\t[dma_queue]:xdma_channel = %d \n", i);
+				verbose_dmaq_printk(KERN_INFO"\t\t\t[dma_queue]: xdma_channel = %d \n", i);
 				return i;
 			}
 	} else if(direction == DMA_FROM_DEVICE) {
@@ -1254,11 +1252,11 @@ static int xdma_query(int direction)
 					verbose_dmaq_printk(KERN_INFO"\t\t\t[dma_queue]: Mutex trylock failed.\n");
 					return -1;
 				}
-				verbose_dmaq_printk(KERN_INFO"\t\t\t[dma_queue]:xdma_channel = %d \n", i);
+				verbose_dmaq_printk(KERN_INFO"\t\t\t[dma_queue]: xdma_channel = %d \n", i);
 				return i;
 			}
 	}
-	verbose_dmaq_printk(KERN_INFO"\t\t\t[dma_queue]:no xdma queue\n");
+	verbose_dmaq_printk(KERN_INFO"\t\t\t[dma_queue]: no xdma queue\n");
 	return -1;
 }
 
@@ -1276,11 +1274,11 @@ int cdma_query(void)
 				verbose_dmaq_printk(KERN_INFO"\t\t\t[cdma_query]: Mutex trylock failed on %d.\n", i);
 				return -1;
 			}
-			verbose_dmaq_printk(KERN_INFO"\t\t\t[cdma_query]:cdma_channel = %d \n", i);
+			verbose_dmaq_printk(KERN_INFO"\t\t\t[cdma_query]: cdma_channel = %d \n", i);
 			return i;
 		}
 	}
-	verbose_cdmaq_printk(KERN_INFO "\t\t\t[cdma_query]: !!!!!!!!! all CDMAs in use !!!!!!!!\n");
+	verbose_cdmaq_printk(KERN_INFO "\t\t\t[cdma_query]: \t!!!!!!!!! all CDMAs in use !!!!!!!!\n");
 	return -1;
 }
 
@@ -1345,7 +1343,7 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 			bit_vec = 0x00000010;	//the bit for KEYHOLE READ
 			verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: Setting the CDMA Keyhole READ as ENABLED\n");
 			if( cdma_config_set(bit_vec, 1, cdma_num) ) {	//value of one means we want to SET the register
-				printk(KERN_INFO"[data_transfer]: ERROR on CDMA WRITE!!!.\n");
+				printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR on CDMA WRITE!!!.\n");
 			}
 			break;
 
@@ -1353,11 +1351,11 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 			bit_vec = 0x00000020;	//the bit for KEYHOLE WRITE
 			verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: Setting the CDMA Keyhole WRITE as ENABLED\n");
 			if( cdma_config_set(bit_vec, 1, cdma_num) ) {	//value of one means we want to SET the register
-				printk(KERN_INFO"[data_transfer]: ERROR on CDMA WRITE!!!.\n");
+				printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR on CDMA WRITE!!!.\n");
 			}	//value of one means we want to SET the register
 			break;
 
-		default:verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer] no keyhole setting will be used.\n");
+		default:verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: no keyhole setting will be used.\n");
 	}
 
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: Using CDMA %d\n", cdma_num);
@@ -1412,13 +1410,13 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 	// Acknowledge the CDMA and check for error status
 	cdma_idle_poll(cdma_num);													//verify idle before checking status
 	if( cdma_ack(cdma_num, SA, DA, BTT) ) {	//value of one means we want to SET the register
-			printk(KERN_INFO"[data_transfer]: ERROR on CDMA WRITE!!!.\n");
+			printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR on CDMA WRITE!!!.\n");
 		}
 
 	if((keyhole_en == KEYHOLE_READ) | (keyhole_en == KEYHOLE_WRITE)) {
 		bit_vec = 0x20 | 0x10;		// "0x30" unset both CDMA keyhole read and write
 		if( cdma_config_set(bit_vec, 0, cdma_num) ) {	//unsets the keyhole configuration
-			printk(KERN_INFO"[data_transfer]: ERROR on CDMA WRITE!!!.\n");
+			printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR on CDMA WRITE!!!.\n");
 		}
 	}
 
@@ -1441,7 +1439,7 @@ void cdma_idle_poll(int cdma_num)
 	status = 0x0;
 	axi_dest = cdma_address[cdma_num] + CDMA_SR;
 	if( data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0) ) {
-		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		return;
 	}
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: CDMA status: ('0x%08x')\n", cdma_num, status);
@@ -1451,7 +1449,7 @@ void cdma_idle_poll(int cdma_num)
 		schedule();
 		//Check the status of the CDMA to see if successful now
 				if( data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0) ) {
-					printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+					printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 					return;
 				}
 	}
@@ -1478,7 +1476,7 @@ int cdma_config_set(u32 bit_vec, int set_unset, int cdma_num)
 
 	axi_dest = cdma_address[cdma_num] + CDMA_CR;
 	if( data_transfer(axi_dest, (void *)&current_CR, 4, NORMAL_READ, 0) ) {
-		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
 
@@ -1486,20 +1484,20 @@ int cdma_config_set(u32 bit_vec, int set_unset, int cdma_num)
 		verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_config_set]: setting the keyhole config on CDMA.\n", cdma_num);
 		set_vec = (current_CR | bit_vec);
 		if( data_transfer(axi_dest, (void *)&set_vec, 4, NORMAL_WRITE, 0) ) {
-			printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+			printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 			return ERROR;
 		}
 	} else {	 //We are unsetting bits in the CR
 		set_vec = (current_CR & (~bit_vec));
 		verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_config_set]: UNsetting the keyhole config on CDMA.\n", cdma_num);
 		if( data_transfer(axi_dest, (void *)&set_vec, 4, NORMAL_WRITE, 0) ) {
-			printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+			printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 			return ERROR;
 		}
 	}
 
 	if( data_transfer(axi_dest, (void *)&new_CR, 4, NORMAL_READ, 0) ) {
-		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_config_set]: new CDMA Config Register is: ('0x%08x')\n", cdma_num, new_CR);
@@ -1522,7 +1520,7 @@ int cdma_ack(int cdma_num, u64 sa, u64 da, u32 btt)
 	cdma_status = 0x00001000;
 	axi_dest = cdma_address[cdma_num] + CDMA_SR;
 	if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE, 0) ) {
-		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+		printk(KERN_INFO"\t\t[cdma_0x%x_ack]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_ack]: writing SR config ('0x%08x') to CDMA at AXI address:%llx\n", cdma_num, cdma_status, axi_dest);
@@ -1531,13 +1529,13 @@ int cdma_ack(int cdma_num, u64 sa, u64 da, u32 btt)
 
 	/* Check the status of the CDMA to see if successful */
 	if( data_transfer(axi_dest, (void *)&status, 4, NORMAL_READ, 0) ) {
-		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+		printk(KERN_INFO"\t\t[cdma_0x%x_ack]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_ack]: CDMA status: ('0x%08x')\n", cdma_num, status);
 	//if this is not the expected status report
 	if((u32)status != 0x2) {
-		printk(KERN_INFO"\t\t[cdma_0x%x_ack]: ERROR CDMA status: ('0x%08x')\n", cdma_num, status);
+		printk(KERN_INFO"\t\t[cdma_0x%x_ack]: !!!!!!!!ERROR CDMA status: ('0x%08x')\n", cdma_num, status);
 		if(status == 0x4042) {
 			printk(KERN_INFO"\t\t[cdma_0x%x_ack]: This is an AXI slave response error SA:0x%llx DA:0x%llx Bytes:%d\n", cdma_num, sa, da, btt);
 			printk(KERN_INFO"\t\t\t\t[cdma_0x%x_ack]: commonly due to incorrect setting in pcie ip for axi to bar translation high address\n", cdma_num);
@@ -1550,20 +1548,20 @@ int cdma_ack(int cdma_num, u64 sa, u64 da, u32 btt)
 		cdma_status = 0x00000004;
 		verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_ack]: sending a soft reset to the CDMA\n", cdma_num);
 		if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE, 0) ) {
-			printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+			printk(KERN_INFO"\t\t[cdma_0x%x_ack]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 			return ERROR;
 		}
 		/*Check the current status*/
 		axi_dest = cdma_address[cdma_num] + CDMA_SR;
 		if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0) ) {
-			printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+			printk(KERN_INFO"\t\t[cdma_0x%x_ack]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 			return ERROR;
 		}
 		verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_ack]: CDMA status before configuring: ('0x%08x')\n", cdma_num, cdma_status);
 		/*Check the current config*/
 		axi_dest = cdma_address[cdma_num] + CDMA_CR;
 		if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0) ) {
-			printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+			printk(KERN_INFO"\t\t[cdma_0x%x_ack]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 			return ERROR;
 		}
 		verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_ack]: CDMA config before configuring: ('0x%08x')\n", cdma_num, cdma_status);
@@ -1572,21 +1570,21 @@ int cdma_ack(int cdma_num, u64 sa, u64 da, u32 btt)
 		cdma_status = 0x00001000;
 		verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_ack]: attempting to write: ('0x%08x') to cdma status reg\n", cdma_num, cdma_status);
 		if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE, 0) ) {
-			printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+			printk(KERN_INFO"\t\t[cdma_0x%x_ack]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 			return ERROR;
 		}
 
 		/*Check the current status*/
 		axi_dest = cdma_address[cdma_num] + CDMA_SR;
 		if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0) ) {
-			printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+			printk(KERN_INFO"\t\t[cdma_0x%x_ack]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 			return ERROR;
 		}
 		verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_ack]: CDMA status after configuring: ('0x%08x')\n", cdma_num, cdma_status);
 		/*Check the current config*/
 		axi_dest = cdma_address[cdma_num] + CDMA_CR;
 		if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0) ) {
-			printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: 	!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+			printk(KERN_INFO"\t\t[cdma_0x%x_ack]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 			return ERROR;
 		}
 		verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_ack]: CDMA config after configuring: ('0x%08x')\n", cdma_num, cdma_status);
@@ -1614,7 +1612,7 @@ size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc)
 		/*Read FIFO Fill level RDFO */
 		axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RDFO;
 		if( data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, 0) ) {
-			printk(KERN_INFO"[axi_stream_fifo_d2r]: ERROR reading Read FIFO fill level (RDFO)\n");
+			printk(KERN_INFO"[axi_stream_fifo_d2r]: !!!!!!!!ERROR reading Read FIFO fill level (RDFO)\n");
 			return ERROR;
 		}
 		verbose_axi_fifo_d2r_printk(KERN_INFO"[axi_stream_fifo_d2r]: RDFO value = 0x%08x\n", buf);
@@ -1631,7 +1629,7 @@ size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc)
 		axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RLR;
 
 		if( data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, 0) ) {
-			printk(KERN_INFO"[axi_stream_fifo_d2r]: ERROR reading Read FIFO fill level (RLR)\n");
+			printk(KERN_INFO"[axi_stream_fifo_d2r]: !!!!!!!!ERROR reading Read FIFO fill level (RLR)\n");
 			return ERROR;
 		}
 		verbose_axi_fifo_d2r_printk(KERN_INFO"[axi_stream_fifo_d2r]: RLR value = 0x%08x\n", buf);
@@ -1646,7 +1644,7 @@ size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc)
 		axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RLR;
 
 		if( data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, 0) ) {
-			printk(KERN_INFO"[axi_stream_fifo_d2r]: ERROR reading Read FIFO fill level (RLR)\n");
+			printk(KERN_INFO"[axi_stream_fifo_d2r]: !!!!!!!!ERROR reading Read FIFO fill level (RLR)\n");
 			return ERROR;
 		}
 		verbose_axi_fifo_d2r_printk(KERN_INFO"[axi_stream_fifo_d2r]: RLR value = 0x%08x\n", buf);
@@ -1708,7 +1706,7 @@ size_t axi_stream_fifo_read(size_t count, char * buf_base_addr, u64 hw_base_addr
 
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: dma_transfer 1 AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset, room_till_end);
 		if(dma_transfer(axi_dest, hw_base_addr+(u64)ring_pointer_offset, room_till_end, KEYHOLE_READ, (HOST_WRITE|INC_DA))) { //unsuccessful CDMA transmission
-			printk(KERN_INFO"[axi_stream_fifo_read]: ERROR on CDMA READ!!!.\n");
+			printk(KERN_INFO"[axi_stream_fifo_read]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 		}
 
 
@@ -1719,14 +1717,14 @@ size_t axi_stream_fifo_read(size_t count, char * buf_base_addr, u64 hw_base_addr
 		//end of buffer reached
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: dma_transfer 2 AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset, remaining);
 		if(dma_transfer(axi_dest, hw_base_addr+(u64)ring_pointer_offset, remaining, KEYHOLE_READ, (HOST_WRITE|INC_DA)) ) { //unsuccessful CDMA transmission
-			printk(KERN_INFO"[axi_stream_fifo_read]: ERROR on CDMA READ!!!.\n");
+			printk(KERN_INFO"[axi_stream_fifo_read]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 		}
 		ring_pointer_offset = get_new_ring_pointer(remaining, ring_pointer_offset, (int)buf_size);
 
 	} else {														//only 1 cdma transfer
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: dma_transfer AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset , count);
 		if(dma_transfer(axi_dest, ((u64)hw_base_addr+ring_pointer_offset), count, KEYHOLE_READ, (HOST_WRITE|INC_DA)) ) { //unsuccessful CDMA transmission
-			printk(KERN_INFO"[axi_stream_fifo_read]: ERROR on CDMA READ!!!.\n");
+			printk(KERN_INFO"[axi_stream_fifo_read]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 		}
 
 
@@ -1796,7 +1794,7 @@ size_t axi_stream_fifo_read_direct(size_t count, char * buf_base_addr, u64 hw_ba
 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: dma_transfer AXI Address: 0x%llx, ring_buff address: 0x%llx, len: 0x%zx\n", axi_dest, hw_base_addr , count);
 
 	if(dma_transfer(axi_dest, ((u64)hw_base_addr), count, KEYHOLE_READ, (HOST_WRITE|INC_DA))) { //unsuccessful CDMA transmission
-		printk(KERN_INFO"[axi_stream_fifo_read_direct]: ERROR on CDMA READ!!!.\n");
+		printk(KERN_INFO"[axi_stream_fifo_read_direct]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 	}
 
 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: Leaving the READ AXI Stream FIFO routine %zd\n", count);
@@ -1821,7 +1819,7 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFR;
 	buf = 0x000000A5;
 	if( data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, 0) ) {
-		printk(KERN_INFO"[axi_stream_fifo_%x_init]: ERROR resetting TX fifo\n", mod_desc->minor);
+		printk(KERN_INFO"[axi_stream_fifo_%x_init]: !!!!!!!!ERROR resetting TX fifo\n", mod_desc->minor);
 		return ERROR;
 	}
 	verbose_printk(KERN_INFO"[axi_stream_fifo_%x_init]: Reset the TX axi fifo\n", mod_desc->minor);
@@ -1830,7 +1828,7 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RDFR;
 	buf = 0x000000A5;
 	if( data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, 0) ) {
-		printk(KERN_INFO"[axi_stream_fifo_%x_init]: ERROR resetting RX fifo\n", mod_desc->minor);
+		printk(KERN_INFO"[axi_stream_fifo_%x_init]: !!!!!!!!ERROR resetting RX fifo\n", mod_desc->minor);
 		return ERROR;
 	}
 	verbose_printk(KERN_INFO"[axi_stream_fifo_%x_init]: Reset the RX axi fifo\n", mod_desc->minor);
@@ -1839,7 +1837,7 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
 	buf = 0;
 	if( data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, 0) ) {
-		printk(KERN_INFO"[axi_stream_fifo_%x_init]: ERROR reading AXI_STREAM_ISR register\n", mod_desc->minor);
+		printk(KERN_INFO"[axi_stream_fifo_%x_init]: !!!!!!!!ERROR reading AXI_STREAM_ISR register\n", mod_desc->minor);
 		return ERROR;
 	}
 	verbose_printk(KERN_INFO"[axi_stream_fifo_%x_init]: AXI_STREAM_ISR register: ('0x%08x')\n", mod_desc->minor, buf);
@@ -1849,7 +1847,7 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
 	buf = 0xFFFFFFFF;
 	if( data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, 0) ) {
-		printk(KERN_INFO"[axi_stream_fifo_%x_init]: ERROR resetting AXI_STREAM_ISR register.\n", mod_desc->minor);
+		printk(KERN_INFO"[axi_stream_fifo_%x_init]: !!!!!!!!ERROR resetting AXI_STREAM_ISR register.\n", mod_desc->minor);
 		return ERROR;
 	}
 	verbose_printk(KERN_INFO"[axi_stream_fifo_%x_init]: Reset the interrupts on the axi fifo\n", mod_desc->minor);
@@ -1857,7 +1855,7 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 	//Read CTL interface
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
 	if( data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, 0) ) {
-		printk(KERN_INFO"[axi_stream_fifo_%x_init]: ERROR reading AXI_STREAM_ISR register.\n", mod_desc->minor);
+		printk(KERN_INFO"[axi_stream_fifo_%x_init]: !!!!!!!!ERROR reading AXI_STREAM_ISR register.\n", mod_desc->minor);
 		return ERROR;
 	}
 	verbose_printk(KERN_INFO"[axi_stream_fifo_%x_init]: ('0x%08x')\n", mod_desc->minor, buf);
@@ -1870,7 +1868,7 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 		axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_IER;
 		buf = 0x04000000;							//bit 26 RX Complete
 		if( data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, 0) ) {
-			printk(KERN_INFO"[axi_stream_fifo_%x_init]: ERROR setting AXI_STREAM_IER register.\n", mod_desc->minor);
+			printk(KERN_INFO"[axi_stream_fifo_%x_init]: !!!!!!!!ERROR setting AXI_STREAM_IER register.\n", mod_desc->minor);
 			return ERROR;
 		}
 	}
@@ -1879,7 +1877,7 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFV; // the transmit FIFO vacancy
 	if( data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, 0) ) {
-		printk(KERN_INFO"[axi_stream_fifo_%x_init]: ERROR reading tx side vacancy\n", mod_desc->minor);
+		printk(KERN_INFO"[axi_stream_fifo_%x_init]: !!!!!!!!ERROR reading tx side vacancy\n", mod_desc->minor);
 		return ERROR;
 	}
 
@@ -1895,7 +1893,7 @@ int axi_stream_fifo_init(struct mod_desc * mod_desc)
 	if(read_reg > 0) {
 		fifo_empty_level = (((u32)(mod_desc->file_size))/8)-4; //(Byte size / 8 bytes per word) - 4)	this value is the empty fill level of the tx fifo.
 		if(read_reg != fifo_empty_level) {
-			printk(KERN_INFO"[axi_stream_fifo_%x_init]: Error during initialization, the calculated axi-s fifo size is not equivalent to the actual size, Fix parameters\n", mod_desc->minor);
+			printk(KERN_INFO"[axi_stream_fifo_%x_init]: !!!!!!!!ERROR during initialization, the calculated axi-s fifo size is not equivalent to the actual size, Fix parameters\n", mod_desc->minor);
 			printk(KERN_INFO"[axi_stream_fifo_%x_init]: calculated size: ('0x%08x')\n", mod_desc->minor, fifo_empty_level);
 			printk(KERN_INFO"[axi_stream_fifo_%x_init]: register read size: ('0x%08x')\n", mod_desc->minor, read_reg);
 			//return ERROR;
@@ -1923,7 +1921,7 @@ int axi_stream_fifo_deinit(struct mod_desc * mod_desc)
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFR;
 	buf = 0x000000A5;
 	if( data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, 0) ) {
-		printk(KERN_INFO"[axi_stream_fifo_%x_deinit]: ERROR resetting TX fifo\n", mod_desc->minor);
+		printk(KERN_INFO"[axi_stream_fifo_%x_deinit]: !!!!!!!!ERROR resetting TX fifo\n", mod_desc->minor);
 		return ERROR;
 	}
 	verbose_printk(KERN_INFO"[axi_stream_fifo_%x_deinit]: Reset the the axi fifo\n", mod_desc->minor);
@@ -1932,7 +1930,7 @@ int axi_stream_fifo_deinit(struct mod_desc * mod_desc)
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RDFR;
 	buf = 0x000000A5;
 	if( data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, 0) ) {
-		printk(KERN_INFO"[axi_stream_fifo_%x_deinit]: ERROR resetting RX fifo\n", mod_desc->minor);
+		printk(KERN_INFO"[axi_stream_fifo_%x_deinit]: !!!!!!!!ERROR resetting RX fifo\n", mod_desc->minor);
 		return ERROR;
 	}
 	verbose_printk(KERN_INFO"[axi_stream_fifo_%x_deinit]: Reset the the axi fifo\n", mod_desc->minor);
@@ -1941,7 +1939,7 @@ int axi_stream_fifo_deinit(struct mod_desc * mod_desc)
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_IER;
 	buf = 0x00000000;
 	if( data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, 0) ) {
-		printk(KERN_INFO"[axi_stream_fifo_%x_deinit]: ERROR setting AXI_STREAM_IER register.\n", mod_desc->minor);
+		printk(KERN_INFO"[axi_stream_fifo_%x_deinit]: !!!!!!!!ERROR setting AXI_STREAM_IER register.\n", mod_desc->minor);
 		return ERROR;
 	}
 
