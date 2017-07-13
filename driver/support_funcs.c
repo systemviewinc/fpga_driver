@@ -85,10 +85,10 @@ const u32 AXIBAR2PCIEBAR_1L = 0x214;	 /**< AXI PCIe Subsystem Offset (See Xilinx
 static struct mutex xdma_h2c_sem[XDMA_CHANNEL_NUM_MAX];
 static struct mutex xdma_c2h_sem[XDMA_CHANNEL_NUM_MAX];
 static int xdma_query(int);
-static dma_addr_t xdma_h2c_buff;
-static dma_addr_t xdma_c2h_buff;
-static void * xdma_h2c_da;
-static void * xdma_c2h_da;
+static dma_addr_t xdma_h2c_buff[XDMA_CHANNEL_NUM_MAX];
+static dma_addr_t xdma_c2h_buff[XDMA_CHANNEL_NUM_MAX];
+static void * xdma_h2c_da[XDMA_CHANNEL_NUM_MAX];
+static void * xdma_c2h_da[XDMA_CHANNEL_NUM_MAX];
 /******************************** Support functions ***************************************/
 
 /**
@@ -250,7 +250,8 @@ int read_data(struct mod_desc * mod_desc, int read_size)
 		verbose_read_thread_printk(KERN_INFO"[read_data]: maximum read amount: %d\n", max_can_read);
 		verbose_read_thread_printk(KERN_INFO"[read_data]: read size: %d\n", read_size);
 
-		read_count = axi_stream_fifo_read((size_t)read_size, mod_desc->dma_read_addr, axi_pcie_m + mod_desc->dma_offset_read, mod_desc, rfh, mod_desc->dma_size);
+		read_count = axi_stream_fifo_read((size_t)read_size, mod_desc->dma_read_addr,
+						  axi_pcie_m + mod_desc->dma_offset_read, mod_desc, rfh, mod_desc->dma_size);
 
 		if(read_count < 0) {
 			printk(KERN_INFO"[read_data]: !!!!!!!!ERROR reading data from axi stream fifo\n");
@@ -499,15 +500,20 @@ static int dma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, u32 xfer_type)
 				sg_dma_len(&sg) = xfer_size;
 				sg_table.sgl = &sg;
 				sg_table.nents = 1;
-				xfer_mem = (char *)dma_buffer_base + ((char *)l_sa - (char *)dma_addr_base);
-				memcpy(xdma_h2c_da, xfer_mem, xfer_size);
-				sg_dma_address(&sg) = (dma_addr_t)xdma_h2c_buff;
-
-				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: DMA_TO_DEVICE l_sa 0x%p l_da 0x%p xdma_b 0x%p xfer_size %d, BTT %d\n",
-						(void*)l_sa, (void*)l_da, (void*)xdma_h2c_buff, xfer_size, l_btt);
-
-				ret = xdma_xfer_submit(xdma_channel_list[xdma_channel].h2c, DMA_TO_DEVICE, l_da, &sg_table, true, XDMA_TIMEOUT_IN_MSEC);
-				if(ret < 0) {
+				//xfer_mem = (char *)dma_buffer_base + ((char *)l_sa - (char *)dma_addr_base);
+				//memcpy(xdma_h2c_da[xdma_channel],xfer_mem,xfer_size);
+				sg_dma_address(&sg) = l_sa;//(dma_addr_t)xdma_h2c_buff[xdma_channel];
+				
+				verbose_cdma_printk(KERN_INFO"vsi_driver:[%s] DMA_TO_DEVICE l_sa 0x%p l_da 0x%p xdma_b 0x%p xfer_size %d, BTT %d\n",
+						    __FUNCTION__ , (void*)l_sa, (void*)l_da, (void*)xdma_h2c_buff[i], xfer_size, l_btt);
+				
+				ret = xdma_xfer_submit(xdma_channel_list[xdma_channel].h2c,
+						       DMA_TO_DEVICE,
+						       l_da,
+						       &sg_table,
+						       true,
+						       XDMA_TIMEOUT_IN_MSEC);
+				if (ret < 0) {
 					mutex_unlock(&xdma_h2c_sem[xdma_channel]);
 					return ret;
 				}
@@ -538,10 +544,10 @@ static int dma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, u32 xfer_type)
 					mutex_unlock(&xdma_c2h_sem[xdma_channel]);
 					return ret;
 				}
-				xfer_mem = (char *)dma_buffer_base + ((char *)l_da - (char *)dma_addr_base);
-				memcpy(xfer_mem, xdma_c2h_da, xfer_size);
-				if(xfer_type & INC_SA) l_sa += xfer_size;
-				if(xfer_type & INC_DA) l_da += xfer_size;
+				//xfer_mem = (char *)dma_buffer_base + ((char *)l_da - (char *)dma_addr_base);
+				//memcpy(xfer_mem, xdma_c2h_da[xdma_channel],xfer_size); 
+				if (xfer_type & INC_SA) l_sa += xfer_size;
+				if (xfer_type & INC_DA) l_da += xfer_size;
 				l_btt -= xfer_size;
 				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: tranfer complete DMA_FROM_DEVICE\n");
 			} while (l_btt);
@@ -931,15 +937,15 @@ int xdma_init_sv(int num_channels)
 	for (i = 0 ; i < num_channels; i++) {
 		mutex_init(&xdma_h2c_sem[i]);
 		mutex_init(&xdma_c2h_sem[i]);
-	}
-	xdma_h2c_da = dma_alloc_coherent(NULL, (size_t)4096, &xdma_h2c_buff, GFP_KERNEL);
-	xdma_c2h_da = dma_alloc_coherent(NULL, (size_t)4096, &xdma_c2h_buff, GFP_KERNEL);
-	if(!xdma_c2h_da || !xdma_h2c_da) {
-		verbose_printk(KERN_INFO"[xdma_init]: cannot allocated xdma buffer 0x%p 0x%p\n",
-					 (void *)xdma_c2h_da, (void *)xdma_h2c_da);
-	} else {
-		verbose_printk(KERN_INFO"[xdma_init]: can allocated xdma buffer 0x%p 0x%p\n",
-					 (void *)xdma_c2h_da, (void *)xdma_h2c_da);
+		xdma_h2c_da[i] = dma_alloc_coherent(NULL, (size_t)4096, &xdma_h2c_buff[i], GFP_KERNEL);
+		xdma_c2h_da[i] = dma_alloc_coherent(NULL, (size_t)4096, &xdma_c2h_buff[i], GFP_KERNEL);
+		if (!xdma_c2h_da[i] || !xdma_h2c_da[i]) {
+			verbose_printk(KERN_INFO"vsi_driver:[xdma_init] cannot allocated xdma buffer 0x%p 0x%p\n",
+				       (void *)xdma_c2h_da[i], (void *)xdma_h2c_da[i]);
+		} else {
+			verbose_printk(KERN_INFO"vsi_driver:[xdma_init] callocated xdma buffer 0x%p 0x%p\n",
+				       (void *)xdma_c2h_da[i],(void *)xdma_h2c_da[i]);
+		}
 	}
 	return 0;
 }

@@ -1543,7 +1543,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			break;
 
 		case SET_FILE_SIZE:
-			mod_desc->file_size = ((loff_t)arg_loc & 0xffffffff);
+			mod_desc->file_size = ((loff_t)arg_loc & 0xffffffffffffffff);
 			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting device file size:%llu\n", minor, mod_desc->file_size);
 
 			/*initialize the DMA for the file*/
