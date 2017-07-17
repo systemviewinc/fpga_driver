@@ -524,6 +524,11 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 	resource_1 = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
+	if(!resource_1){
+		printk(KERN_INFO"%s:[probe]platform_get_resource error\n", pci_devName);
+		return ERROR;
+	}
+
 	//get the base memory size
 	pci_bar_size = resource_1->end - resource_1->start;
 	printk(KERN_INFO"[probe]platform name is: %s\n", resource_1->name);
