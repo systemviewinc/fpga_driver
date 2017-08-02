@@ -1252,7 +1252,7 @@ static int xdma_query(int direction)
 	} else if(direction == DMA_FROM_DEVICE) {
 		for (i = 0 ; i < xdma_num_channels; i++)
 			if(!mutex_is_locked(&xdma_c2h_sem[i])) {
-				if( mutex_trylock(&xdma_c2h_sem[i]) ) {
+				if(!mutex_trylock(&xdma_c2h_sem[i]) ) {
 					verbose_dmaq_printk(KERN_INFO"\t\t\t[dma_queue]: Mutex trylock failed.\n");
 					return -1;
 				}
