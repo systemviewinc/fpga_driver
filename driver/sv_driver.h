@@ -40,7 +40,7 @@
 //#define BACK_PRESSURE 1
 #define RING_BUFF_SIZE_MULTIPLIER 2
 /********* printk statements *********/
-#define verbose_printk printk
+//#define verbose_printk printk
 //#define verbose_read_printk printk
 //#define verbose_write_printk printk
 //#define verbose_cdma_printk printk
@@ -360,6 +360,10 @@ struct mod_desc
 	int axi_fifo_rdfo;	/**< Last read RDFO value if non-zero this has to be used */
 	size_t read_header_size; 	/**< Last read_header_size value if non-zero this has to be used */
 	wait_queue_head_t poll_wq; /**< waitq for events */
+
+	u32 tx_dest;	/**< Last wrote RLR value if non-zero this has to be used */
+	u32 rx_dest;	/**< Last read RLR value if non-zero this has to be used */
+
 };
 
 //DECLARE_KFIFO(read_fifo, struct mod_desc*, 4096);

@@ -503,10 +503,10 @@ static int dma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, u32 xfer_type)
 				//xfer_mem = (char *)dma_buffer_base + ((char *)l_sa - (char *)dma_addr_base);
 				//memcpy(xdma_h2c_da[xdma_channel],xfer_mem,xfer_size);
 				sg_dma_address(&sg) = l_sa;//(dma_addr_t)xdma_h2c_buff[xdma_channel];
-				
+
 				verbose_cdma_printk(KERN_INFO"vsi_driver:[%s] DMA_TO_DEVICE l_sa 0x%p l_da 0x%p xdma_b 0x%p xfer_size %d, BTT %d\n",
-						    __FUNCTION__ , (void*)l_sa, (void*)l_da, (void*)xdma_h2c_buff[i], xfer_size, l_btt);
-				
+						    __FUNCTION__ , (void*)l_sa, (void*)l_da, (void*)xdma_h2c_buff[xdma_channel], xfer_size, l_btt);
+
 				ret = xdma_xfer_submit(xdma_channel_list[xdma_channel].h2c,
 						       DMA_TO_DEVICE,
 						       l_da,
@@ -545,7 +545,7 @@ static int dma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, u32 xfer_type)
 					return ret;
 				}
 				//xfer_mem = (char *)dma_buffer_base + ((char *)l_da - (char *)dma_addr_base);
-				//memcpy(xfer_mem, xdma_c2h_da[xdma_channel],xfer_size); 
+				//memcpy(xfer_mem, xdma_c2h_da[xdma_channel],xfer_size);
 				if (xfer_type & INC_SA) l_sa += xfer_size;
 				if (xfer_type & INC_DA) l_da += xfer_size;
 				l_btt -= xfer_size;
@@ -660,16 +660,14 @@ int write_data(struct mod_desc * mod_desc)
 
 
 
-
-	/* Find an available CDMA to use and wait if both are in use */
-/*
-	while(cdma_num == 0) {
-		cdma_num = cdma_query();
-		if(cdma_num == 0 ) {
-			schedule();
+	/*write to TDR register*/
+	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDR;
+	buf = mod_desc->tx_dest;
+	verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: Wrote 0x%x to TDR!!.\n", mod_desc->tx_dest);
+	if( data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_WRITE, 0) ) {
+		printk(KERN_INFO"[write_data]: !!!!!!!!ERROR writing to AXI Streaming FIFO Control Interface\n");
+		return ERROR;
 		}
-	}
-*/
 
 	axi_dest = mod_desc->axi_addr + AXI_STREAM_TDFD;
 	//now we want to cdma write_header_size amount of data
@@ -1630,6 +1628,17 @@ size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc)
 			return 0;
 		}
 
+
+
+		/*Read FIFO Fill level RDR (tdest)*/
+		axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RDR;
+
+		if( data_transfer(axi_dest, (void*)(&buf), 4, NORMAL_READ, 0) ) {
+			printk(KERN_INFO"[axi_stream_fifo_d2r]: !!!!!!!!ERROR reading Read FIFO dest (RDR)\n");
+			return ERROR;
+		}
+		verbose_axi_fifo_d2r_printk(KERN_INFO"[axi_stream_fifo_d2r]: RDR value = 0x%08x\n", buf);
+		mod_desc->rx_dest = buf;
 
 		/*Read FIFO Fill level RLR (byte count)*/
 		axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RLR;

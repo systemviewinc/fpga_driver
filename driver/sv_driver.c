@@ -1293,7 +1293,6 @@ int pci_open(struct inode *inode, struct file *filep)
 	atomic_set(in_read_fifo_count, 0);
 	atomic_set(in_write_fifo_count, 0);
 
-
 	//interrupt_count = kmalloc(sizeof(int), GFP_KERNEL);
 
 	s = (struct mod_desc *)kmalloc(sizeof(struct mod_desc), GFP_KERNEL);
@@ -1339,6 +1338,9 @@ int pci_open(struct inode *inode, struct file *filep)
 
 	s->in_write_fifo_count = in_write_fifo_count;
 	s->in_read_fifo_count = in_read_fifo_count;
+
+	s->tx_dest = 0x2;
+	s->rx_dest = 0x0;
 
 	s->file_open = true;
 
@@ -1593,7 +1595,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		case GET_FILE_STATISTICS:
 			stats = (struct statistics *)kmalloc(sizeof(struct statistics), GFP_KERNEL);
 			if( copy_from_user(stats, (void *)arg, sizeof(struct statistics)) ) {	//value of 0 means we want to UNSET the register
-				printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR copy_to_user\n", minor);
+				printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR copy_from_user\n", minor);
 				return ERROR;
 			}
 
@@ -2015,6 +2017,8 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 			verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: the amount of bytes being copied to kernel: %zu\n", minor, partial_count);
 
+			verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: copy_from_user (0x%p, 0x%p + 0x%x, 0x%zx)\n" , minor, mod_desc->dma_write_addr, &buf, bytes_written, count);
+
 			if( copy_from_user(mod_desc->dma_write_addr, (buf + bytes_written), partial_count) ) {
 				printk(KERN_INFO"[pci_%x_write]: !!!!!!!!ERROR copy_from_user\n", minor);
 				return ERROR;
@@ -2035,8 +2039,9 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 					verbose_pci_write_printk(KERN_INFO"[user_peripheral_%x_write]: Only writing %zu bytes to end of file!\n", minor, partial_count);
 				}
 			}
-
-			if(data_transfer(axi_dest, buffer, partial_count, transfer_type, dma_offset_write) ) {
+			verbose_pci_write_printk(KERN_INFO"[user_peripheral_%x_write]: data_transfer AXI Address: 0x%llx, buf: 0x%p, len: 0x%zx\n",
+						minor, axi_dest, mod_desc->dma_write_addr, partial_count);
+			if(data_transfer(axi_dest, mod_desc->dma_write_addr, partial_count, transfer_type, dma_offset_write) ) {
 				printk(KERN_INFO"[pci_%x_write]: !!!!!!!!ERROR writing to User Peripheral\n", minor);
 				return ERROR;
 			}
@@ -2347,7 +2352,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 				transfer_type = NORMAL_READ;
 
 			if(count > mod_desc->dma_size) {
-				verbose_pci_write_printk(KERN_INFO"[pci_%x_read]: DMA Buffer size of: 0x%zx is not large enough for *remaining* transfer size: 0x%zx bytes\n", minor, mod_desc->dma_size, count);
+				verbose_printk(KERN_INFO"[pci_%x_read]: DMA Buffer size of: 0x%zx is not large enough for *remaining* transfer size: 0x%zx bytes\n", minor, mod_desc->dma_size, count);
 				count = mod_desc->dma_size;
 			}
 
@@ -2371,8 +2376,8 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 				return ERROR;
 			}
 
-			verbose_pci_write_printk(KERN_INFO"[pci_%x_read]: the amount of bytes being copied to kernel: %zu\n", minor, count);
-
+			verbose_pci_read_printk(KERN_INFO"[user_peripheral_%x_read]: first 4 bytes 0x%x\n", minor,*(unsigned int *)mod_desc->dma_read_addr);
+			verbose_pci_read_printk(KERN_INFO"[user_peripheral_%x_read]: copy_to_user (0x%p, 0x%p, 0x%zx)\n" , minor, &buf, mod_desc->dma_read_addr, count);
 			if( copy_to_user(buf, mod_desc->dma_read_addr, count) ) {
 				printk(KERN_INFO"[pci_%x_read]: !!!!!!!!ERROR copy to user\n", minor);
 				return ERROR;
