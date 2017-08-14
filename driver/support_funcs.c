@@ -584,7 +584,7 @@ static int dma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, u32 xfer_type)
 		} while (l_btt);
 		/*Release Mutex on CDMA*/
 
-		verbose_cdmaq_printk(KERN_INFO"\t\t\t[dma_transfer]: Releasing Mutex on CDMA %d \n", cdma_num);
+		verbose_dma_printk(KERN_INFO"\t\t\t[dma_transfer]: Releasing Mutex on CDMA %d \n", cdma_num);
 		mutex_unlock(&cdma_sem[cdma_num]);
 
 		return ret;
@@ -975,7 +975,7 @@ int cdma_init(int cdma_num, uint cdma_addr)
 	cdma_status = 0x00000004;
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: sending a soft reset to the CDMA\n", cdma_num);
 	if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE, 0) ) {
-		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+		printk(KERN_INFO"\t\t[cdma_idle_%x_init]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
 
@@ -984,7 +984,7 @@ int cdma_init(int cdma_num, uint cdma_addr)
 	axi_dest = cdma_addr + CDMA_SR;
 	//			direct_read(axi_dest, (void*)&cdma_status, 4, NORMAL_READ);
 	if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0) ) {
-		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+		printk(KERN_INFO"\t\t[cdma_idle_%x_init]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
 
@@ -993,7 +993,7 @@ int cdma_init(int cdma_num, uint cdma_addr)
 	/*Check the current config*/
 	axi_dest = cdma_addr + CDMA_CR;
 	if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0) ) {
-		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+		printk(KERN_INFO"\t\t[cdma_idle_%x_init]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA config before configuring: ('0x%08x')\n", cdma_num, cdma_status);
@@ -1003,7 +1003,7 @@ int cdma_init(int cdma_num, uint cdma_addr)
 	cdma_status = 0x00001000;
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: attempting to write: ('0x%08x') to cdma status reg\n", cdma_num, cdma_status);
 	if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE, 0) ) {
-		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+		printk(KERN_INFO"\t\t[cdma_idle_%x_init]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
 
@@ -1011,14 +1011,14 @@ int cdma_init(int cdma_num, uint cdma_addr)
 	//	cdma_status = 0x00001000;
 	//	axi_dest = cdma_addr + CDMA_CR;
 	//	if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE, 0) ) {
-		//			printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+		//			printk(KERN_INFO"\t\t[cdma_idle_%x_init]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		//			return ERROR;
 		//	}
 
 	/*Check the current status*/
 	axi_dest = cdma_addr + CDMA_SR;
 	if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0) ) {
-		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+		printk(KERN_INFO"\t\t[cdma_idle_%x_init]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA status after configuring: ('0x%08x')\n", cdma_num, cdma_status);
@@ -1026,7 +1026,7 @@ int cdma_init(int cdma_num, uint cdma_addr)
 	/*Check the current config*/
 	axi_dest = cdma_addr + CDMA_CR;
 	if( data_transfer(axi_dest, (void *)&cdma_status, 4, NORMAL_READ, 0) ) {
-		printk(KERN_INFO"\t\t[cdma_idle_%d_poll]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
+		printk(KERN_INFO"\t\t[cdma_idle_%x_init]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA config after configuring: ('0x%08x') pcie_ctl: ('0x%08x')\n", cdma_num, cdma_status, pcie_ctl_set);
