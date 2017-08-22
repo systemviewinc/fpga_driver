@@ -113,6 +113,9 @@ MODULE_PARM_DESC(interface_crc_check, "interface_crc_check bool");/**< Insmod Pa
 module_param(pcie_use_xdma, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
 MODULE_PARM_DESC(pcie_use_xdma, "USE XDMA Instead of CDMA");/**< Insmod Parameter */
 
+module_param(bar_0_axi_offset, u64, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
+MODULE_PARM_DESC(bar_0_axi_offset, "bar_0_axi_offset");/**< Insmod Parameter */
+
 /*****************************************************************************/
 
 //char pci_devName_const[128] ;
@@ -1457,7 +1460,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	struct timespec diff;
 	int minor;
 	if( copy_from_user(&arg_loc, argp, sizeof(u64)) ) {
-		printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR copy_to_user\n", minor);
+		printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR copy_from_user\n", minor);
 		return ERROR;
 	}
 
