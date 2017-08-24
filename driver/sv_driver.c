@@ -113,7 +113,7 @@ MODULE_PARM_DESC(interface_crc_check, "interface_crc_check bool");/**< Insmod Pa
 module_param(pcie_use_xdma, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
 MODULE_PARM_DESC(pcie_use_xdma, "USE XDMA Instead of CDMA");/**< Insmod Parameter */
 
-module_param(bar_0_axi_offset, u64, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
+module_param(bar_0_axi_offset, ulong, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
 MODULE_PARM_DESC(bar_0_axi_offset, "bar_0_axi_offset");/**< Insmod Parameter */
 
 /*****************************************************************************/
