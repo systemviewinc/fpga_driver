@@ -41,8 +41,7 @@
 #define RING_BUFF_SIZE_MULTIPLIER 2
 /********* printk statements *********/
 //#define verbose_printk printk
-//#define verbose_read_printk printk
-//#define verbose_write_printk printk
+//#define verbose_data_xfer_printk printk
 //#define verbose_cdma_printk printk
 //#define verbose_dma_printk printk
 //#define verbose_cdmaq_printk printk
@@ -83,11 +82,8 @@
 #ifndef verbose_dmaq_printk
 #define verbose_dmaq_printk(...)
 #endif
-#ifndef verbose_write_printk
-#define verbose_write_printk(...)
-#endif
-#ifndef verbose_read_printk
-#define verbose_read_printk(...)
+#ifndef verbose_data_xfer_printk
+#define verbose_data_xfer_printk(...)
 #endif
 #ifndef verbose_axi_fifo_read_printk
 #define verbose_axi_fifo_read_printk(...)
@@ -161,6 +157,10 @@
 
 //max number of CDMAs
 #define CDMA_MAX_NUM			5
+#define BAR_MAX_NUM			5
+#define PCIE_RESOURCES_MAX_NUM			6
+
+
 
 
 #define MAX_NUM_MASTERS 2
@@ -257,16 +257,15 @@ extern u32 dma_current_offset;
 extern u32 dma_garbage_offset;
 extern u32 dma_garbage_size;
 /*these are used in the data_transfer function to check for out of range memory r/w */
-extern unsigned long pci_bar_size;
-extern unsigned long pci_bar_1_size;
-extern unsigned long pci_bar_2_size;
+extern unsigned long pci_bar_addr[BAR_MAX_NUM];
+extern unsigned long pci_bar_size[BAR_MAX_NUM];
+extern uint num_bars;
 
-extern char * pci_bar_vir_addr;		 //hardware base virtual address
-extern char * pci_bar_1_vir_addr;		 //hardware base virtual address
-extern char * pci_bar_2_vir_addr;		 //hardware base virtual address
+extern char * pci_bar_vir_addr[BAR_MAX_NUM];		 //hardware base virtual address
 
 /*this is the user peripheral address offset*/
-extern u64 bar_0_axi_offset;
+//extern u64 bar_0_axi_offset;
+//extern u64 bar_1_axi_offset;
 
 extern ulong pcie_m_address;
 
