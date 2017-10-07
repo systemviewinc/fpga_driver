@@ -566,9 +566,6 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		sv_pci_remove(dev);
 		return ERROR;
 	}
-	verbose_printk(KERN_INFO"[probe:%s]: device enabled\n", pci_devName);
-	//set bus mastering capability
-	pci_set_master(dev);
 
 	//set DMA mask
 	if(0 != dma_set_coherent_mask(&dev->dev, 0x00000000FFFFFFFF)){
@@ -584,30 +581,47 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 	//enable MSI interrupts
 #if defined(CONFIG_PCI_MSI)
- 	if(msi_msix_capable(pci_dev_struct, PCI_CAP_ID_MSIX)) {
-		int i;
-		int req_nvec = MAX_NUM_ENGINES + MAX_USER_IRQ;
-		verbose_printk(KERN_INFO"[probe:%s]: MSI-X capable\n", pci_devName);
-		for (i = 0 ; i < req_nvec ; i++)
-			sv_msix_entry[i].entry = i;
-		// request all vectors
-		if(0 > pci_enable_msix(pci_dev_struct, sv_msix_entry, req_nvec)) {
-			printk(KERN_INFO"[probe:%s]: Enable MSI-X failed\n", pci_devName);
+	if(driver_type == PCI) {
+		verbose_printk(KERN_INFO"[probe:%s]: MSI capable PCI\n", pci_devName);
+
+		// allocate vectors
+		if(0 != pci_enable_msi(pci_dev_struct)) {
+			printk(KERN_INFO"[probe:%s]: Alloc MSI failed\n", pci_devName);
 			sv_pci_remove(dev);
 			return ERROR;
 		}
 		// take over the user interrupts, the rest will be
 		// handles by xdma engine if enabled
-		for (i = 0 ; i < MAX_INTERRUPTS ; i++) {
-			printk(KERN_INFO"[probe:%s]: MSI-X requesting IRQ #%d for entry %d\n", pci_devName, sv_msix_entry[i].vector, sv_msix_entry[i].entry);
-			if(0 > request_irq(sv_msix_entry[i].vector, pci_isr, 0 , pci_devName, pci_dev_struct)) {
-				printk(KERN_INFO"[probe:%s]: MSI-X request_irq failed\n", pci_devName);
+
+		if(0 > request_irq(pci_dev_struct->irq, &pci_isr, IRQF_TRIGGER_RISING | IRQF_SHARED, pci_devName, pci_dev_struct)){
+			printk(KERN_INFO"%s:[probe]request IRQ error\n", pci_devName);
+			return ERROR;
+		}
+	}
+	else if(driver_type == AWS) {
+	 	if(msi_msix_capable(pci_dev_struct, PCI_CAP_ID_MSIX)) {
+			// do AWS Specific stuff
+			int i;
+			int req_nvec = MAX_NUM_ENGINES + MAX_USER_IRQ;
+			verbose_printk(KERN_INFO"[probe:%s]: MSI-X capable AWS\n", pci_devName);
+			for (i = 0 ; i < req_nvec ; i++)
+				sv_msix_entry[i].entry = i;
+			// request all vectors
+			if(0 > pci_enable_msix(pci_dev_struct, sv_msix_entry, req_nvec)) {
+				printk(KERN_INFO"[probe:%s]: Enable MSI-X failed\n", pci_devName);
 				sv_pci_remove(dev);
 				return ERROR;
 			}
-		}
-		// do AWS Specific stuff
-		if(driver_type == AWS) {
+			// take over the user interrupts, the rest will be
+			// handles by xdma engine if enabled
+			for (i = 0 ; i < MAX_INTERRUPTS ; i++) {
+				printk(KERN_INFO"[probe:%s]: MSI-X requesting IRQ #%d for entry %d\n", pci_devName, sv_msix_entry[i].vector, sv_msix_entry[i].entry);
+				if(0 > request_irq(sv_msix_entry[i].vector, pci_isr, 0 , pci_devName, pci_dev_struct)) {
+					printk(KERN_INFO"[probe:%s]: MSI-X request_irq failed\n", pci_devName);
+					sv_pci_remove(dev);
+					return ERROR;
+				}
+			}
 			aws_enable_interrupts(pci_dev_struct);
 			aws_get_max_sizes();
 			if(pcie_use_xdma) {
@@ -630,22 +644,28 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 				xdma_init_sv(xdma_num_channels);
 				verbose_printk(KERN_INFO"[probe:%s]: xdma initialized with %d channels\n", pci_devName, xdma_num_channels);
 			}
+		} else {
+			verbose_printk(KERN_INFO"[probe:%s]: MSI capable\n", pci_devName);
+			if(0 > pci_enable_msi(pci_dev_struct)){
+				printk(KERN_INFO"[probe:%s]: MSI enable error\n", pci_devName);
+				sv_pci_remove(dev);
+				return ERROR;
+			}
+			if(0 > request_irq(pci_dev_struct->irq, &pci_isr, 0, pci_devName, pci_dev_struct)){
+				printk(KERN_INFO"[probe:%s]: MSI request_irq failed\n", pci_devName);
+				sv_pci_remove(dev);
+				return ERROR;
+			}
 		}
-	} else {
-		if(0 > pci_enable_msi(pci_dev_struct)){
-			printk(KERN_INFO"[probe:%s]: MSI enable error\n", pci_devName);
-			sv_pci_remove(dev);
-			return ERROR;
-		}
-		if(0 > request_irq(pci_dev_struct->irq, &pci_isr, 0, pci_devName, pci_dev_struct)){
-			printk(KERN_INFO"[probe:%s]: MSI request_irq failed\n", pci_devName);
-			sv_pci_remove(dev);
-			return ERROR;
-		}
+	}
+	else{
+		verbose_printk(KERN_INFO"[probe:%s]: ERROR MSI-X capable unknown type\n", pci_devName);
+		return ERROR;
 	}
 	verbose_printk(KERN_INFO"[probe:%s]: pci enabled msi interrupt\n", pci_devName);
 #else
 	//request IRQ
+	verbose_printk(KERN_INFO"[probe:%s]: request interrupt\n", pci_devName);
 	if(0 > request_irq(pci_dev_struct->irq, &pci_isr, IRQF_TRIGGER_RISING | IRQF_SHARED, pci_devName, pci_dev_struct)){
 		printk(KERN_INFO"[probe:%s]: request IRQ error\n", pci_devName);
 		sv_pci_remove(dev);
