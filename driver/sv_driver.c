@@ -957,25 +957,36 @@ static void sv_pci_remove(struct pci_dev *dev)
 	printk(KERN_INFO"%s[sv_pci_remove]: PCIE remove\n", pci_devName);
 	// free and disable IRQ
 #if defined(CONFIG_PCI_MSI)
- 	if(msi_msix_capable(dev, PCI_CAP_ID_MSIX)) {
-		int i ;
-		for (i = 0 ; i < MAX_INTERRUPTS; i++)
-			free_irq (sv_msix_entry[i].vector, dev);
-		printk(KERN_INFO"%s[sv_pci_remove]: free_irq done\n", pci_devName);
-		// do AWS Specific interrupts
-		if(driver_type == AWS) {
-			aws_disable_interrupts(pci_dev_struct);
-			if(pcie_use_xdma) {
-				sv_xdma_device_close(pci_dev_struct, xdma_dev_s, xdma_channel_list);
-			}
-		}
-		pci_disable_msix(dev);
-		printk(KERN_INFO"%s[sv_pci_remove]: MSI-X disabled\n", pci_devName);
-	} else {
+
+	if(driver_type == PCI) {
+		printk(KERN_INFO"[probe:%s]: MSI capable PCI remove\n", pci_devName);
 		free_irq(dev->irq, dev);
 		printk(KERN_INFO"%s[sv_pci_remove]: free_irq done\n", pci_devName);
 		pci_disable_msi(dev);
 		printk(KERN_INFO"%s[sv_pci_remove]: MSI disabled\n", pci_devName);
+
+	}
+	else {
+	 	if(msi_msix_capable(dev, PCI_CAP_ID_MSIX)) {
+			int i ;
+			for (i = 0 ; i < MAX_INTERRUPTS; i++)
+				free_irq (sv_msix_entry[i].vector, dev);
+			printk(KERN_INFO"%s[sv_pci_remove]: free_irq done\n", pci_devName);
+			// do AWS Specific interrupts
+			if(driver_type == AWS) {
+				aws_disable_interrupts(pci_dev_struct);
+				if(pcie_use_xdma) {
+					sv_xdma_device_close(pci_dev_struct, xdma_dev_s, xdma_channel_list);
+				}
+			}
+			pci_disable_msix(dev);
+			printk(KERN_INFO"%s[sv_pci_remove]: MSI-X disabled\n", pci_devName);
+		} else {
+			free_irq(dev->irq, dev);
+			printk(KERN_INFO"%s[sv_pci_remove]: free_irq done\n", pci_devName);
+			pci_disable_msi(dev);
+			printk(KERN_INFO"%s[sv_pci_remove]: MSI disabled\n", pci_devName);
+		}
 	}
 #else
 	free_irq(pci_dev_struct->irq, pci_dev_struct);
@@ -2006,7 +2017,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				//return bytes_written;
 
 				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: pci_write is going to sleep ZzZzZzZzZzZzZz, room in buffer: %d\n", minor, room_in_buffer(wtk, wth, full, mod_desc->dma_size));
-				if( wait_event_interruptible(pci_write_head, atomic_read(mod_desc->pci_write_q) == 1) ) {
+				if( wait_event_interruptible_timeout(pci_write_head, atomic_read(mod_desc->pci_write_q) == 1) ) {
 					printk(KERN_INFO"[pci_%x_write]: !!!!!!!!ERROR wait_event_interruptible\n", minor);
  	 				return ERROR;
 				}
