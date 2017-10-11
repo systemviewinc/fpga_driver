@@ -121,7 +121,6 @@ MODULE_PARM_DESC(pcie_use_xdma, "USE XDMA Instead of CDMA");/**< Insmod Paramete
 /*****************************************************************************/
 
 //Allow up to 5 bar to read/write to
-unsigned long pci_bar_hw_addr[BAR_MAX_NUM];			/** < hardware base address of BAR 0 */
 unsigned long pci_bar_addr[BAR_MAX_NUM];			/** < hardware base address of BAR 0 */
 unsigned long pci_bar_end[BAR_MAX_NUM];			/** < hardware base address of BAR 0 */
 unsigned long pci_bar_size[BAR_MAX_NUM];			/** < Hardware bar memory size of BAR 0 */
@@ -530,21 +529,16 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		else {
 			pci_bar_addr[i] = pcie_bar_address[i];
 			//get the base memory size
-			pci_bar_hw_addr[i] = pci_resource_start(pci_dev_struct, j);
-			pci_bar_end[i] = pci_resource_end(pci_dev_struct, j);
 			pci_bar_size[i] = pci_resource_len(pci_dev_struct, j);
+			pci_bar_end[i] = pcie_bar_address[i] + pci_bar_size[i];
 
 			printk(KERN_INFO"[probe:%s]: pci bar %d addr is:0x%lx mapped to resource %d \n", pci_devName, i, pci_bar_addr[i], j);
-			printk(KERN_INFO"[probe:%s]: pci bar %d start is:0x%lx end is:%lx\n", pci_devName, i, pci_bar_hw_addr[i], pci_bar_end[i]);
+			printk(KERN_INFO"[probe:%s]: pci bar %d start is:0x%lx end is:%lx\n", pci_devName, i, pci_bar_addr[i], pci_bar_end[i]);
 			printk(KERN_INFO"[probe:%s]: pci bar %d size is:0x%lx\n", pci_devName, i, pci_bar_size[i]);
 			printk(KERN_INFO"[probe:%s]: pci region %d flags is:0x%08lx\n", pci_devName, j, pci_resource_flags(pci_dev_struct, j));
 
-
-
 			//map the hardware space to virtual space
-			//pci_bar_vir_addr[i] = pci_iomap(pci_dev_struct, j, 0);
-			pci_bar_vir_addr[i] = ioremap(pci_resource_start(pci_dev_struct, j),  pci_resource_len(pci_dev_struct, j));//pci_bar_hw_addr[i], pci_bar_size[i]);
-
+			pci_bar_vir_addr[i] = pci_ioremap_bar(pci_dev_struct, j);
 
 			if(!pci_bar_vir_addr[i]){
 				printk(KERN_INFO"[probe:%s]: pci_iomap error when mapping to virtual address\n", pci_devName);
@@ -1566,14 +1560,15 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	struct statistics * stats; //= kmalloc(sizeof(struct statistics), GFP_KERNEL);
 	struct timespec diff;
 	int minor;
+
+	mod_desc = filep->private_data;
+	minor = mod_desc->minor;
+
 	if( copy_from_user(&arg_loc, argp, sizeof(u64)) ) {
 		printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR copy_to_user\n", minor);
 		return ERROR;
 	}
 
-
-	mod_desc = filep->private_data;
-	minor = mod_desc->minor;
 
 	verbose_printk(KERN_INFO"[pci_%x_ioctl]: Entering IOCTL with command: %d and arg %llx\n", minor, cmd, arg_loc);
 
@@ -2017,7 +2012,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				//return bytes_written;
 
 				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: pci_write is going to sleep ZzZzZzZzZzZzZz, room in buffer: %d\n", minor, room_in_buffer(wtk, wth, full, mod_desc->dma_size));
-				if( wait_event_interruptible_timeout(pci_write_head, atomic_read(mod_desc->pci_write_q) == 1) ) {
+				if( wait_event_interruptible(pci_write_head, atomic_read(mod_desc->pci_write_q) == 1) ) {
 					printk(KERN_INFO"[pci_%x_write]: !!!!!!!!ERROR wait_event_interruptible\n", minor);
  	 				return ERROR;
 				}
