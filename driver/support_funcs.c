@@ -421,9 +421,10 @@ int write_thread(void *in_param) {
 
 						//if we needed backpressure wait here for a write to take data out of the buffer so we have room -MM
 						verbose_write_thread_printk(KERN_INFO"[write_thread]: waiting in wait_event_interruptible write buffer full!!\n");
-						if( wait_event_interruptible(thread_q_head_write, ( atomic_read(&thread_q_write) == 1 || kthread_should_stop() )) ) {
-
-										}
+						wait_event_interruptible_timeout(thread_q_head_write,
+										 ( atomic_read(&thread_q_write) == 1 || kthread_should_stop() ),
+										 msecs_to_jiffies(1));
+						
 						//waits until thread_q_write is true or we should stop the thread (previous methods of exitings weren't working -MM)
 						atomic_set(&thread_q_write, 0);	// the threaded way
 
@@ -561,12 +562,22 @@ static int dma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, u32 xfer_type)
 	else if(cdma_capable != 0) {
 		verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: Using CDMA \n");
 		/* Find an available CDMA to use and wait if both are in use */
+	cdma_retry:
 		while(cdma_num == -1 && --attempts != 0) {
 			cdma_num = cdma_query();
 			if(cdma_num == -1 ) {
 				schedule();
 			}
-		}
+		}			
+		if (cdma_num == -1) {
+			printk(KERN_INFO"\t\t[dma_transfer]: could not get cdma will sleep 10 msecs\n");
+			if (xfer_type & HOST_WRITE)
+				wait_event_interruptible_timeout(thread_q_head_write,1,msecs_to_jiffies(10));
+			else 
+				wait_event_interruptible_timeout(thread_q_head_read,1,msecs_to_jiffies(10));
+			attempts = 1000;
+			goto cdma_retry;
+		}		
 		// if write check required and dma max write is set
 		if((xfer_type & HOST_WRITE) && dma_max_write_size && BTT > dma_max_write_size) {
 			max_xfer_size = dma_max_write_size;
