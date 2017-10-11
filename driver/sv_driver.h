@@ -40,7 +40,7 @@
 //#define BACK_PRESSURE 1
 #define RING_BUFF_SIZE_MULTIPLIER 2
 /********* printk statements *********/
-//#define verbose_printk printk
+#define verbose_printk printk
 //#define verbose_data_xfer_printk printk
 //#define verbose_cdma_printk printk
 //#define verbose_dma_printk printk
