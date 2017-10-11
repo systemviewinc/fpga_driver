@@ -1,4 +1,3 @@
-
 /**
  * System View Device Driver
 
@@ -258,6 +257,7 @@ extern u32 dma_garbage_offset;
 extern u32 dma_garbage_size;
 /*these are used in the data_transfer function to check for out of range memory r/w */
 extern unsigned long pci_bar_addr[BAR_MAX_NUM];
+extern unsigned long pci_bar_end[BAR_MAX_NUM];
 extern unsigned long pci_bar_size[BAR_MAX_NUM];
 extern uint num_bars;
 
