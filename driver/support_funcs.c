@@ -86,10 +86,12 @@ const u32 AXIBAR2PCIEBAR_1L = 0x214;	 /**< AXI PCIe Subsystem Offset (See Xilinx
 static struct mutex xdma_h2c_sem[XDMA_CHANNEL_NUM_MAX];
 static struct mutex xdma_c2h_sem[XDMA_CHANNEL_NUM_MAX];
 static int xdma_query(int);
+static int cdma_query(void);
 static dma_addr_t xdma_h2c_buff[XDMA_CHANNEL_NUM_MAX];
 static dma_addr_t xdma_c2h_buff[XDMA_CHANNEL_NUM_MAX];
 static void * xdma_h2c_da[XDMA_CHANNEL_NUM_MAX];
 static void * xdma_c2h_da[XDMA_CHANNEL_NUM_MAX];
+static int cdma_use_count[CDMA_MAX_NUM];
 /******************************** Support functions ***************************************/
 
 /**
@@ -569,7 +571,8 @@ static int dma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, u32 xfer_type)
 			schedule();
 		}			
 		if (cdma_num == -1) {
-			printk(KERN_INFO"\t\t[dma_transfer]: could not get cdma will sleep 10 msecs\n");
+			printk(KERN_INFO"\t\t[dma_transfer]: could not get cdma will sleep 10 msecs cdma_use(%d,%d,%d,%d)\n",
+			       cdma_use_count[0],cdma_use_count[1],cdma_use_count[2],cdma_use_count[3]);
 			if (xfer_type & HOST_WRITE)
 				wait_event_interruptible_timeout(thread_q_head_write,1,msecs_to_jiffies(10));
 			else 
@@ -1351,22 +1354,22 @@ static int xdma_query(int direction)
 	verbose_dmaq_printk(KERN_INFO"\t\t\t[dma_queue]: no xdma queue\n");
 	return -1;
 }
-
 /**
- * This function determines if a CDMA is available. if it is, it locks the semaphore and returns
+ * @brief This function determines if a CDMA is available. if it is, it locks the semaphore and returns
  * the CDMA number.
- */
-int cdma_query(void)
+*/
+static int cdma_query(void)
 {
 	int i;
 	/*Check the CDMA Semaphore*/
 	for( i = 0; i < cdma_count; i++) {
-		if( (cdma_set[0] == 1) | (!mutex_is_locked(&cdma_sem[i])) ) {
+		if( (cdma_set[i] == 1) && (!mutex_is_locked(&cdma_sem[i])) ) {
 			if(!mutex_trylock(&cdma_sem[i]) ){
 				verbose_dmaq_printk(KERN_INFO"\t\t\t[cdma_query]: Mutex trylock failed on %d.\n", i);
 				return -1;
 			}
 			verbose_dmaq_printk(KERN_INFO"\t\t\t[cdma_query]: cdma_channel = %d \n", i);
+			cdma_use_count[i]++;
 			return i;
 		}
 	}

@@ -464,11 +464,6 @@ int vec2num(u32 vec);
 */
 u32 num2vec(int num);
 /**
- * @brief This function determines if a CDMA is available. if it is, it locks the semaphore and returns
- * the CDMA number.
-*/
-int cdma_query(void);
-/**
  * @brief This function initializes the CDMA.
  * @param cdma_num Instructs which CDMA to use (Assumes it has been locked)
  * @param cdma_address the AXI address of the CDMA
