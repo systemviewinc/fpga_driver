@@ -793,7 +793,7 @@ struct task_struct* create_thread_read(struct kfifo * read_fifo) {
 int dma_file_init(struct mod_desc *mod_desc, char *dma_buffer_base, u64 dma_buffer_size) {
 
 	int dma_file_size;
-	dma_file_size = (int)(mod_desc->dma_size)*RING_BUFF_SIZE_MULTIPLIER; //we want the ring buffer to be atleast 2 times the size of the file size (aka fifo size)
+	dma_file_size = (int)(mod_desc->dma_size);//*RING_BUFF_SIZE_MULTIPLIER; //we want the ring buffer to be atleast 2 times the size of the file size (aka fifo size)
 
 	printk(KERN_INFO"[dma_file_init]: Setting Peripheral DMA size:%d, current offset %lld\n", dma_file_size, (u64)dma_current_offset);
 	mod_desc->dma_size = (size_t)dma_file_size;
@@ -1506,7 +1506,7 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 	cdma_idle_poll(cdma_num);													//verify idle before checking status
 	if( cdma_ack(cdma_num, SA, DA, BTT) ) {	//value of one means we want to SET the register
 			printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR on CDMA WRITE!!!.\n");
-		}
+	}
 
 	if((keyhole_en == KEYHOLE_READ) | (keyhole_en == KEYHOLE_WRITE)) {
 		bit_vec = 0x20 | 0x10;		// "0x30" unset both CDMA keyhole read and write
@@ -1630,7 +1630,7 @@ int cdma_ack(int cdma_num, u64 sa, u64 da, u32 btt)
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_ack]: CDMA status: ('0x%08x')\n", cdma_num, status);
 	//if this is not the expected status report
 	if((u32)status != 0x2) {
-		printk(KERN_INFO"\t\t[cdma_0x%x_ack]: !!!!!!!!ERROR CDMA status: ('0x%08x')\n", cdma_num, status);
+		printk(KERN_INFO"\t\t[cdma_0x%x_ack]: !!!!!!!!ERROR CDMA status: ('0x%08x') SA:0x%llx DA:0x%llx btt:%d\n", cdma_num, status, sa,da,btt);
 		if(status == 0x4042) {
 			printk(KERN_INFO"\t\t[cdma_0x%x_ack]: This is an AXI slave response error SA:0x%llx DA:0x%llx Bytes:%d\n", cdma_num, sa, da, btt);
 			printk(KERN_INFO"\t\t\t\t[cdma_0x%x_ack]: commonly due to incorrect setting in pcie ip for axi to bar translation high address\n", cdma_num);
