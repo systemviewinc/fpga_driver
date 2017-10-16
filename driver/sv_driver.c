@@ -2296,10 +2296,13 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 		case AXI_STREAM_PACKET:
 			// if AXI streaming fifo set with no interrupt then just read
 			if(!mod_desc->has_interrupt_vec) {
-
+				if (count == 0) {
+					printk(KERN_INFO"[pci_%x_read] illegal to read 0 bytes\n",minor);
+					break;
+				}
 				bytes = axi_stream_fifo_d2r(mod_desc);
 
-				if(bytes == 0) {
+				if(bytes == 0) {					
 					verbose_axi_fifo_write_printk(KERN_INFO"[pci_%x_read]: No data to read from axi stream fifo\n" , minor);
 				} else {
 					if(bytes <= count){
@@ -2309,6 +2312,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 					else if(count < bytes) {
 						bytes = axi_stream_fifo_read_direct((size_t)count, mod_desc->dma_read_addr, axi_pcie_m+mod_desc->dma_offset_read, mod_desc, mod_desc->dma_size);
 					}
+					
 					verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: copy_to_user (0x%p, 0x%p, 0x%zx)\n" , minor, &buf, mod_desc->dma_read_addr, count);
 					if( copy_to_user(buf, mod_desc->dma_read_addr, count) ) {
 						printk(KERN_INFO"[pci_%x_read]: !!!!!!!!ERROR copy_to_user\n" , minor);
