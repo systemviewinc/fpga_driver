@@ -1354,6 +1354,7 @@ static int xdma_query(int direction)
 	verbose_dmaq_printk(KERN_INFO"\t\t\t[dma_queue]: no xdma queue\n");
 	return -1;
 }
+
 /**
  * @brief This function determines if a CDMA is available. if it is, it locks the semaphore and returns
  * the CDMA number.
@@ -1438,7 +1439,7 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 			bit_vec = 0x00000010;	//the bit for KEYHOLE READ
 			verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: Setting the CDMA Keyhole READ as ENABLED\n");
 			if( cdma_config_set(bit_vec, 1, cdma_num) ) {	//value of one means we want to SET the register
-				printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR on CDMA WRITE!!!.\n");
+				printk(KERN_INFO"[cdma_transfer]: !!!!!!!!ERROR on CDMA WRITE!!!.\n");
 			}
 			break;
 

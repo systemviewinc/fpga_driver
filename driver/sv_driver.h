@@ -56,6 +56,7 @@
 //#define verbose_llseek_printk printk
 //#define verbose_pci_read_printk printk
 //#define verbose_pci_write_printk printk
+//#define verbose_mmap_printk printk
 //#define verbose_read_thread_printk printk
 //#define verbose_write_thread_printk printk
 
@@ -111,6 +112,9 @@
 #ifndef verbose_pci_write_printk
 #define verbose_pci_write_printk(...)
 #endif
+#ifndef verbose_mmap_printk
+#define verbose_mmap_printk(...)
+#endif
 #ifndef verbose_read_thread_printk
 #define verbose_read_thread_printk(...)
 #endif
@@ -144,14 +148,17 @@
 #define START_DRIVER_TIMER 71		/**< IOCTL Magic Number */
 #define STOP_DRIVER_TIMER 72		/**< IOCTL Magic Number */
 
+#define WRITE_REG 73		/**< IOCTL Magic Number */
+#define READ_REG 74		/**< IOCTL Magic Number */
+
 #define ERROR	-1
 #define SUCCESS 0
 
 /* MODE Types */
-#define SLAVE 0				/**< Mode Type : This is standard memory interface */
-#define AXI_STREAM_FIFO 1	/**< Mode Type : This is for axi streaming peripherals with no last singal */
-#define MASTER 2			/**< Mode Type : This is for AXI Master devices (currently not supported) */
-#define AXI_STREAM_PACKET 4 /**< Mode Type : This is for axi streaming peripherals with a last signal */
+#define SLAVE 0									/**< Mode Type : This is standard memory interface */
+#define AXI_STREAM_FIFO 1				/**< Mode Type : This is for axi streaming peripherals with no last singal */
+#define MASTER 2								/**< Mode Type : This is for AXI Master devices (currently not supported) */
+#define AXI_STREAM_PACKET 4 		/**< Mode Type : This is for axi streaming peripherals with a last signal */
 //#define CDMA 3
 
 //max number of CDMAs
@@ -303,8 +310,7 @@ extern u64 dma_buffer_size;
  *	design, it contains characteristics of the IP suxk as AXI address, mode types, interrupt
  *	numbers, etc.
  */
-struct mod_desc
-{
+struct mod_desc {
 	int minor;					 /**< The minor number of file node (mainly used for debug msgs */
 	u64 axi_addr;				/**< The axi address of the file node's associated IP */
 	u64 axi_addr_ctl;			/**< The axi control address for axi-streaming IPs */
@@ -316,17 +322,29 @@ struct mod_desc
 
 	atomic_t * in_read_fifo_count;		/**< The number of times the mod_desc is in the read fifo, once it reaches 0 we can kfree it */
 	atomic_t * in_write_fifo_count;		/**< The number of times the mod_desc is in the write fifo, once it reaches 0 we can kfree it */
+	atomic_t * mmap_count;						/**< The number of current mmaps if it is zero we will read/write the using the mmap section of memory */
+
+	unsigned long mmap_read_start_addr;
+	unsigned long mmap_read_end_addr;
+
+	unsigned long mmap_write_start_addr;
+	unsigned long mmap_write_end_addr;
 
 	bool file_open;							/**< True if file is open, used to process the mod_desc (or throw it away) in read/write threads */
 
 	size_t dma_size;				/**< The size of allocated DMA buffer */
+	loff_t file_size;	/**< This is the size of the axi_streaming FIFO for streaming peripherals or size of ram for memory peripherals */
+
 
 	u32 dma_offset_read;		 /**< The Offset byte of the allocated DMA buffer for READ from dma_buffer_base */
 	u32 dma_offset_write;				/**< The Offset byte of the allocated DMA buffer for WRITE from dma_buffer_base */
+	u32 dma_offset_read_write;				/**< The Offset byte of the allocated DMA buffer for WRITE from dma_buffer_base */
+
 	char * dma_write_addr;			/**< This is the pointer to the start of DMA buffer for WRITE in virtual address space */
 	char * dma_read_addr;			/**< This is the pointer to the start of DMA buffer for READ in virtual address space */
+	char * dma_read_write_addr;			/**< This is the pointer to the start of DMA buffer for READ in virtual address space */
 
-	loff_t file_size;	/**< This is the size of the axi_streaming FIFO for streaming peripherals or size of ram for memory peripherals */
+
 	int tx_bytes;				/**< This is the TX byte count for statistics generation */
 	int rx_bytes;				/**< This is the RX byte count for statistics generation */
 	struct timespec * start_time;	/**< This holds the start time for statistics generation */
@@ -362,7 +380,11 @@ struct mod_desc
 
 	u32 tx_dest;	/**< Last wrote RLR value if non-zero this has to be used */
 	u32 rx_dest;	/**< Last read RLR value if non-zero this has to be used */
+};
 
+struct mmap_info {
+    char *data; 					/**< the data **/
+    int reference;       	/**< how many times it is mmapped **/
 };
 
 //DECLARE_KFIFO(read_fifo, struct mod_desc*, 4096);
