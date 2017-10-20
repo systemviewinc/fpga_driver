@@ -1587,7 +1587,10 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	mod_desc = filep->private_data;
 	minor = mod_desc->minor;
 
-	if( copy_from_user(&arg_loc, argp, sizeof(u64)) ) {
+  if(arg == 0){
+    arg_loc = 0;
+  }
+	else if( copy_from_user(&arg_loc, argp, sizeof(u64)) ) {
 		printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR copy_to_user\n", minor);
 		return ERROR;
 	}
