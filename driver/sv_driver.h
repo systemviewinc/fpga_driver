@@ -247,7 +247,6 @@ extern u64 axi_pcie_m;
 extern int dma_byte_width;
 
 extern u8 cdma_set[CDMA_MAX_NUM];
-extern u8 pcie_ctl_set;
 
 extern int cdma_capable;	 /**< This variable is set by the driver if a CDMA is initialized and available for use */
 extern int back_pressure;	/**< This variable is set at insmod that tells whether the read ring buffers should backpressure to HW or overwrite */
@@ -265,7 +264,6 @@ extern u32 dma_garbage_size;
 /*these are used in the data_transfer function to check for out of range memory r/w */
 extern unsigned long pci_bar_addr[BAR_MAX_NUM];
 extern unsigned long pci_bar_end[BAR_MAX_NUM];
-extern unsigned long pci_bar_size[BAR_MAX_NUM];
 extern uint num_bars;
 
 extern char * pci_bar_vir_addr[BAR_MAX_NUM];		 //hardware base virtual address

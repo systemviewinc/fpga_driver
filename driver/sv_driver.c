@@ -121,9 +121,8 @@ MODULE_PARM_DESC(pcie_use_xdma, "USE XDMA Instead of CDMA");/**< Insmod Paramete
 /*****************************************************************************/
 
 //Allow up to 5 bar to read/write to
-unsigned long pci_bar_addr[BAR_MAX_NUM];			/** < hardware base address of BAR 0 */
-unsigned long pci_bar_end[BAR_MAX_NUM];			/** < hardware base address of BAR 0 */
-unsigned long pci_bar_size[BAR_MAX_NUM];			/** < Hardware bar memory size of BAR 0 */
+unsigned long pci_bar_addr[BAR_MAX_NUM];			/** < hardware base address of BARs */
+unsigned long pci_bar_end[BAR_MAX_NUM];			/** < hardware base address of BARs */
 char * pci_bar_vir_addr[BAR_MAX_NUM];		 /**< hardware base virtual address for BAR 1 (not currently used) */
 uint num_bars = 0;							//number of bars that direct read / direct write must look at
 
@@ -555,12 +554,11 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		else {
 			pci_bar_addr[i] = pcie_bar_address[i];
 			//get the base memory size
-			pci_bar_size[i] = pci_resource_len(pci_dev_struct, j);
-			pci_bar_end[i] = pcie_bar_address[i] + pci_bar_size[i];
+			pci_bar_end[i] = pcie_bar_address[i] + pci_resource_len(pci_dev_struct, j);
 
 			printk(KERN_INFO"[probe:%s]: pci bar %d addr is:0x%lx mapped to resource %d \n", pci_devName, i, pci_bar_addr[i], j);
 			printk(KERN_INFO"[probe:%s]: pci bar %d start is:0x%lx end is:%lx\n", pci_devName, i, pci_bar_addr[i], pci_bar_end[i]);
-			printk(KERN_INFO"[probe:%s]: pci bar %d size is:0x%lx\n", pci_devName, i, pci_bar_size[i]);
+			printk(KERN_INFO"[probe:%s]: pci bar %d size is:0x%lx\n", pci_devName, i, (unsigned long)pci_resource_len(pci_dev_struct, j));
 			printk(KERN_INFO"[probe:%s]: pci region %d flags is:0x%08lx\n", pci_devName, j, pci_resource_flags(pci_dev_struct, j));
 
 			//map the hardware space to virtual space
@@ -741,7 +739,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		dma_addr_base = pci_map_single(pci_dev_struct, dma_buffer_base, dma_buffer_size, PCI_DMA_BIDIRECTIONAL);
 		verbose_printk(KERN_INFO"[probe:%s]: pci_map_single physical 0x%p, virtual %p\n", pci_devName, (void *)dma_addr_base, (void *)dma_buffer_base);
 		pci_bar_addr[0] = 0x82000000;			/**< The AXI address of BAR 0 (ie common interface IP) */
-		pci_bar_addr[1] = 0x88000000;			/**< The AXI address of BAR 1 (ie common interface IP) */			//todo fix -MM
+		pci_bar_end[0] = 0x83ffffff;			/**< The AXI address of BAR 1 (ie common interface IP) */			//todo fix -MM
 		axi_pcie_m = dma_addr_base;
 	} else if(axi2pcie_bar0_size != 0xFFFFFFFF && pcie_ctl_address != 0xFFFFFFFF) {
 		axi_pcie_m = dma_addr_base % axi2pcie_bar0_size;
@@ -836,15 +834,13 @@ static int sv_plat_probe(struct platform_device *pdev)
 		{
 			printk(KERN_INFO"[probe:%s]: platform_get_resource  for bar %d not found\n", pci_devName, i);
 			pci_bar_addr[i] = 0;
-			pci_bar_size[i] = 0;
 			pci_bar_end[i] = 0;
 		} else {
 			//get the control memory size
 			pci_bar_addr[i] = resource->start;
-			pci_bar_size[i] = resource_size(resource);
 			pci_bar_end[i] = resource->end;
 			printk(KERN_INFO"[probe:%s]: platform name is: %s\n", pci_devName, resource->name);
-			printk(KERN_INFO"[probe:%s]: platform bar %d size is:0x%lx\n", pci_devName, i, pci_bar_size[i]);
+			printk(KERN_INFO"[probe:%s]: platform bar %d size is:0x%lx\n", pci_devName, i, (unsigned long)resource_size(resource));
 			printk(KERN_INFO"[probe:%s]: platform bar %d start is:%lx end is:%lx\n", pci_devName, i, pci_bar_addr[i], pci_bar_end[i]);
 			//map the hardware space to virtual space
 			pci_bar_vir_addr[i] = devm_ioremap_resource(&pdev->dev, resource);
@@ -1425,8 +1421,8 @@ int pci_open(struct inode *inode, struct file *filep)
 
 	s = (struct mod_desc *)kmalloc(sizeof(struct mod_desc), GFP_KERNEL);
 	s->minor = MINOR(inode->i_rdev);
-	s->axi_addr = 0;
-	s->axi_addr_ctl = 0;
+	s->axi_addr = -1;
+	s->axi_addr_ctl = -1;
 	s->mode = 0;
 	s->int_num = 100;
 	s->master_num = 0;
@@ -1834,7 +1830,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 					/*Initialize the AXI_STREAM_FIFO*/
 					/*for now we will initialize all as interrupting for read*/
 					//					/*check to see if the AXI addresses have been set*/
-					if((mod_desc->axi_addr == 0) | (mod_desc->axi_addr_ctl == 0)) {
+					if((mod_desc->axi_addr == -1) | (mod_desc->axi_addr_ctl == -1)) {
 						printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR: axi addresses of AXI STREAM FIFO not set\n", minor);
 						printk(KERN_INFO"[pci_%x_ioctl]: \tset the AXI addresses then set mode again\n", minor);
 						return ERROR;
@@ -2377,7 +2373,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 				}
 				bytes = axi_stream_fifo_d2r(mod_desc);
 
-				if(bytes == 0) {					
+				if(bytes == 0) {
 					verbose_axi_fifo_write_printk(KERN_INFO"[pci_%x_read]: No data to read from axi stream fifo\n" , minor);
 				} else {
 					if(bytes <= count){
@@ -2387,7 +2383,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 					else if(count < bytes) {
 						bytes = axi_stream_fifo_read_direct((size_t)count, mod_desc->dma_read_addr, axi_pcie_m+mod_desc->dma_offset_read, mod_desc, mod_desc->dma_size);
 					}
-					
+
 					verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: copy_to_user (0x%p, 0x%p, 0x%zx)\n" , minor, &buf, mod_desc->dma_read_addr, count);
 					if( copy_to_user(buf, mod_desc->dma_read_addr, count) ) {
 						printk(KERN_INFO"[pci_%x_read]: !!!!!!!!ERROR copy_to_user\n" , minor);

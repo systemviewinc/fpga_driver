@@ -427,7 +427,7 @@ int write_thread(void *in_param) {
 						wait_event_interruptible_timeout(thread_q_head_write,
 										 ( atomic_read(&thread_q_write) == 1 || kthread_should_stop() ),
 										 msecs_to_jiffies(1));
-						
+
 						//waits until thread_q_write is true or we should stop the thread (previous methods of exitings weren't working -MM)
 						atomic_set(&thread_q_write, 0);	// the threaded way
 
@@ -569,17 +569,17 @@ static int dma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, u32 xfer_type)
 		while(cdma_num == -1 && --attempts != 0) {
 			cdma_num = cdma_query();
 			schedule();
-		}			
+		}
 		if (cdma_num == -1) {
 			printk(KERN_INFO"\t\t[dma_transfer]: could not get cdma will sleep 10 msecs cdma_use(%d,%d,%d,%d)\n",
 			       cdma_use_count[0],cdma_use_count[1],cdma_use_count[2],cdma_use_count[3]);
 			if (xfer_type & HOST_WRITE)
 				wait_event_interruptible_timeout(thread_q_head_write,1,msecs_to_jiffies(10));
-			else 
+			else
 				wait_event_interruptible_timeout(thread_q_head_read,1,msecs_to_jiffies(10));
 			attempts = 1000;
 			goto cdma_retry;
-		}		
+		}
 		// if write check required and dma max write is set
 		if((xfer_type & HOST_WRITE) && dma_max_write_size && BTT > dma_max_write_size) {
 			max_xfer_size = dma_max_write_size;
@@ -1086,7 +1086,7 @@ int cdma_init(int cdma_num, uint cdma_addr)
 		printk(KERN_INFO"\t\t[cdma_idle_%x_init]: \t!!!!!!!!ERROR: in direct_read!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA config after configuring: ('0x%08x') pcie_ctl: ('0x%08x')\n", cdma_num, cdma_status, pcie_ctl_set);
+	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA config after configuring: ('0x%08x')\n", cdma_num, cdma_status);
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: ****************Setting CDMA AXI Address:%x Complete*************************************\n", cdma_num, cdma_addr);
 
 	cdma_set[cdma_num] = 1;
