@@ -510,7 +510,7 @@ static int dma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, u32 xfer_type)
 				//memcpy(xdma_h2c_da[xdma_channel],xfer_mem,xfer_size);
 				sg_dma_address(&sg) = l_sa;//(dma_addr_t)xdma_h2c_buff[xdma_channel];
 
-				verbose_cdma_printk(KERN_INFO"vsi_driver:[%s] DMA_TO_DEVICE l_sa 0x%p l_da 0x%p xdma_b 0x%p xfer_size %d, BTT %d\n",
+				verbose_dma_printk(KERN_INFO"vsi_driver:[%s] DMA_TO_DEVICE l_sa 0x%p l_da 0x%p xdma_b 0x%p xfer_size %d, BTT %d\n",
 						    __FUNCTION__ , (void*)l_sa, (void*)l_da, (void*)xdma_h2c_buff[xdma_channel], xfer_size, l_btt);
 
 				ret = xdma_xfer_submit(xdma_channel_list[xdma_channel].h2c,
