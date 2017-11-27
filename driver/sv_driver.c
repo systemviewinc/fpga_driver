@@ -617,7 +617,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		}
 	}
 	else if(driver_type == AWS) {
-	 	if(msi_msix_capable(pci_dev_struct, PCI_CAP_ID_MSIX)) {
+		if(msi_msix_capable(pci_dev_struct, PCI_CAP_ID_MSIX)) {
 			// do AWS Specific stuff
 			int i;
 			int req_nvec = MAX_NUM_ENGINES + MAX_USER_IRQ;
@@ -653,14 +653,6 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 					memcpy(&xdma_dev_s->entry[i], &sv_msix_entry[i], sizeof(xdma_dev_s->entry[i]));
 					printk(KERN_INFO"[probe:%s]: entry %d, vector IRQ#%d\n", pci_devName, i, xdma_dev_s->entry[i].vector);
 				}
-				xdma_num_channels = sv_xdma_device_open(pci_dev_struct, xdma_dev_s, &xdma_channel_list);
-				if(xdma_num_channels < 0) {
-					printk(KERN_INFO"[probe:%s]: sv_xdma_device_open failed\n", pci_devName);
-					sv_pci_remove(dev);
-					return ERROR;
-				}
-				xdma_init_sv(xdma_num_channels);
-				verbose_printk(KERN_INFO"[probe:%s]: xdma initialized with %d channels\n", pci_devName, xdma_num_channels);
 			}
 		} else {
 			verbose_printk(KERN_INFO"[probe:%s]: MSI capable\n", pci_devName);
@@ -675,6 +667,18 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 				return ERROR;
 			}
 		}
+
+		xdma_num_channels = sv_xdma_device_open(pci_dev_struct, xdma_dev_s, &xdma_channel_list);
+		if(xdma_num_channels < 0) {
+			printk(KERN_INFO"[probe:%s]: sv_xdma_device_open failed\n", pci_devName);
+			sv_pci_remove(dev);
+			return ERROR;
+		}
+		xdma_init_sv(xdma_num_channels);
+		verbose_printk(KERN_INFO"[probe:%s]: xdma initialized with %d channels\n", pci_devName, xdma_num_channels);
+
+
+
 	}
 	else{
 		verbose_printk(KERN_INFO"[probe:%s]: ERROR MSI-X capable unknown type\n", pci_devName);
@@ -747,7 +751,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 			printk(KERN_INFO"[probe:%s]: !!!!!!!!ERROR pcie_ctl_init(0x%llx, 0x%llx)\n", pci_devName, (u64)pcie_ctl_address, (u64)(dma_addr_base - axi_pcie_m));
 			sv_pci_remove(dev);
 			return ERROR;
-	 	}
+		}
 	} else if(pcie_ctl_address != 0xFFFFFFFF) {
 		printk(KERN_INFO"[probe:%s]: axi2pcie_bar0_size not set\n", pci_devName);
 		printk(KERN_INFO"[probe:%s]: If this is a gen2 PCIE design address translation will fail\n", pci_devName);
@@ -976,7 +980,7 @@ static void sv_pci_remove(struct pci_dev *dev)
 
 	}
 	else {
-	 	if(msi_msix_capable(dev, PCI_CAP_ID_MSIX)) {
+		if(msi_msix_capable(dev, PCI_CAP_ID_MSIX)) {
 			int i ;
 			for (i = 0 ; i < MAX_INTERRUPTS; i++)
 				free_irq (sv_msix_entry[i].vector, dev);
@@ -1487,7 +1491,7 @@ int pci_release(struct inode *inode, struct file *filep)
 	 * Might need to find a way to kfree() the other open
 	 * instances of the file. Or restrict that each file
 	 * only be open once. */
- 	int in_read_fifo_count, in_write_fifo_count, try_count = 0;
+	int in_read_fifo_count, in_write_fifo_count, try_count = 0;
 	struct mod_desc* mod_desc;
 
 	//printk(KERN_INFO"[pci_release]: Attempting to close file minor number: %d\n", mod_desc->minor);
@@ -1583,9 +1587,9 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	mod_desc = filep->private_data;
 	minor = mod_desc->minor;
 
-  if(arg == 0){
-    arg_loc = 0;
-  }
+	if(arg == 0){
+		arg_loc = 0;
+	}
 	else if( copy_from_user(&arg_loc, argp, sizeof(u64)) ) {
 		printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR copy_to_user\n", minor);
 		return ERROR;
@@ -1695,9 +1699,9 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			} else { //We are disabling keyhole write
 				verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the CDMA Keyhole WRITE as DISABLED\n", minor);
 				if( cdma_config_set(bit_vec, 0, 1) ) {	//value of 0 means we want to UNSET the register
-	 				printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR reading from AXI Streaming FIFO control interface\n", minor);
-	 				return ERROR;
-	 			}
+					printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR reading from AXI Streaming FIFO control interface\n", minor);
+					return ERROR;
+				}
 			}
 			break;
 
@@ -2051,12 +2055,12 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 					//wake up write thread
 					atomic_set(&thread_q_write, 1);
 					wake_up_interruptible(&thread_q_head_write);
-					verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: waking up write thread a\n", minor);
+					verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: not enough room in the the write buffer, waking up write thread a\n", minor);
 
 					verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: pci_write is going to sleep ZzZzZzZzZzZzZz, room in buffer: %d\n", minor, room_in_buffer(wtk, wth, full, mod_desc->dma_size));
 					if( wait_event_interruptible(pci_write_head, atomic_read(mod_desc->pci_write_q) == 1) ) {
 						printk(KERN_INFO"[pci_%x_write]: !!!!!!!!ERROR wait_event_interruptible\n", minor);
-	 	 				return ERROR;
+						return ERROR;
 					}
 					atomic_set(mod_desc->pci_write_q, 0);
 					verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: woke up the sleeping pci_write function!!\n", minor);
@@ -2710,8 +2714,8 @@ int pci_mmap(struct file *filep, struct vm_area_struct *vma) {
 		return ERROR;
 	}
 
-  vma->vm_ops = &mmap_vm_ops;
-  vma->vm_private_data = filep->private_data;
+	vma->vm_ops = &mmap_vm_ops;
+	vma->vm_private_data = filep->private_data;
 	mmap_open(vma);
 
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: ************************************************************************\n", minor);

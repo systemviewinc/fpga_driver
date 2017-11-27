@@ -429,7 +429,7 @@ int xdma_init_sv(int num_channels);
  * @param keyhole_en Instructs the CDMA to to a keyhole transaction or not
  * @param cdma_num Instructs which CDMA to use (Assumes it has been locked)
 */
-int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num);
+int cdma_transfer(u64 l_sa, u64 l_da, u32 l_btt, int keyhole_en, int cdma_num);
 /**
  * @brief This function is used to acknowledge a CDMA transaction. It will check
  * for any failures.

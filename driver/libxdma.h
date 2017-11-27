@@ -348,7 +348,7 @@ struct xdma_irq {
 	irq_handler_t handler;
 
 	const char *name;
-	void *dev;	
+	void *dev;
 };
 
 /* XDMA PCIe device specific book-keeping */
