@@ -579,12 +579,12 @@ static int dma_transfer(u64 l_sa, u64 l_da, u32 l_btt, int keyhole_en, u32 xfer_
 			goto cdma_retry;
 		}
 		// if write check required and dma max write is set
-		if((xfer_type & HOST_WRITE) && dma_max_write_size && BTT > dma_max_write_size) {
+		if((xfer_type & HOST_WRITE) && dma_max_write_size && l_btt > dma_max_write_size) {
 			max_xfer_size = dma_max_write_size;
-		} else if((xfer_type & HOST_READ) && dma_max_read_size && BTT > dma_max_read_size) {
+		} else if((xfer_type & HOST_READ) && dma_max_read_size && l_btt > dma_max_read_size) {
 			max_xfer_size = dma_max_read_size;
 		} else {
-			max_xfer_size = BTT;
+			max_xfer_size = l_btt;
 		}
 		do {
 			int xfer_size = l_btt > max_xfer_size ? max_xfer_size : l_btt;
