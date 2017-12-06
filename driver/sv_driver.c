@@ -1680,6 +1680,12 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 				printk(KERN_INFO"[pci_%x_ioctl]: \t!!!!file open FAILURE!!!!.\n", minor);
 				return ERROR;
 			}
+			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Returning dma size:%zu\n", minor, mod_desc->dma_size);
+
+			if( copy_to_user((void *)arg, &(mod_desc->dma_size), sizeof(size_t)) ) {
+				printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR copy_to_user\n", minor);
+				return ERROR;
+			}
 			break;
 
 
