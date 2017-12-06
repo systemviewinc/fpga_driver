@@ -1,16 +1,12 @@
 Instructions to build:
 
-Download and copy vsi_driver_2016_4.tar.gz into the directory where you would like to build the driver.
-Extract the tarball:
-
-tar xvzf vsi_driver_2016_4.tar.gz
-
+Clone the fpga_driver_build repository.
 
 Modify Makefile so that KDIR points to your driver headers
 
 Source the xilinx environment settings:
 
-source /opt/Xilinx/Vivado/2016.4/settings64.sh   
+source /opt/Xilinx/Vivado/<<version>>/settings64.sh   
 **use settings32.sh on 32-bit operating systems**
 
 

@@ -7,20 +7,17 @@ Create a template module.
 petalinux-create --type modules --name vsidriver --enable
 	**The name must be lowercase and must not contain special characters**
 
-Download and copy vsi_driver_yotco_2016_4.tar.gz into the following directory within your petalinux project:
+Clone the vsi_driver_build repository into the following directory.
 
 <petalinux-project>/project-spec/meta-user/recipes-modules/vsidriver/vsidriver/
 
 
-Extract the tarball:
-
-tar xvzf vsi_driver_yotco_2016_4.tar.gz
 Modify <petalinux-project>/project-spec/meta-user/recipe-modules/vsidriver/vsidriver.bb as shown below:
 SRC_URI should look like:
 SRC_URI = "file://Makefile \
            	file://sv_driver.c \
 	file://sv_driver.h \
- 	file://${ARCH}/support_funcs.o_shipped \
+ 	file://support_funcs.c \
  	file://COPYING \
 	“
 
@@ -39,7 +36,7 @@ petalinux-build -c vsidriver -x do_build
 petalinux-build -c vsidriver -x do_install
 
 petalinux-build
-The driver will now be in the filesystem at: 
+The driver will now be in the filesystem at:
 
 /lib/modules/<version>-xilinx/extra/vsi_driver.ko
 
@@ -47,5 +44,3 @@ The driver will now be in the filesystem at:
 
 
 Petalinux 2016.4 module build reference - https://www.xilinx.com/support/answers/68441.html
-
-

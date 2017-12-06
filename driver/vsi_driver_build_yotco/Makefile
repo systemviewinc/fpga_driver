@@ -1,5 +1,5 @@
 obj-m += vsi_driver.o
-vsi_driver-y += sv_driver.o ${ARCH}/support_funcs.o
+vsi_driver-y += sv_driver.o support_funcs.o
 
 all:
 	make -C $(KERNEL_SRC) M=$(CURDIR)
