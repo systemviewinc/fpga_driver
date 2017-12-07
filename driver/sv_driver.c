@@ -617,7 +617,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		}
 	}
 	else if(driver_type == AWS) {
-	 	if(msi_msix_capable(pci_dev_struct, PCI_CAP_ID_MSIX)) {
+		if(msi_msix_capable(pci_dev_struct, PCI_CAP_ID_MSIX)) {
 			// do AWS Specific stuff
 			int i;
 			int req_nvec = MAX_NUM_ENGINES + MAX_USER_IRQ;
@@ -689,7 +689,6 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		sv_pci_remove(dev);
 		return ERROR;
 	}
-
 #endif
 	//register the char device
 	if(0 > register_chrdev(major, pci_devName, &pci_fops)){
@@ -747,7 +746,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 			printk(KERN_INFO"[probe:%s]: !!!!!!!!ERROR pcie_ctl_init(0x%llx, 0x%llx)\n", pci_devName, (u64)pcie_ctl_address, (u64)(dma_addr_base - axi_pcie_m));
 			sv_pci_remove(dev);
 			return ERROR;
-	 	}
+		}
 	} else if(pcie_ctl_address != 0xFFFFFFFF) {
 		printk(KERN_INFO"[probe:%s]: axi2pcie_bar0_size not set\n", pci_devName);
 		printk(KERN_INFO"[probe:%s]: If this is a gen2 PCIE design address translation will fail\n", pci_devName);
@@ -976,7 +975,7 @@ static void sv_pci_remove(struct pci_dev *dev)
 
 	}
 	else {
-	 	if(msi_msix_capable(dev, PCI_CAP_ID_MSIX)) {
+		if(msi_msix_capable(dev, PCI_CAP_ID_MSIX)) {
 			int i ;
 			for (i = 0 ; i < MAX_INTERRUPTS; i++)
 				free_irq (sv_msix_entry[i].vector, dev);
@@ -1683,7 +1682,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Returning dma size:%zu\n", minor, mod_desc->dma_size);
 
 			if( copy_to_user((void *)arg, &(mod_desc->dma_size), sizeof(size_t)) ) {
-				printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR copy_to_user\n", minor);
+				verbose_printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR copy_to_user\n", minor);
 				return ERROR;
 			}
 			break;
@@ -1701,9 +1700,9 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			} else { //We are disabling keyhole write
 				verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the CDMA Keyhole WRITE as DISABLED\n", minor);
 				if( cdma_config_set(bit_vec, 0, 1) ) {	//value of 0 means we want to UNSET the register
-	 				printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR reading from AXI Streaming FIFO control interface\n", minor);
-	 				return ERROR;
-	 			}
+					printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR reading from AXI Streaming FIFO control interface\n", minor);
+					return ERROR;
+				}
 			}
 			break;
 
@@ -1762,7 +1761,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		case GET_DRIVER_STATISTICS:
 			stats = (struct statistics *)kmalloc(sizeof(struct statistics), GFP_KERNEL);
 			if( copy_from_user(stats, (void *)arg, sizeof(struct statistics)) ) {
-				printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR copy_to_user\n", minor);
+				printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR copy_from_user\n", minor);
 				return ERROR;
 			}
 			//	statistics = (struct statistics *)arg;
@@ -2057,12 +2056,12 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 					//wake up write thread
 					atomic_set(&thread_q_write, 1);
 					wake_up_interruptible(&thread_q_head_write);
-					verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: waking up write thread a\n", minor);
+					verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: not enough room in the the write buffer, waking up write thread a\n", minor);
 
 					verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: pci_write is going to sleep ZzZzZzZzZzZzZz, room in buffer: %d\n", minor, room_in_buffer(wtk, wth, full, mod_desc->dma_size));
 					if( wait_event_interruptible(pci_write_head, atomic_read(mod_desc->pci_write_q) == 1) ) {
 						printk(KERN_INFO"[pci_%x_write]: !!!!!!!!ERROR wait_event_interruptible\n", minor);
-	 	 				return ERROR;
+						return ERROR;
 					}
 					atomic_set(mod_desc->pci_write_q, 0);
 					verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: woke up the sleeping pci_write function!!\n", minor);
@@ -2162,7 +2161,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 			axi_dest = mod_desc->axi_addr + *f_pos;
 
-			mmap_addr_offset = ((size_t)buf - mod_desc->mmap_write_start_addr);		//(difference between vitrual write address and given buffer)
+			mmap_addr_offset = ((size_t)buf - mod_desc->mmap_start_addr);		//(difference between vitrual write address and given buffer)
 
 			if(mod_desc->keyhole_config & 0x1)
 				transfer_type = KEYHOLE_WRITE;
@@ -2532,7 +2531,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			// Here we will decide whether to do a zero copy DMA, or to read directly from the peripheral
 			axi_dest = mod_desc->axi_addr + *f_pos + internal_offset;
 
-			mmap_addr_offset = ((size_t)buf - mod_desc->mmap_read_start_addr);		//(difference between vitrual write address and given buffer)
+			mmap_addr_offset = ((size_t)buf - mod_desc->mmap_start_addr);		//(difference between vitrual write address and given buffer)
 
 			if(mod_desc->keyhole_config & 0x1)
 				transfer_type = KEYHOLE_READ;
@@ -2688,22 +2687,11 @@ int pci_mmap(struct file *filep, struct vm_area_struct *vma) {
 		printk(KERN_INFO "[pci_%x_mmap]: WARNING: vm_pgoff != 0, vm_pg_off ignored \n", minor);
 	}
 
-	if((vma->vm_flags & VM_READ) == VM_READ && (vma->vm_flags & VM_WRITE) == VM_WRITE){
+//fix me, using the "read" buffer for everything, change to 1 buffer
+	if((vma->vm_flags & VM_READ) == VM_READ || (vma->vm_flags & VM_WRITE) == VM_WRITE){
 		printk(KERN_INFO "[pci_%x_mmap]: Using dma_mmap_coherent for read/write space\n", minor);
 		ret = dma_mmap_coherent(NULL, vma, mod_desc->dma_read_addr,	dma_addr_base+mod_desc->dma_offset_read, length);
-		mod_desc->mmap_read_start_addr = vma->vm_start;
-
-	}
-	else if((vma->vm_flags & VM_READ) == VM_READ){
-		printk(KERN_INFO "[pci_%x_mmap]: Using dma_mmap_coherent for read space\n", minor);
-		ret = dma_mmap_coherent(NULL, vma, mod_desc->dma_read_addr,	dma_addr_base+mod_desc->dma_offset_read, length);
-		mod_desc->mmap_read_start_addr = vma->vm_start;
-
-	}
-	else if((vma->vm_flags & VM_WRITE) == VM_WRITE){
-		printk(KERN_INFO "[pci_%x_mmap]: Using dma_mmap_coherent for write space\n", minor);
-		ret = dma_mmap_coherent(NULL, vma, mod_desc->dma_write_addr,	dma_addr_base+mod_desc->dma_offset_write, length);
-		mod_desc->mmap_write_start_addr = vma->vm_start;
+		mod_desc->mmap_start_addr = vma->vm_start;
 
 	}
 	else {
@@ -2716,8 +2704,8 @@ int pci_mmap(struct file *filep, struct vm_area_struct *vma) {
 		return ERROR;
 	}
 
-  vma->vm_ops = &mmap_vm_ops;
-  vma->vm_private_data = filep->private_data;
+	vma->vm_ops = &mmap_vm_ops;
+	vma->vm_private_data = filep->private_data;
 	mmap_open(vma);
 
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: ************************************************************************\n", minor);
