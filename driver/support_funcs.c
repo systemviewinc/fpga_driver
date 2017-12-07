@@ -475,16 +475,12 @@ int write_thread(void *in_param) {
  * @param BTT Number of bytes to transfer.
  * @param keyhole_en Instructs the CDMA to to a keyhole transaction or not
 */
-static int dma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, u32 xfer_type)
+static int dma_transfer(u64 l_sa, u64 l_da, u32 l_btt, int keyhole_en, u32 xfer_type)
 {
-	u64 l_sa = SA;
-	u64 l_da = DA;
-	u32 l_btt = BTT;
 	u32 max_xfer_size;
 	int ret = 0, cdma_num = -1, xdma_channel = -1, attempts = 10000;
 	struct sg_table sg_table;
 	struct scatterlist sg;
-	//void *xfer_mem;
 
 	verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: **** Starting XDMA transfer ****\n");
 
@@ -511,8 +507,8 @@ static int dma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, u32 xfer_type)
 				//memcpy(xdma_h2c_da[xdma_channel],xfer_mem,xfer_size);
 				sg_dma_address(&sg) = l_sa;//(dma_addr_t)xdma_h2c_buff[xdma_channel];
 
-				verbose_dma_printk(KERN_INFO"vsi_driver:[%s] DMA_TO_DEVICE l_sa 0x%p l_da 0x%p xdma_b 0x%p xfer_size %d, BTT %d\n",
-						    __FUNCTION__ , (void*)l_sa, (void*)l_da, (void*)xdma_h2c_buff[xdma_channel], xfer_size, l_btt);
+				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer] DMA_TO_DEVICE l_sa: 0x%p, l_da: 0x%p, xdma_b: 0x%p, xfer_size: %d, BTT: %d\n",
+								(void*)l_sa, (void*)l_da, (void*)xdma_h2c_buff[xdma_channel], xfer_size, l_btt);
 
 				ret = xdma_xfer_submit(xdma_channel_list[xdma_channel].h2c,
 						       DMA_TO_DEVICE,
@@ -582,12 +578,12 @@ static int dma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, u32 xfer_type)
 			goto cdma_retry;
 		}
 		// if write check required and dma max write is set
-		if((xfer_type & HOST_WRITE) && dma_max_write_size && BTT > dma_max_write_size) {
+		if((xfer_type & HOST_WRITE) && dma_max_write_size && l_btt > dma_max_write_size) {
 			max_xfer_size = dma_max_write_size;
-		} else if((xfer_type & HOST_READ) && dma_max_read_size && BTT > dma_max_read_size) {
+		} else if((xfer_type & HOST_READ) && dma_max_read_size && l_btt > dma_max_read_size) {
 			max_xfer_size = dma_max_read_size;
 		} else {
-			max_xfer_size = BTT;
+			max_xfer_size = l_btt;
 		}
 		do {
 			int xfer_size = l_btt > max_xfer_size ? max_xfer_size : l_btt;
@@ -1499,7 +1495,7 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: ********* CDMA TRANSFER %d INITIALIZATION *************\n", cdma_usage_cnt);
 
 	// Step 3. Write the desired transfer source address to the Source Address (SA) register. The
- 	// transfer data at the source address must be valid and ready for transfer. If the address
+	// transfer data at the source address must be valid and ready for transfer. If the address
 	// space selected is more than 32, write the SA_MSB register also.
 	axi_dest = cdma_address[cdma_num] + CDMA_SA;
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: writing dma SA address ('0x%012llx') to CDMA at axi address:0x%x\n", SA, axi_dest);
@@ -1510,7 +1506,7 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 	direct_write(axi_dest , (void*)&SA_LSB, 4, NORMAL_WRITE);				//todo add error check
 	direct_write(axi_dest + 4, (void*)&SA_MSB, 4, NORMAL_WRITE);			//todo add error check
 
- 	// Step 4. Write the desired transfer destination address to the Destination Address (DA) register.
+	// Step 4. Write the desired transfer destination address to the Destination Address (DA) register.
 	// If the address space selected is more than 32, then write the DA_MSB register also.
 	axi_dest = cdma_address[cdma_num] + CDMA_DA;
 
@@ -1542,7 +1538,7 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 	// Step 8. Clear the CDMASR.IOC_Irq bit by writing a 1 to the DMASR.IOC_Irq bit position.
 	//--------------------------------------------NA---------------------------------------------
 
- 	// Step 9. Ready for another transfer. Go back to step 1.
+	// Step 9. Ready for another transfer. Go back to step 1.
 
 	// Acknowledge the CDMA and check for error status
 	cdma_idle_poll(cdma_num);													//verify idle before checking status
@@ -1828,10 +1824,10 @@ size_t axi_stream_fifo_read(size_t count, char * buf_base_addr, u64 hw_base_addr
 	mod_desc->axi_fifo_rlr = mod_desc->axi_fifo_rdfo = 0;
 
 	if(count == 0) {
-	 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: There is either no data to read, or less than 8 bytes.\n");
+		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: There is either no data to read, or less than 8 bytes.\n");
 		return 0; // nothing to read
 	} else {
-	 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: count = %zd.\n", count);
+		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: count = %zd.\n", count);
 	}
 
 	//copy the count to the ring buffer to act as the "header"
@@ -1924,10 +1920,10 @@ size_t axi_stream_fifo_read_direct(size_t count, char * buf_base_addr, u64 hw_ba
 	mod_desc->axi_fifo_rlr = mod_desc->axi_fifo_rdfo = 0;
 
 	if(count == 0) {
-	 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: There is either no data to read, or less than 8 bytes.\n");
+		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: There is either no data to read, or less than 8 bytes.\n");
 		return 0; // nothing to read
 	} else {
-	 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: count = %zd.\n", count);
+		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: count = %zd.\n", count);
 	}
 
 	axi_dest = mod_desc->axi_addr + AXI_STREAM_RDFD;
