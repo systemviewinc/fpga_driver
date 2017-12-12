@@ -322,11 +322,8 @@ struct mod_desc {
 	atomic_t * in_write_fifo_count;		/**< The number of times the mod_desc is in the write fifo, once it reaches 0 we can kfree it */
 	atomic_t * mmap_count;						/**< The number of current mmaps if it is zero we will read/write the using the mmap section of memory */
 
-	unsigned long mmap_read_start_addr;
-	unsigned long mmap_read_end_addr;
-
-	unsigned long mmap_write_start_addr;
-	unsigned long mmap_write_end_addr;
+	unsigned long mmap_start_addr;
+	unsigned long mmap_end_addr;
 
 	bool file_open;							/**< True if file is open, used to process the mod_desc (or throw it away) in read/write threads */
 
@@ -429,7 +426,7 @@ int xdma_init_sv(int num_channels);
  * @param keyhole_en Instructs the CDMA to to a keyhole transaction or not
  * @param cdma_num Instructs which CDMA to use (Assumes it has been locked)
 */
-int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num);
+int cdma_transfer(u64 l_sa, u64 l_da, u32 l_btt, int keyhole_en, int cdma_num);
 /**
  * @brief This function is used to acknowledge a CDMA transaction. It will check
  * for any failures.
