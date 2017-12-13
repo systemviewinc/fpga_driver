@@ -857,7 +857,7 @@ int dma_file_init(struct mod_desc *mod_desc, char *dma_buffer_base, u64 dma_buff
 		mod_desc->dma_offset_read = dma_current_offset;				//set the dma start address for the peripheral read
 		mod_desc->dma_offset_write = dma_current_offset + (u32)dma_file_size; //set the dma start address for the peripheral write
 
-		mod_desc->dma_read_addr = (dma_buffer_base + (u64)dma_current_offset); 	//actual pointer to kernel buffer
+		mod_desc->dma_read_addr = (dma_buffer_base + (u64)dma_current_offset);	//actual pointer to kernel buffer
 		verbose_printk(KERN_INFO"[dma_file_init]: DMA kernel read address set to:0x%p\n", mod_desc->dma_read_addr);
 		mod_desc->dma_write_addr = (dma_buffer_base + (u64)dma_current_offset + dma_file_size);				//actual pointer to kernel buffer
 		verbose_printk(KERN_INFO"[dma_file_init]: DMA kernel write address set to:0x%p\n", mod_desc->dma_write_addr);
@@ -1049,22 +1049,22 @@ int cdma_init(int cdma_num, uint cdma_addr)
 	cdma_address[cdma_num] = cdma_addr;
 	mutex_init(&cdma_sem[cdma_num]);
 
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: *******************Setting CDMA AXI Address:%x ******************************************\n", cdma_num, cdma_address[cdma_num]);
+	printk(KERN_INFO"\t\t[cdma_0x%x_init]: *******************Setting CDMA AXI Address:%x ******************************************\n", cdma_num, cdma_address[cdma_num]);
 
 
 	//wait for reset to finish	axi_dest = cdma_addr + CDMA_CR;
 	axi_dest = cdma_addr + CDMA_CR;
 	if( direct_read(axi_dest, (void *)&cdma_status, 4, NORMAL_READ) ) {
-		printk(KERN_INFO"\t\t[cdma_idle_%x_init]: \t!!!!!!!!ERROR: in direct_read!!!!!!!\n", cdma_num);
+		printk(KERN_INFO"\t\t[cdma_idle_%x_init]: \t!!!!!!!!ERROR: in direct_read 0x%p !!!!!!!\n", cdma_num, axi_dest);
 		return ERROR;
 	}
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA configuration before reset: ('0x%08x')\n", cdma_num, cdma_status);
+	printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA configuration before reset: ('0x%08x')\n", cdma_num, cdma_status);
 
 
 	/*Issue a Soft Reset*/
 	axi_dest = cdma_addr + CDMA_CR;
 	cdma_status = 0x00000004;
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: sending a soft reset to the CDMA\n", cdma_num);
+	printk(KERN_INFO"\t\t[cdma_0x%x_init]: sending a soft reset to the CDMA\n", cdma_num);
 	if( direct_write(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE) ) {
 		printk(KERN_INFO"\t\t[cdma_idle_%x_init]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n", cdma_num);
 		return ERROR;
@@ -1075,7 +1075,7 @@ int cdma_init(int cdma_num, uint cdma_addr)
 		printk(KERN_INFO"\t\t[cdma_idle_%x_init]: \t!!!!!!!!ERROR: in direct_read!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA configuration after reset: ('0x%08x')\n", cdma_num, cdma_status);
+	printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA configuration after reset: ('0x%08x')\n", cdma_num, cdma_status);
 
 
 
@@ -1086,7 +1086,7 @@ int cdma_init(int cdma_num, uint cdma_addr)
 		return ERROR;
 	}
 
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA status before configuring: ('0x%08x')\n", cdma_num, cdma_status);
+	printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA status before configuring: ('0x%08x')\n", cdma_num, cdma_status);
 
 	/*Check the current config*/
 	axi_dest = cdma_addr + CDMA_CR;
@@ -1094,12 +1094,12 @@ int cdma_init(int cdma_num, uint cdma_addr)
 		printk(KERN_INFO"\t\t[cdma_idle_%x_init]: \t!!!!!!!!ERROR: in direct_read!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA config before configuring: ('0x%08x')\n", cdma_num, cdma_status);
+	printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA config before configuring: ('0x%08x')\n", cdma_num, cdma_status);
 
 	/*clear any pre existing interrupt*/
 	axi_dest = cdma_addr + CDMA_SR;
 	cdma_status = 0x00001000;
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: attempting to write: ('0x%08x') to cdma status reg\n", cdma_num, cdma_status);
+	printk(KERN_INFO"\t\t[cdma_0x%x_init]: attempting to write: ('0x%08x') to cdma status reg\n", cdma_num, cdma_status);
 	if( direct_write(axi_dest, (void *)&cdma_status, 4, NORMAL_WRITE) ) {
 		printk(KERN_INFO"\t\t[cdma_idle_%x_init]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n", cdma_num);
 		return ERROR;
@@ -1119,7 +1119,7 @@ int cdma_init(int cdma_num, uint cdma_addr)
 		printk(KERN_INFO"\t\t[cdma_idle_%x_init]: \t!!!!!!!!ERROR: in direct_read!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA status after configuring: ('0x%08x')\n", cdma_num, cdma_status);
+	printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA status after configuring: ('0x%08x')\n", cdma_num, cdma_status);
 
 	/*Check the current status*/
 	axi_dest = cdma_addr + CDMA_SR;
@@ -1127,7 +1127,7 @@ int cdma_init(int cdma_num, uint cdma_addr)
 		printk(KERN_INFO"\t\t[cdma_idle_%x_init]: \t!!!!!!!!ERROR: in data_transfer!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA status after configuring(data_transfer): ('0x%08x')\n", cdma_num, cdma_status);
+	printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA status after configuring(data_transfer): ('0x%08x')\n", cdma_num, cdma_status);
 
 	/*Check the current config*/
 	axi_dest = cdma_addr + CDMA_CR;
@@ -1135,8 +1135,8 @@ int cdma_init(int cdma_num, uint cdma_addr)
 		printk(KERN_INFO"\t\t[cdma_idle_%x_init]: \t!!!!!!!!ERROR: in direct_read!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA config after configuring: ('0x%08x')\n", cdma_num, cdma_status);
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: ****************Setting CDMA AXI Address:%x Complete*************************************\n", cdma_num, cdma_addr);
+	printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA config after configuring: ('0x%08x')\n", cdma_num, cdma_status);
+	printk(KERN_INFO"\t\t[cdma_0x%x_init]: ****************Setting CDMA AXI Address:%x Complete*************************************\n", cdma_num, cdma_addr);
 
 	cdma_set[cdma_num] = 1;
 
@@ -1527,7 +1527,7 @@ int cdma_transfer(u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: writing DA_LSB address ('0x%08x') to CDMA at axi address:0x%x\n", DA_LSB, axi_dest);
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: writing DA_MSB address ('0x%08x') to CDMA at axi address:0x%x\n", DA_MSB, axi_dest+4);
 
-	direct_write(axi_dest, 	(void*)&DA_LSB, 4, NORMAL_WRITE);			//todo add error check
+	direct_write(axi_dest,	(void*)&DA_LSB, 4, NORMAL_WRITE);			//todo add error check
 	direct_write(axi_dest+4, (void*)&DA_MSB, 4, NORMAL_WRITE);			//todo add error check
 	//read the status register
 
