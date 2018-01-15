@@ -45,26 +45,26 @@
 //#define BACK_PRESSURE 1
 #define RING_BUFF_SIZE_MULTIPLIER 2
 /********* printk statements *********/
-#define verbose_printk printk
-#define verbose_data_xfer_printk printk
-#define verbose_cdma_printk printk
-#define verbose_dma_printk printk
+// #define verbose_printk printk
+// #define verbose_data_xfer_printk printk
+// #define verbose_cdma_printk printk
+// #define verbose_dma_printk printk
 //#define verbose_cdmaq_printk printk
 //#define verbose_dmaq_printk printk
-#define verbose_axi_fifo_read_printk printk
-#define verbose_axi_fifo_write_printk printk
-#define verbose_isr_printk printk
+// #define verbose_axi_fifo_read_printk printk
+// #define verbose_axi_fifo_write_printk printk
+// #define verbose_isr_printk printk
 //#define verbose_poll_printk printk
 //#define very_verbose_poll_printk printk
-#define verbose_axi_fifo_d2r_printk printk
-#define verbose_direct_write_printk printk
-#define verbose_direct_read_printk printk
+// #define verbose_axi_fifo_d2r_printk printk
+// #define verbose_direct_write_printk printk
+// #define verbose_direct_read_printk printk
 //#define verbose_llseek_printk printk
-#define verbose_pci_read_printk printk
-#define verbose_pci_write_printk printk
-#define verbose_mmap_printk printk
-#define verbose_read_thread_printk printk
-#define verbose_write_thread_printk printk
+// #define verbose_pci_read_printk printk
+// #define verbose_pci_write_printk printk
+// #define verbose_mmap_printk printk
+// #define verbose_read_thread_printk printk
+// #define verbose_write_thread_printk printk
 
 
 #ifndef verbose_llseek_printk
