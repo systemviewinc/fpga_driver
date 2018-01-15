@@ -45,9 +45,9 @@ int vendor_id = PCI_VENDOR_ID_XILINX;	 /**< Insmod Patameter - PCIe vendor	*/
 int device_id = 100;	/**< Insmod Parameter - PCIe specific */
 int major = 241;/**< Insmod Parameter - Major number of Driver*/
 uint cdma_address[CDMA_MAX_NUM] = {0xFFFFFFFF}; /**< Insmod Parameter - the AXI Address of CDMA 1*/
-int cdma_count;	/**<  The number of elements in cdma_address (or max value)*/
-int pcie_bar_num; /**<  The number of elements in pcie_ctl_address (or max value)*/
-ulong pcie_ctl_address = 0xFFFFFFFF; /**<  The number of elements in pcie_ctl_address (or max value)*/
+int cdma_count;	/**< The number of elements in cdma_address (or max value)*/
+int pcie_bar_num; /**< The number of elements in pcie_ctl_address (or max value)*/
+ulong pcie_ctl_address = 0xFFFFFFFF; /**< The number of elements in pcie_ctl_address (or max value)*/
 ulong pcie_bar_address[BAR_MAX_NUM] = {0xFFFFFFFF};/**< Insmod Parameter - The AXI Address of the PCIe Control regs*/
 ulong pcie_m_address = 0xFFFFFFFF;/**< Insmod Parameter - AXI address of data transport slave address as viewed from CDMA */
 uint int_ctlr_address = 0xFFFFFFFF;/**< Insmod Parameter - AXI Address of Interrupt Controller*/
@@ -119,13 +119,6 @@ module_param(pcie_use_xdma, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< In
 MODULE_PARM_DESC(pcie_use_xdma, "USE XDMA Instead of CDMA");/**< Insmod Parameter */
 
 /*****************************************************************************/
-
-//Allow up to 5 bar to read/write to
-unsigned long pci_bar_addr[BAR_MAX_NUM];			/** < hardware base address of BARs */
-unsigned long pci_bar_end[BAR_MAX_NUM];			/** < hardware base address of BARs */
-char * pci_bar_vir_addr[BAR_MAX_NUM];		 /**< hardware base virtual address for BAR 1 (not currently used) */
-uint num_bars = 0;							//number of bars that direct read / direct write must look at
-
 
 struct pci_dev * pci_dev_struct = NULL; /**<pci device struct */
 struct platform_device * platform_dev_struct = NULL; /**< Platform device struct (for zynq) */
@@ -212,8 +205,10 @@ const u32 INT_CTRL_IAR		= 0x0C;	 /**< Interrupt Controller Register Offset, see 
 
 
 /*This is an array of interrupt structures to hold up to 8 peripherals*/
-struct mod_desc * mod_desc_arr[12] = { 0 }; /**< This is an array of Module Descriptions that is used to be indexed by interrupt number
+struct mod_desc * mod_desc_arr[MAX_FILE_DESC] = { 0 }; /**< This is an array of Module Descriptions that is used to be indexed by interrupt number
 						 * This is how the pci_isr knows which peripheral has sent the interrupt. */
+
+struct bar_info * bars = NULL;
 
 
 /* ************************* file operations *************************** */
@@ -280,7 +275,7 @@ struct file_operations pci_fops = {
 
 
 /**
- * @brief VM Operations Struct map: functions that the  kernel will invoke
+ * @brief VM Operations Struct map: functions that the kernel will invoke
  *						to operate in VMA
 */
 struct vm_operations_struct mmap_vm_ops = {
@@ -308,15 +303,24 @@ static struct pci_device_id ids[] = {
 MODULE_DEVICE_TABLE(pci, ids);
 
 /* functions & data used from libxdma.c */
-struct xdma_dev *xdma_dev_s;
-int xdma_num_channels;
-xdma_channel_tuple* xdma_channel_list = NULL;
+#if (XDMA_AWS == 1)
+	/******************************** AWS XDMA related **********************************/
+	struct xdma_dev *xdma_dev_s;
+	int xdma_num_channels;
+	xdma_channel_tuple* xdma_channel_list = NULL;
 
-u32 build_vector_reg(u32 a, u32 b, u32 c, u32 d) ;
-int msi_msix_capable(struct pci_dev *dev, int type) ;
-struct xdma_dev *sv_alloc_dev_instance(struct pci_dev *pdev);
-int sv_xdma_device_open (struct pci_dev *pdev, struct xdma_dev *lro, xdma_channel_tuple **tuple_p);
-void sv_xdma_device_close(struct pci_dev *pdev, struct xdma_dev *lro, xdma_channel_tuple *tuple);
+	u32 build_vector_reg(u32 a, u32 b, u32 c, u32 d) ;
+	int msi_msix_capable(struct pci_dev *dev, int type) ;
+	struct xdma_dev *sv_alloc_dev_instance(struct pci_dev *pdev);
+	int sv_xdma_device_open (struct pci_dev *pdev, struct xdma_dev *lro, xdma_channel_tuple **tuple_p);
+	void sv_xdma_device_close(struct pci_dev *pdev, struct xdma_dev *lro, xdma_channel_tuple *tuple);
+
+#else
+/******************************** NON XDMA related **********************************/
+struct xdma_dev *lro_global = NULL;
+
+#endif
+
 
 static const struct of_device_id sv_driver_match[] = {
 	{ .compatible = "xlnx,sv_driver_plat", },
@@ -351,7 +355,7 @@ static unsigned char skel_get_revision(struct pci_dev *dev)
 }
 
 
-static void write_msix_vectors(char *bar)
+static void aws_write_msix_vectors(char *bar)
 {
 	struct interrupt_regs *int_regs;
 	u32 reg_val;
@@ -390,7 +394,7 @@ static void write_msix_vectors(char *bar)
  *
  * @return
  */
-static int is_config_bar(char *bar)
+static int aws_is_config_bar(char *bar)
 {
 	u32 irq_id = 0;
 	u32 cfg_id = 0;
@@ -405,11 +409,11 @@ static int is_config_bar(char *bar)
 	cfg_id = ioread32(&cfg_regs->identifier);
 
 	if(((irq_id & mask)== IRQ_BLOCK_ID) && ((cfg_id & mask)== CONFIG_BLOCK_ID)) {
-		verbose_printk(KERN_INFO"[is_config_bar]: BAR %p is the XDMA config BAR\n", bar);
+		verbose_printk(KERN_INFO"[aws_is_config_bar]: BAR %p is the XDMA config BAR\n", bar);
 		flag = 1;
 	} else {
-		verbose_printk(KERN_INFO"[is_config_bar]: BAR %p is not XDMA config BAR\n", bar);
-		verbose_printk(KERN_INFO"[is_config_bar]: BAR %p is NOT the XDMA config BAR: 0x%x, 0x%x.\n", bar, irq_id, cfg_id);
+		verbose_printk(KERN_INFO"[aws_is_config_bar]: BAR %p is not XDMA config BAR\n", bar);
+		verbose_printk(KERN_INFO"[aws_is_config_bar]: BAR %p is NOT the XDMA config BAR: 0x%x, 0x%x.\n", bar, irq_id, cfg_id);
 		flag = 0;
 	}
 
@@ -431,9 +435,9 @@ static void aws_enable_interrupts(struct pci_dev *dev)
 		bar_map[i].bar = pci_iomap(dev, i, bar_map[i].bar_len);
 		verbose_printk(KERN_INFO"[aws_enable_interrupts:%s]: bar %d, len %d, start 0x%p, mapped @ 0x%p\n", pci_devName,
 					 i, (int)bar_map[i].bar_len, (void *)bar_map[i].bar_start, bar_map[i].bar);
-		if(aws_config_idx == -1 && is_config_bar(bar_map[i].bar)) {
+		if(aws_config_idx == -1 && aws_is_config_bar(bar_map[i].bar)) {
 			aws_config_idx = i;
-			write_msix_vectors(bar_map[i].bar);
+			aws_write_msix_vectors(bar_map[i].bar);
 		} else {
 			pci_iounmap(dev, bar_map[i].bar);
 		}
@@ -449,6 +453,8 @@ static void aws_disable_interrupts(struct pci_dev *dev)
 	iowrite32(~0, &reg->user_int_enable_w1c);
 	pci_iounmap(dev, bar_map[aws_config_idx].bar);
 }
+
+#if (XDMA_AWS == 1)
 
 static void aws_get_max_sizes(void)
 {
@@ -482,17 +488,19 @@ static void aws_get_max_sizes(void)
 	verbose_printk(KERN_INFO"[aws_disable_interrupts:%s]: dma_max_read_size %d, dma_max_write_size = %d\n", pci_devName, dma_max_read_size, dma_max_write_size);
 }
 
+#endif
+
 /**
  * @brief This is the Probe function called for PCIe Devices
 */
+#if (XDMA_AWS == 0)
+
 static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
 	int int_ctrl_set;
-	int i;
-	int j;
-	/* Do probing type stuff here.
-	 * 	 * Like calling request_region();
-	 * 	 	 */
+	int rc = 0, i;
+	int bar_id_list[XDMA_BAR_NUM];
+	//struct bar_info *bars = NULL;
 
 
 	verbose_printk(KERN_INFO"[probe:%s]: ******************************** PROBE PARAMETERS *****************************************\n", pci_devName);
@@ -528,68 +536,64 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	pci_dev_struct = dev;
 	dev_struct = &dev->dev;
 
+	lro_global = alloc_dev_instance(pci_dev_struct);
+	if (!lro_global) {
+		verbose_printk("%s: OOM.\n", __func__);
+		goto disable_device;
+	}
+    printk(KERN_INFO"[probe:%s]: lro_global: %p\n", pci_devName, lro_global);
+
+
+
+	bars = kzalloc(sizeof(struct bar_info), GFP_KERNEL);
+	if (!lro_global) {
+		pr_info("%s: OOM.\n", __func__);
+		return -ENOMEM;
+	}
+	bars->num_bars = 0;
+	for( i = 0; i < pcie_bar_num; i++) {
+		bars->pci_bar_addr[i] = pcie_bar_address[i];
+	}
+
 	if(NULL == pci_dev_struct){
 		printk(KERN_INFO"[probe:%s]: struct pci_dev_struct is NULL\n", pci_devName);
-		return ERROR;
+		goto disable_device;
 	}
 
 	//request memory region
 	if(pci_request_regions(pci_dev_struct, "vsi_driver")) {
 		printk(KERN_INFO"[probe:%s]: Failed to pci_request_selected_regions\n", pci_devName);
-		return ERROR;
+		lro_global->regions_in_use = 1;
+		goto rel_region;
 	}
+	lro_global->got_regions = 1;
 
-	/****************** BAR Mapping *******************************************/
-	i = 0;												//j will count the pci resources
-	j = 0;												//i will count pcie_ctrl_address
-	while(i < pcie_bar_num)	{
-		if(j==PCIE_RESOURCES_MAX_NUM){
-			printk(KERN_INFO"[probe:%s]: ERROR: Cannot find all PCIE bars\n", pci_devName);
-			return ERROR;
-		}
-		//get the base hardware address
-		if(pci_resource_len(pci_dev_struct, j) == 0) {
-			printk(KERN_INFO"[probe:%s]: pci resource %d is empty, getting next resource\n", pci_devName, j);
-		}
-		else {
-			pci_bar_addr[i] = pcie_bar_address[i];
-			//get the base memory size
-			pci_bar_end[i] = pcie_bar_address[i] + pci_resource_len(pci_dev_struct, j);
 
-			printk(KERN_INFO"[probe:%s]: pci bar %d addr is:0x%lx mapped to resource %d \n", pci_devName, i, pci_bar_addr[i], j);
-			printk(KERN_INFO"[probe:%s]: pci bar %d start is:0x%lx end is:%lx\n", pci_devName, i, pci_bar_addr[i], pci_bar_end[i]);
-			printk(KERN_INFO"[probe:%s]: pci bar %d size is:0x%lx\n", pci_devName, i, (unsigned long)pci_resource_len(pci_dev_struct, j));
-			printk(KERN_INFO"[probe:%s]: pci region %d flags is:0x%08lx\n", pci_devName, j, pci_resource_flags(pci_dev_struct, j));
 
-			//map the hardware space to virtual space
-			pci_bar_vir_addr[i] = pci_ioremap_bar(pci_dev_struct, j);
+	//map bars
+	//TODO GET BAR INFO TO OUR DRIVER
+	rc = sv_xdma_map_bars(lro_global, bars, pci_dev_struct);
+	if (rc)
+		goto unmap_bar;
 
-			if(!pci_bar_vir_addr[i]){
-				printk(KERN_INFO"[probe:%s]: pci_iomap error when mapping to virtual address\n", pci_devName);
-				return ERROR;
-			}
-			printk(KERN_INFO"[probe:%s]: pci bar %d virtual address base is:0x%p\n", pci_devName, i, pci_bar_vir_addr[i]);
-			i++;
-		}
-		j++;
-	}
-
-	num_bars = pcie_bar_num;
+	//identify_bars(lro_global, bar_id_list, num_bars, config_bar_pos);
 
 
 
 	//enable the device
-	if( pci_enable_device(dev) ) {
+    rc = pci_enable_device(dev);
+	if( rc ) {
 		printk(KERN_INFO"[probe:%s]: !!!!!!!!ERROR pci_enable_device\n", pci_devName);
-		sv_pci_remove(dev);
-		return ERROR;
+		goto disable_device;
 	}
+
+
+
 
 	//set DMA mask
 	if(0 != dma_set_coherent_mask(&dev->dev, 0x00000000FFFFFFFF)){
 		printk(KERN_INFO"[probe:%s]: set DMA mask error\n", pci_devName);
-		sv_pci_remove(dev);
-		return ERROR;
+		goto disable_device;
 	}
 	verbose_printk(KERN_INFO"[probe:%s]: dma mask set\n", pci_devName);
 
@@ -597,115 +601,109 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	pci_set_master(dev);
 	verbose_printk(KERN_INFO"[probe:%s]: pci set as master\n", pci_devName);
 
-	//enable MSI interrupts
-#if defined(CONFIG_PCI_MSI)
-	if(driver_type == PCI) {
+	//-----------------------------------------------NEW-----------------------------------------------
+	if(driver_type == PCI && pcie_use_xdma) {
+
+		//MSIX
+		if(msi_msix_capable(pci_dev_struct, PCI_CAP_ID_MSIX)) {
+			verbose_printk(KERN_INFO"[probe:%s]: MSIX capable XDMA\n", pci_devName);
+
+
+
+		}
+		//MSI
+		else if (msi_msix_capable(pci_dev_struct, PCI_CAP_ID_MSI)) {
+			verbose_printk(KERN_INFO"[probe:%s]: MSI capable XDMA\n", pci_devName);
+			//fix bar mapping?
+
+			verbose_printk("pci_enable_msi()\n");
+			rc = pci_enable_msi(pci_dev_struct);
+			if (rc < 0)
+				verbose_printk("Couldn't enable MSI mode: rc = %d\n", rc);
+			lro_global->msi_enabled = 1;
+
+			verbose_printk("probe_engines()\n");
+
+			rc = probe_engines(lro_global);
+			if (rc) {
+				verbose_printk(KERN_INFO"[probe:%s]: ERROR probe_engines\n", pci_devName);
+				goto disable_device;
+			}
+
+			verbose_printk("create_interfaces()\n");
+
+			rc = create_interfaces(lro_global);
+			if (rc) {
+				verbose_printk(KERN_INFO"[probe:%s]: ERROR create_interfaces\n", pci_devName);
+				goto disable_device;
+			}
+
+
+            if(0 > request_irq(pci_dev_struct->irq, &pci_isr, 0, pci_devName, pci_dev_struct)){
+    			printk(KERN_INFO"%s:[probe]request IRQ error\n", pci_devName);
+    			goto disable_device;
+    		}
+
+            printk(KERN_INFO"[probe:%s]: Using IRQ#%d with 0x%p\n", pci_devName, pci_dev_struct->irq, &pci_dev_struct);
+
+            /* enable user interrupts */
+        	user_interrupts_enable(lro_global, ~0);
+
+
+
+		}
+		//LEGACY
+		else {
+			verbose_printk(KERN_INFO"[probe:%s]: Legacy interupts XDMA\n", pci_devName);
+
+
+
+		}
+	}
+	//-----------------------------------------------END NEW-----------------------------------------------
+
+	else if(driver_type == PCI) {
 		verbose_printk(KERN_INFO"[probe:%s]: MSI capable PCI\n", pci_devName);
 
 		// allocate vectors
 		if(0 != pci_enable_msi(pci_dev_struct)) {
 			printk(KERN_INFO"[probe:%s]: Alloc MSI failed\n", pci_devName);
-			sv_pci_remove(dev);
-			return ERROR;
+			goto disable_device;
 		}
 		// take over the user interrupts, the rest will be
 		// handles by xdma engine if enabled
 
 		if(0 > request_irq(pci_dev_struct->irq, &pci_isr, IRQF_TRIGGER_RISING | IRQF_SHARED, pci_devName, pci_dev_struct)){
 			printk(KERN_INFO"%s:[probe]request IRQ error\n", pci_devName);
-			return ERROR;
+			goto disable_device;
 		}
+
+        printk(KERN_INFO"[probe:%s]: Using IRQ#%d with 0x%p\n", pci_devName, pci_dev_struct->irq, &pci_dev_struct);
+
+
 	}
+	//USING AWS
 	else if(driver_type == AWS) {
-		if(msi_msix_capable(pci_dev_struct, PCI_CAP_ID_MSIX)) {
-			// do AWS Specific stuff
-			int i;
-			int req_nvec = MAX_NUM_ENGINES + MAX_USER_IRQ;
-			verbose_printk(KERN_INFO"[probe:%s]: MSI-X capable AWS\n", pci_devName);
-			for (i = 0 ; i < req_nvec ; i++)
-				sv_msix_entry[i].entry = i;
-			// request all vectors
-			if(0 > pci_enable_msix(pci_dev_struct, sv_msix_entry, req_nvec)) {
-				printk(KERN_INFO"[probe:%s]: Enable MSI-X failed\n", pci_devName);
-				sv_pci_remove(dev);
-				return ERROR;
-			}
-			// take over the user interrupts, the rest will be
-			// handles by xdma engine if enabled
-			for (i = 0 ; i < MAX_INTERRUPTS ; i++) {
-				printk(KERN_INFO"[probe:%s]: MSI-X requesting IRQ #%d for entry %d\n", pci_devName, sv_msix_entry[i].vector, sv_msix_entry[i].entry);
-				if(0 > request_irq(sv_msix_entry[i].vector, pci_isr, 0 , pci_devName, pci_dev_struct)) {
-					printk(KERN_INFO"[probe:%s]: MSI-X request_irq failed\n", pci_devName);
-					sv_pci_remove(dev);
-					return ERROR;
-				}
-			}
-			aws_enable_interrupts(pci_dev_struct);
-			aws_get_max_sizes();
-			if(pcie_use_xdma) {
-				if(!(xdma_dev_s = sv_alloc_dev_instance(pci_dev_struct))) {
-					printk(KERN_INFO"[probe:%s]: cannot allocate xdma\n", pci_devName);
-					sv_pci_remove(dev);
-					return ERROR;
-				}
-				xdma_dev_s->sv_driver = 1; /* tell xdma that SV driver is in control */
-				for (i = 0 ; i < req_nvec ; i++) {
-					memcpy(&xdma_dev_s->entry[i], &sv_msix_entry[i], sizeof(xdma_dev_s->entry[i]));
-					printk(KERN_INFO"[probe:%s]: entry %d, vector IRQ#%d\n", pci_devName, i, xdma_dev_s->entry[i].vector);
-				}
-			}
-		} else {
-			verbose_printk(KERN_INFO"[probe:%s]: MSI capable\n", pci_devName);
-			if(0 > pci_enable_msi(pci_dev_struct)){
-				printk(KERN_INFO"[probe:%s]: MSI enable error\n", pci_devName);
-				sv_pci_remove(dev);
-				return ERROR;
-			}
-			if(0 > request_irq(pci_dev_struct->irq, &pci_isr, 0, pci_devName, pci_dev_struct)){
-				printk(KERN_INFO"[probe:%s]: MSI request_irq failed\n", pci_devName);
-				sv_pci_remove(dev);
-				return ERROR;
-			}
-		}
-
-		xdma_num_channels = sv_xdma_device_open(pci_dev_struct, xdma_dev_s, &xdma_channel_list);
-		if(xdma_num_channels < 0) {
-			printk(KERN_INFO"[probe:%s]: sv_xdma_device_open failed\n", pci_devName);
-			sv_pci_remove(dev);
-			return ERROR;
-		}
-		xdma_init_sv(xdma_num_channels);
-		verbose_printk(KERN_INFO"[probe:%s]: xdma initialized with %d channels\n", pci_devName, xdma_num_channels);
-
-
-
+		printk(KERN_INFO"[probe:%s]: ERROR: driver built for not AWS\n", pci_devName);
+		goto disable_device;
 	}
 	else{
-		verbose_printk(KERN_INFO"[probe:%s]: ERROR MSI-X capable unknown type\n", pci_devName);
-		return ERROR;
-	}
-	verbose_printk(KERN_INFO"[probe:%s]: pci enabled msi interrupt\n", pci_devName);
-#else
-	//request IRQ
-	verbose_printk(KERN_INFO"[probe:%s]: request interrupt\n", pci_devName);
-	if(0 > request_irq(pci_dev_struct->irq, &pci_isr, IRQF_TRIGGER_RISING | IRQF_SHARED, pci_devName, pci_dev_struct)){
-		printk(KERN_INFO"[probe:%s]: request IRQ error\n", pci_devName);
-		sv_pci_remove(dev);
-		return ERROR;
+		verbose_printk(KERN_INFO"[probe:%s]: ERROR Unknown setup\n", pci_devName);
+		goto disable_device;
 	}
 
-#endif
+	verbose_printk(KERN_INFO"[probe:%s]: pci enabled msi interrupt\n", pci_devName);
+
 	//register the char device
 	if(0 > register_chrdev(major, pci_devName, &pci_fops)){
 		//	dynamic_major = register_chrdev(0, pci_devName, &pci_fops);
 		printk(KERN_INFO"[probe:%s]: char driver not registered\n", pci_devName);
 		printk(KERN_INFO"[probe:%s]: char driver major number: 0x%x\n", pci_devName, major);
-		sv_pci_remove(dev);
-		return ERROR;
+		goto rmv_cdev;
 	}
 
 	if(skel_get_revision(dev) == 0x42)
-		return -ENODEV;
+		goto rmv_cdev;
 
 	/*allocate the DMA buffer*/
 	dma_buffer_base = dma_alloc_coherent(dev_struct, (size_t)dma_buffer_size, &dma_addr_base, GFP_KERNEL);
@@ -713,12 +711,11 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	if(NULL == dma_buffer_base) {
 		printk(KERN_INFO"[probe:%s]: DMA buffer base allocation ERROR\n", pci_devName);
 		printk(KERN_INFO"[probe:%s]: typical max DMA size is 4M, check your linux settings\n", pci_devName);
-		sv_pci_remove(dev);
-		return ERROR;
+		goto free_alloc;
 	} else {
 		verbose_printk(KERN_INFO"[probe:%s]: dma kernel buffer base address is:0x%p\n", pci_devName, dma_buffer_base);
 		verbose_printk(KERN_INFO"[probe:%s]: dma system memory buffer base address is:0x%p\n", pci_devName, (void *)dma_addr_base);
-		dma_current_offset = 4096;	//we want to leave the first 4k for the kernel to use internally.
+		dma_current_offset = PAGE_ALIGN(4096);	//we want to leave the first 4k for the kernel to use internally.
 		dma_internal_offset = 0;
 	}
 
@@ -733,24 +730,23 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		if(cdma_address[i] != 0xFFFFFFFF && !pcie_use_xdma) {
 			if( cdma_init(i, cdma_address[i]) ) { //cdma_num = 1
 				printk(KERN_INFO"[probe:%s]: !!!!!!!!ERROR cdma_init(%d, %08x)\n", pci_devName, i, cdma_address[i]);
-				sv_pci_remove(dev);
-				return ERROR;
+					goto free_alloc;
 			}
 		}
 	}
 
-	if(pcie_m_address != 0) {
+	if(driver_type == AWS && pcie_m_address != 0) {
 		dma_addr_base = pci_map_single(pci_dev_struct, dma_buffer_base, dma_buffer_size, PCI_DMA_BIDIRECTIONAL);
 		verbose_printk(KERN_INFO"[probe:%s]: pci_map_single physical 0x%p, virtual %p\n", pci_devName, (void *)dma_addr_base, (void *)dma_buffer_base);
-		pci_bar_addr[0] = 0x82000000;			/**< The AXI address of BAR 0 (ie common interface IP) */
-		pci_bar_end[0] = 0x83ffffff;			/**< The AXI address of BAR 1 (ie common interface IP) */			//todo fix -MM
+		bars->pci_bar_addr[0] = 0x82000000;			/**< The AXI address of BAR 0 (ie common interface IP) */
+		bars->pci_bar_end[0] = 0x8fffffff;		//test!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 		axi_pcie_m = dma_addr_base;
 	} else if(axi2pcie_bar0_size != 0xFFFFFFFF && pcie_ctl_address != 0xFFFFFFFF) {
 		axi_pcie_m = dma_addr_base % axi2pcie_bar0_size;
 		if(pcie_ctl_init((u64)pcie_ctl_address, (u64)(dma_addr_base - axi_pcie_m)) ) {
 			printk(KERN_INFO"[probe:%s]: !!!!!!!!ERROR pcie_ctl_init(0x%llx, 0x%llx)\n", pci_devName, (u64)pcie_ctl_address, (u64)(dma_addr_base - axi_pcie_m));
-			sv_pci_remove(dev);
-			return ERROR;
+			goto free_alloc;
 		}
 	} else if(pcie_ctl_address != 0xFFFFFFFF) {
 		printk(KERN_INFO"[probe:%s]: axi2pcie_bar0_size not set\n", pci_devName);
@@ -777,7 +773,403 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	printk(KERN_INFO"[probe:%s]: cdma_capable = 0x%x\n", pci_devName, cdma_capable);
 	printk(KERN_INFO"[probe:%s]: ***********************PROBE FINISHED SUCCESSFULLY**************************************\n", pci_devName);
 	return 0;
+
+
+	// rmv_cdev:
+	// 	dev_present[lro->instance] = 0;
+	// 	device_remove_file(&pdev->dev, &dev_attr_xdma_dev_instance);
+    //
+	// rmv_interface:
+	// 	destroy_interfaces(lro);
+	// 	rmv_engine:
+	// 	remove_engines(lro);
+    //
+	// disable_irq:
+	// 	irq_teardown(lro);
+    //
+    //
+	// disable_msi:
+	// 	if (lro->msix_enabled) {
+	// 		pci_disable_msix(pdev);
+	// 		lro->msix_enabled = 0;
+	// 	} else if (lro->msi_enabled) {
+	// 		pci_disable_msi(pdev);
+	// 		lro->msi_enabled = 0;
+	// 	}
+	// 	if (!lro->regions_in_use)
+	// 		 pci_disable_device(pci_devName);
+    //
+
+	free_alloc:
+        dma_free_coherent(dev_struct, (size_t)dma_buffer_size, dma_buffer_base, dma_addr_base);
+
+    rmv_cdev:
+        unregister_chrdev(major, pci_devName);
+
+
+    disable_device:
+        pci_disable_device(dev);
+
+	unmap_bar:
+        unmap_bars(lro_global, dev);
+
+
+	rel_region:
+		pci_release_regions(dev);
+
+
+		printk("probe() returning %d\n", rc);
+		return -1;
+
+
+
 }
+
+#else
+
+static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
+{
+	int int_ctrl_set;
+	int rc = 0, i;
+
+	verbose_printk(KERN_INFO"[probe:%s]: ******************************** PROBE PARAMETERS *****************************************\n", pci_devName);
+
+	verbose_printk(KERN_INFO"[probe:%s]: device_id: %d \n", pci_devName, device_id);
+	verbose_printk(KERN_INFO"[probe:%s]: major: %d \n", pci_devName, major);
+	if(cdma_count > CDMA_MAX_NUM) {
+		verbose_printk(KERN_INFO"[probe:%s]: given more CDMA address than max allowed, setting cdma_count to %d\n", pci_devName, CDMA_MAX_NUM);
+		cdma_count = CDMA_MAX_NUM;
+	}
+	for( i = 0; i < cdma_count; i++) {
+		verbose_printk(KERN_INFO"[probe:%s]: cdma_ctrl_%d_address: 0x%x \n", pci_devName, i, cdma_address[i]);
+	}
+	for( i = 0; i < pcie_bar_num; i++) {
+		verbose_printk(KERN_INFO"[probe:%s]: pcie_bar_%d_address: 0x%lx \n", pci_devName, i, pcie_bar_address[i]);
+	}
+
+	verbose_printk(KERN_INFO"[probe:%s]: pcie_ctl_address: 0x%lx \n", pci_devName, pcie_ctl_address);
+	verbose_printk(KERN_INFO"[probe:%s]: pcie_m_address: 0x%lx \n", pci_devName, pcie_m_address);
+	verbose_printk(KERN_INFO"[probe:%s]: int_ctlr_address: 0x%x \n", pci_devName, int_ctlr_address);
+	verbose_printk(KERN_INFO"[probe:%s]: driver_type: 0x%x \n", pci_devName, driver_type);
+	verbose_printk(KERN_INFO"[probe:%s]: dma_system_size: %d \n", pci_devName, dma_system_size);
+	verbose_printk(KERN_INFO"[probe:%s]: dma_file_size: %d \n", pci_devName, dma_file_size);
+	verbose_printk(KERN_INFO"[probe:%s]: dma_byte_width: %d \n", pci_devName, dma_byte_width);
+	verbose_printk(KERN_INFO"[probe:%s]: back_pressure: %d \n", pci_devName, back_pressure);
+	verbose_printk(KERN_INFO"[probe:%s]: axi2pcie_bar0_size : 0x%x \n", pci_devName, axi2pcie_bar0_size);
+	verbose_printk(KERN_INFO"[probe:%s]: interface_crc : 0x%x \n", pci_devName, interface_crc);
+	verbose_printk(KERN_INFO"[probe:%s]: interface_crc_check : 0x%x \n", pci_devName, interface_crc_check);
+	verbose_printk(KERN_INFO"[probe:%s]: pcie_use_xdma : 0x%x \n", pci_devName, pcie_use_xdma);
+
+	verbose_printk(KERN_INFO"[probe:%s]: ******************************** BEGIN PROBE ROUTINE *****************************************\n", pci_devName);
+
+	pci_dev_struct = dev;
+	dev_struct = &dev->dev;
+
+	lro_global = alloc_dev_instance(pci_dev_struct);
+	if (!lro_global) {
+		verbose_printk("%s: OOM.\n", __func__);
+		goto disable_device;
+	}
+
+	if(NULL == pci_dev_struct){
+		printk(KERN_INFO"[probe:%s]: struct pci_dev_struct is NULL\n", pci_devName);
+		goto rel_region;
+	}
+
+	//request memory region
+	if(pci_request_regions(pci_dev_struct, "vsi_driver")) {
+		printk(KERN_INFO"[probe:%s]: Failed to pci_request_selected_regions\n", pci_devName);
+		return ERROR;
+	}
+
+
+	//map bars
+    //
+	// num_bars = sv_map_bars(pci_dev_struct, pcie_bar_address, pcie_bar_num);
+    //
+	// if(num_bars <= 0) {
+	// 	printk(KERN_INFO"[probe:%s]: Failed to map bars\n", pci_devName);
+	// 	goto unmap_bar;
+	// }
+
+	//enable the device
+    rc = pci_enable_device(dev);
+	if( rc ) {
+		printk(KERN_INFO"[probe:%s]: !!!!!!!!ERROR pci_enable_device\n", pci_devName);
+		goto disable_device;
+	}
+
+	//set DMA mask
+	if(0 != dma_set_coherent_mask(&dev->dev, 0x00000000FFFFFFFF)){
+		printk(KERN_INFO"[probe:%s]: set DMA mask error\n", pci_devName);
+		goto disable_device;
+	}
+	verbose_printk(KERN_INFO"[probe:%s]: dma mask set\n", pci_devName);
+
+	//enable bus mastering
+	pci_set_master(dev);
+	verbose_printk(KERN_INFO"[probe:%s]: pci set as master\n", pci_devName);
+
+	//-----------------------------------------------NEW-----------------------------------------------
+	if(driver_type == PCI && pcie_use_xdma) {
+
+		printk(KERN_INFO"[probe:%s]: ERROR: driver built for AWS\n", pci_devName);
+		goto disable_device;
+
+	else if(driver_type == PCI) {
+		verbose_printk(KERN_INFO"[probe:%s]: MSI capable PCI\n", pci_devName);
+
+		// allocate vectors
+		if(0 != pci_enable_msi(pci_dev_struct)) {
+			printk(KERN_INFO"[probe:%s]: Alloc MSI failed\n", pci_devName);
+			goto disable_device;
+		}
+		// take over the user interrupts, the rest will be
+		// handles by xdma engine if enabled
+
+		if(0 > request_irq(pci_dev_struct->irq, &pci_isr, IRQF_TRIGGER_RISING | IRQF_SHARED, pci_devName, pci_dev_struct)){
+			printk(KERN_INFO"%s:[probe]request IRQ error\n", pci_devName);
+			goto disable_device;
+		}
+
+        printk(KERN_INFO"[probe:%s]: Using IRQ#%d with 0x%p\n", pci_devName, pci_dev_struct->irq, &pci_dev_struct);
+
+
+	}
+	//USING AWS
+	else if(driver_type == AWS) {
+		if(msi_msix_capable(pci_dev_struct, PCI_CAP_ID_MSIX)) {
+			// do AWS Specific stuff
+			int i;
+			int req_nvec = MAX_NUM_ENGINES + MAX_USER_IRQ;
+			verbose_printk(KERN_INFO"[probe:%s]: MSI-X capable AWS\n", pci_devName);
+			for (i = 0 ; i < req_nvec ; i++)
+				sv_msix_entry[i].entry = i;
+			// request all vectors
+			if(0 > pci_enable_msix(pci_dev_struct, sv_msix_entry, req_nvec)) {
+				printk(KERN_INFO"[probe:%s]: Enable MSI-X failed\n", pci_devName);
+				goto disable_device;
+			}
+			// take over the user interrupts, the rest will be
+			// handles by xdma engine if enabled
+			for (i = 0 ; i < MAX_INTERRUPTS ; i++) {
+				printk(KERN_INFO"[probe:%s]: MSI-X requesting IRQ #%d for entry %d\n", pci_devName, sv_msix_entry[i].vector, sv_msix_entry[i].entry);
+				if(0 > request_irq(sv_msix_entry[i].vector, pci_isr, 0 , pci_devName, pci_dev_struct)) {
+					printk(KERN_INFO"[probe:%s]: MSI-X request_irq failed\n", pci_devName);
+					goto disable_device;
+				}
+                printk(KERN_INFO"[probe:%s]: Using IRQ#%d with 0x%p\n", pci_devName, pci_dev_struct->irq, &pci_dev_struct);
+
+			}
+			aws_enable_interrupts(pci_dev_struct);
+			aws_get_max_sizes();
+			//if(pcie_use_xdma) {
+			if(!(xdma_dev_s = sv_alloc_dev_instance(pci_dev_struct))) {
+				printk(KERN_INFO"[probe:%s]: cannot allocate xdma\n", pci_devName);
+				goto disable_device;
+			}
+			xdma_dev_s->sv_driver = 1; /* tell xdma that SV driver is in control */
+			for (i = 0 ; i < req_nvec ; i++) {
+				memcpy(&xdma_dev_s->entry[i], &sv_msix_entry[i], sizeof(xdma_dev_s->entry[i]));
+				printk(KERN_INFO"[probe:%s]: entry %d, vector IRQ#%d\n", pci_devName, i, xdma_dev_s->entry[i].vector);
+			}
+
+			xdma_num_channels = sv_xdma_device_open(pci_dev_struct, xdma_dev_s, &xdma_channel_list);
+			if(xdma_num_channels < 0) {
+				printk(KERN_INFO"[probe:%s]: sv_xdma_device_open failed\n", pci_devName);
+				goto disable_device;
+			}
+
+			xdma_init_sv(xdma_num_channels);
+			verbose_printk(KERN_INFO"[probe:%s]: xdma initialized with %d channels\n", pci_devName, xdma_num_channels);
+			//}
+		} else if (msi_msix_capable(pci_dev_struct, PCI_CAP_ID_MSI)) {
+
+			//TODO update this to AWS code
+
+			verbose_printk(KERN_INFO"[probe:%s]: MSI capable\n", pci_devName);
+			if(0 > pci_enable_msi(pci_dev_struct)){
+				printk(KERN_INFO"[probe:%s]: MSI enable error\n", pci_devName);
+				goto disable_device;
+			}
+
+			if(0 > request_irq(pci_dev_struct->irq, &pci_isr, 0, pci_devName, pci_dev_struct)){
+				printk(KERN_INFO"[probe:%s]: MSI request_irq failed\n", pci_devName);
+				goto disable_device;
+			}
+            printk(KERN_INFO"[probe:%s]: Using IRQ#%d with 0x%p\n", pci_devName, pci_dev_struct->irq, &pci_dev_struct);
+
+
+			aws_enable_interrupts(pci_dev_struct);
+			aws_get_max_sizes();
+			//if(pcie_use_xdma) {
+			if(!(xdma_dev_s = sv_alloc_dev_instance(pci_dev_struct))) {
+				printk(KERN_INFO"[probe:%s]: cannot allocate xdma\n", pci_devName);
+				goto disable_device;
+			}
+			xdma_dev_s->sv_driver = 1; /* tell xdma that SV driver is in control */
+			// for (i = 0 ; i < req_nvec ; i++) {
+			// 	memcpy(&xdma_dev_s->entry[i], &sv_msix_entry[i], sizeof(xdma_dev_s->entry[i]));
+			// 	printk(KERN_INFO"[probe:%s]: entry %d, vector IRQ#%d\n", pci_devName, i, xdma_dev_s->entry[i].vector);
+			// }
+
+			xdma_num_channels = sv_xdma_device_open(pci_dev_struct, xdma_dev_s, &xdma_channel_list);
+			if(xdma_num_channels < 0) {
+				printk(KERN_INFO"[probe:%s]: sv_xdma_device_open failed\n", pci_devName);
+				goto disable_device;
+			}
+
+			xdma_init_sv(xdma_num_channels);
+			verbose_printk(KERN_INFO"[probe:%s]: xdma initialized with %d channels\n", pci_devName, xdma_num_channels);
+
+		} else {
+			printk(KERN_INFO"[probe:%s]: MSI/MSI-X not detected - using legacy interrupts\n", pci_devName);
+			if(0 > request_irq(pci_dev_struct->irq, &pci_isr, IRQF_TRIGGER_RISING | IRQF_SHARED, pci_devName, pci_dev_struct)){
+				printk(KERN_INFO"[probe:%s]: request IRQ error\n", pci_devName);
+				goto disable_device;
+			}
+            printk(KERN_INFO"[probe:%s]: Using IRQ#%d with 0x%p\n", pci_devName, pci_dev_struct->irq, &pci_dev_struct);
+
+		}
+	}
+	else{
+		verbose_printk(KERN_INFO"[probe:%s]: ERROR Unknown setup\n", pci_devName);
+		goto disable_device;
+	}
+
+	verbose_printk(KERN_INFO"[probe:%s]: pci enabled msi interrupt\n", pci_devName);
+
+	//register the char device
+	if(0 > register_chrdev(major, pci_devName, &pci_fops)){
+		//	dynamic_major = register_chrdev(0, pci_devName, &pci_fops);
+		printk(KERN_INFO"[probe:%s]: char driver not registered\n", pci_devName);
+		printk(KERN_INFO"[probe:%s]: char driver major number: 0x%x\n", pci_devName, major);
+		goto rmv_cdev;
+	}
+
+	if(skel_get_revision(dev) == 0x42)
+		goto rmv_cdev;
+
+	/*allocate the DMA buffer*/
+	dma_buffer_base = dma_alloc_coherent(dev_struct, (size_t)dma_buffer_size, &dma_addr_base, GFP_KERNEL);
+
+	if(NULL == dma_buffer_base) {
+		printk(KERN_INFO"[probe:%s]: DMA buffer base allocation ERROR\n", pci_devName);
+		printk(KERN_INFO"[probe:%s]: typical max DMA size is 4M, check your linux settings\n", pci_devName);
+		goto free_alloc;
+	} else {
+		verbose_printk(KERN_INFO"[probe:%s]: dma kernel buffer base address is:0x%p\n", pci_devName, dma_buffer_base);
+		verbose_printk(KERN_INFO"[probe:%s]: dma system memory buffer base address is:0x%p\n", pci_devName, (void *)dma_addr_base);
+		dma_current_offset = 4096;	//we want to leave the first 4k for the kernel to use internally.
+		dma_internal_offset = 0;
+	}
+
+	//set defaults
+	for(i = 0; i < cdma_count; i++){
+		cdma_set[i] = 0;
+	}
+
+	int_ctrl_set = 0;
+
+	for( i = 0; i < cdma_count; i++){
+		if(cdma_address[i] != 0xFFFFFFFF && !pcie_use_xdma) {
+			if( cdma_init(i, cdma_address[i]) ) { //cdma_num = 1
+				printk(KERN_INFO"[probe:%s]: !!!!!!!!ERROR cdma_init(%d, %08x)\n", pci_devName, i, cdma_address[i]);
+					goto free_alloc;
+			}
+		}
+	}
+
+	if(driver_type == AWS && pcie_m_address != 0) {
+		dma_addr_base = pci_map_single(pci_dev_struct, dma_buffer_base, dma_buffer_size, PCI_DMA_BIDIRECTIONAL);
+		verbose_printk(KERN_INFO"[probe:%s]: pci_map_single physical 0x%p, virtual %p\n", pci_devName, (void *)dma_addr_base, (void *)dma_buffer_base);
+		bars->pci_bar_addr[0] = 0x82000000;			/**< The AXI address of BAR 0 (ie common interface IP) */
+		bars->pci_bar_end[0] = 0x8fffffff;		//test!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+		axi_pcie_m = dma_addr_base;
+	} else if(axi2pcie_bar0_size != 0xFFFFFFFF && pcie_ctl_address != 0xFFFFFFFF) {
+		axi_pcie_m = dma_addr_base % axi2pcie_bar0_size;
+		if(pcie_ctl_init((u64)pcie_ctl_address, (u64)(dma_addr_base - axi_pcie_m)) ) {
+			printk(KERN_INFO"[probe:%s]: !!!!!!!!ERROR pcie_ctl_init(0x%llx, 0x%llx)\n", pci_devName, (u64)pcie_ctl_address, (u64)(dma_addr_base - axi_pcie_m));
+			goto free_alloc;
+		}
+	} else if(pcie_ctl_address != 0xFFFFFFFF) {
+		printk(KERN_INFO"[probe:%s]: axi2pcie_bar0_size not set\n", pci_devName);
+		printk(KERN_INFO"[probe:%s]: If this is a gen2 PCIE design address translation will fail\n", pci_devName);
+		axi_pcie_m = 0;
+		//return ERROR;
+	} else {
+		printk(KERN_INFO"[probe:%s]: !!!!!!!!ERROR axi2pcie_bar0_size and pcie_ctl_address was not set\n", pci_devName);
+		axi_pcie_m = 0;
+	}
+
+	printk(KERN_INFO"[probe:%s]: DMA hardware offset(axi_pcie_m) = 0x08%llx\n", pci_devName, axi_pcie_m);
+
+	if(int_ctlr_address != 0xFFFFFFFF) {
+		int_ctlr_init((u64)int_ctlr_address);
+		int_ctrl_set = 1;
+	}
+
+	for(i = 0; i < cdma_count; i++){
+		verbose_printk(KERN_INFO"[probe:%s]: cdma_set[%d] = 0x%x\n", pci_devName, i, cdma_set[i]);
+		cdma_capable += (cdma_set[i] & int_ctrl_set);
+	}
+
+	printk(KERN_INFO"[probe:%s]: cdma_capable = 0x%x\n", pci_devName, cdma_capable);
+	printk(KERN_INFO"[probe:%s]: ***********************PROBE FINISHED SUCCESSFULLY**************************************\n", pci_devName);
+	return 0;
+
+
+	// rmv_cdev:
+	// 	dev_present[lro->instance] = 0;
+	// 	device_remove_file(&pdev->dev, &dev_attr_xdma_dev_instance);
+    //
+	// rmv_interface:
+	// 	destroy_interfaces(lro);
+	// 	rmv_engine:
+	// 	remove_engines(lro);
+    //
+	// disable_irq:
+	// 	irq_teardown(lro);
+    //
+    //
+	// disable_msi:
+	// 	if (lro->msix_enabled) {
+	// 		pci_disable_msix(pdev);
+	// 		lro->msix_enabled = 0;
+	// 	} else if (lro->msi_enabled) {
+	// 		pci_disable_msi(pdev);
+	// 		lro->msi_enabled = 0;
+	// 	}
+	// 	if (!lro->regions_in_use)
+	// 		 pci_disable_device(pci_devName);
+    //
+
+	free_alloc:
+        dma_free_coherent(dev_struct, (size_t)dma_buffer_size, dma_buffer_base, dma_addr_base);
+
+    rmv_cdev:
+        unregister_chrdev(major, pci_devName);
+
+
+    disable_device:
+        pci_disable_device(dev);
+
+	unmap_bar:
+		unmap_bars(lro_global, pdev);
+	rel_region:
+		pci_release_regions(dev);
+
+
+		printk("probe() returning %d\n", rc);
+		return -1;
+
+
+
+}
+
+#endif
+
 
 /**
  * @brief This is the Probe function called for Platform Devices (ie Zynq)
@@ -836,28 +1228,28 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 		if(!resource)	 //if null
 		{
-			printk(KERN_INFO"[probe:%s]: platform_get_resource  for bar %d not found\n", pci_devName, i);
-			pci_bar_addr[i] = 0;
-			pci_bar_end[i] = 0;
+			printk(KERN_INFO"[probe:%s]: platform_get_resource for bar %d not found\n", pci_devName, i);
+			bars->pci_bar_addr[i] = 0;
+			bars->pci_bar_end[i] = 0;
 		} else {
 			//get the control memory size
-			pci_bar_addr[i] = resource->start;
-			pci_bar_end[i] = resource->end;
+			bars->pci_bar_addr[i] = resource->start;
+			bars->pci_bar_end[i] = resource->end;
 			printk(KERN_INFO"[probe:%s]: platform name is: %s\n", pci_devName, resource->name);
 			printk(KERN_INFO"[probe:%s]: platform bar %d size is:0x%lx\n", pci_devName, i, (unsigned long)resource_size(resource));
-			printk(KERN_INFO"[probe:%s]: platform bar %d start is:%lx end is:%lx\n", pci_devName, i, pci_bar_addr[i], pci_bar_end[i]);
+			printk(KERN_INFO"[probe:%s]: platform bar %d start is:%lx end is:%lx\n", pci_devName, i, bars->pci_bar_addr[i], bars->pci_bar_end[i]);
 			//map the hardware space to virtual space
-			pci_bar_vir_addr[i] = devm_ioremap_resource(&pdev->dev, resource);
-			if(IS_ERR(pci_bar_vir_addr[i])){
+			bars->pci_bar_vir_addr[i] = devm_ioremap_resource(&pdev->dev, resource);
+			if(IS_ERR(bars->pci_bar_vir_addr[i])){
 				printk(KERN_INFO"[probe:%s]: ioremap error when mapping to virtual address %d \n", pci_devName, i);
 				return ERROR;
 			}
-			printk(KERN_INFO"[probe:%s]: pci bar %d virtual address base is:0x%p\n", pci_devName, i, pci_bar_vir_addr[i]);
-			num_bars++;
+			printk(KERN_INFO"[probe:%s]: pci bar %d virtual address base is:0x%p\n", pci_devName, i, bars->pci_bar_vir_addr[i]);
+			bars->num_bars++;
 		}
 
 	}
-	verbose_printk(KERN_INFO"[probe:%s]: num_bars : 0x%x \n", pci_devName, num_bars);
+	verbose_printk(KERN_INFO"[probe:%s]: num_bars : 0x%x \n", pci_devName, bars->num_bars);
 
 
 	//set DMA mask
@@ -939,8 +1331,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 		printk(KERN_INFO"[probe:%s]: request IRQ error\n", pci_devName);
 		return ERROR;
 	}
-
-	printk(KERN_INFO"[probe:%s]: IRQ request complete\n", pci_devName);
+    printk(KERN_INFO"[probe:%s]: Using IRQ#%d with 0x%p\n", pci_devName, pci_dev_struct->irq, &pci_dev_struct);
 
 	if(pcie_use_xdma){
 		verbose_axi_fifo_write_printk(KERN_INFO"[probe:%s]: pcie_use_xdma is not 0 on platform\n", pci_devName);
@@ -989,7 +1380,9 @@ static void sv_pci_remove(struct pci_dev *dev)
 			if(driver_type == AWS) {
 				aws_disable_interrupts(pci_dev_struct);
 				if(pcie_use_xdma) {
+#if (XDMA_AWS == 1)
 					sv_xdma_device_close(pci_dev_struct, xdma_dev_s, xdma_channel_list);
+#endif
 				}
 			}
 			pci_disable_msix(dev);
@@ -1009,33 +1402,35 @@ static void sv_pci_remove(struct pci_dev *dev)
 	/*Destroy the read thread*/
 	printk(KERN_INFO"[sv_pci_remove]: Stopping read thead\n");
 	atomic_set(&thread_q_read, 1);
-	wake_up_interruptible(&thread_q_head_read);
 	if(thread_struct_read) {
 		while(kthread_stop(thread_struct_read)<0) {
+            wake_up_interruptible(&thread_q_head_read);
 			printk(KERN_INFO"[sv_pci_remove]: Read thread failed to stop, attemping again\n");
 			atomic_set(&thread_q_read, 1);
 			wake_up_interruptible(&thread_q_head_read);
 		}
+        put_task_struct(thread_struct_read);
 	}
 	printk(KERN_INFO"[sv_pci_remove]: Read Thread Destroyed\n");
 
 	/*Destroy the write thread*/
-	printk(KERN_INFO"[sv_pci_remove]: Stopping read thead\n");
+	printk(KERN_INFO"[sv_pci_remove]: Stopping write thead\n");
 	atomic_set(&thread_q_write, 1);
-	wake_up_interruptible(&thread_q_head_write);
 	if(thread_struct_write) {
+        wake_up_interruptible(&thread_q_head_write);
 		while(kthread_stop(thread_struct_write)<0) {
 			printk(KERN_INFO"[sv_pci_remove]: Write thread failed to stop, attemping again\n");
 			atomic_set(&thread_q_write, 1);
 			wake_up_interruptible(&thread_q_head_write);
 		}
+        put_task_struct(thread_struct_write);
 	}
 	printk(KERN_INFO"[sv_pci_remove]: Write Thread Destroyed\n");
 
 	unregister_chrdev(major, pci_devName);
-	for(i = 0; i < num_bars; i++){
+	for(i = 0; i < bars->num_bars; i++){
 			printk(KERN_INFO"[sv_pci_remove]: unmapping pci bar %d\n", i);
-			pci_iounmap(dev, pci_bar_vir_addr[i]);
+			pci_iounmap(dev, bars->pci_bar_vir_addr[i]);
 	}
 	pci_release_regions(dev);
 	dma_free_coherent(dev_struct, (size_t)dma_buffer_size, dma_buffer_base, dma_addr_base);
@@ -1078,8 +1473,8 @@ static int sv_plat_remove(struct platform_device *pdev)
 	printk(KERN_INFO"[sv_plat_remove]: Write Thread Destroyed\n");
 
 	unregister_chrdev(major, pci_devName);
-	for(i = 0; i < num_bars; i++){
-		iounmap(pci_bar_vir_addr[i]);
+	for(i = 0; i < bars->num_bars; i++){
+		iounmap(bars->pci_bar_vir_addr[i]);
 	}
 	dma_free_coherent(dev_struct, (size_t)dma_buffer_size, dma_buffer_base, dma_addr_base);
 
@@ -1197,11 +1592,13 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 	u32 device_mode;
 	u32 vec_serviced;
 
+    int test_attempts = 10;
+
 	verbose_isr_printk(KERN_INFO"[pci_isr]: Entered the ISR (%llx)\n", axi_interr_ctrl);
 	//	tasklet_schedule(&isr_tasklet);
 	if(axi_interr_ctrl == 0) {
 		verbose_isr_printk(KERN_INFO"[pci_isr]: returning early ISR (%llx)\n", axi_interr_ctrl);
-		return IRQ_HANDLED; // controller not intialized yet
+		return IRQ_NONE; // controller not intialized yet
 	}
 	vec_serviced = 0;
 	/*Here we need to find out who triggered the interrupt*
@@ -1210,108 +1607,106 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 	/*This is the interrupt status register*/
 	axi_dest = axi_interr_ctrl + INT_CTRL_ISR;
-	if( direct_read(axi_dest, (void *)&isr_status, 4, NORMAL_READ) ) {
-		printk(KERN_INFO"[pci_isr]: !!!!!!!!ERROR direct_read\n");
-		return ERROR;
-	}
-	verbose_isr_printk(KERN_INFO"[pci_isr]: interrupt status register vector is: ('0x%08x')\n", isr_status);
 
+    /*This is the interrupt status register*/
+    axi_dest = axi_interr_ctrl + INT_CTRL_ISR;
+    if( direct_read(axi_dest, (void *)&status, 4, NORMAL_READ) ) {
+        printk(KERN_INFO"[pci_isr]: !!!!!!!!ERROR direct_read\n");
+        return IRQ_NONE;
+    }
+
+	verbose_isr_printk(KERN_INFO"[pci_isr]: interrupt status register vector is: ('0x%08x')\n", status);
 	/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
 	axi_dest = axi_interr_ctrl + INT_CTRL_IAR;
-	status = isr_status;
+	isr_status = status;
 	if( direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
 		printk(KERN_INFO"[pci_isr]: !!!!!!!!ERROR direct_write\n");
-		return ERROR;
+		return IRQ_NONE;
 	}
 
-	interrupt_num = vec2num(isr_status);
+	while(isr_status > 0 && test_attempts-- > 0) {
 
-	while(isr_status > 0) {
+		interrupt_num = vec2num(isr_status);
+        verbose_isr_printk(KERN_INFO"[pci_isr]: interrupt status interrupt number is: ('%i')\n", interrupt_num);
 
-		//interrupt_num = vec2num(isr_status);
 		//	tasklet_schedule(&isr_tasklet);
 
-		//check to see if axi stream fifo is set_interrupt
-		//todo should be only for steam fifo interupt
-		if(!mod_desc_arr[interrupt_num]) {
-			isr_status = isr_status && ~num2vec(interrupt_num);//don't service this one, clear it from isr_status
-			interrupt_num = 0;	//don't service this one
-			//vec_serviced = vec_serviced | num2vec(interrupt_num);
-			verbose_isr_printk(KERN_INFO"[pci_isr]: returning early ISR null axi stream fifo \n");
-			continue; // controller not intialized yet
-			//todo make it so we handle other interupts instead of just failing
-		}
-
-		verbose_isr_printk(KERN_INFO"[pci_isr]: interrupt number is: ('%d'-->' minor: %x')\n", interrupt_num, mod_desc_arr[interrupt_num]->minor);
-		device_mode = mod_desc_arr[interrupt_num]->mode;
+		//check to mod_desc is not null for this interrupt_num and that it doesn't step over our array
+		if(interrupt_num >= MAX_FILE_DESC || !mod_desc_arr[interrupt_num]) {
+            //do nothing
+			verbose_isr_printk(KERN_INFO"[pci_isr]: WARNING: Interrupt not set for this driver or interrupt over max. \n");
+        }
+        else {
+    		verbose_isr_printk(KERN_INFO"[pci_isr]: interrupt number is: ('%d'-->' minor: %x')\n", interrupt_num, mod_desc_arr[interrupt_num]->minor);
+    		device_mode = mod_desc_arr[interrupt_num]->mode;
 
 
-		if(device_mode == CDMA) {
-			verbose_isr_printk(KERN_INFO"[pci_isr]: this interrupt is from the CDMA\n");
-			vec_serviced = vec_serviced | num2vec(interrupt_num);
-		}
-		else if(device_mode == AXI_STREAM_FIFO || device_mode == AXI_STREAM_PACKET) {
-			verbose_isr_printk(KERN_INFO"[pci_isr]: this interrupt is from a user peripheral\n");
+    		if(device_mode == CDMA) {
+    			verbose_isr_printk(KERN_INFO"[pci_isr]: this interrupt is from the CDMA\n");
+    			vec_serviced = vec_serviced | num2vec(interrupt_num);
+    		}
+    		else if(device_mode == AXI_STREAM_FIFO || device_mode == AXI_STREAM_PACKET) {
+    			verbose_isr_printk(KERN_INFO"[pci_isr]: this interrupt is from a user peripheral\n");
 
-			/*Read the axi fifo ISR*/
-			axi_dest = mod_desc_arr[interrupt_num]->axi_addr_ctl + AXI_STREAM_ISR;
-			if(direct_read(axi_dest, (void *)&status, 4, NORMAL_READ) ) {
-				printk(KERN_INFO"[pci_isr]: !!!!!!!!ERROR direct_read\n");
-				return ERROR;
-			}
-			verbose_isr_printk(KERN_INFO"[pci_isr]: Stream FIFO ISR status: 0x%08x\n", status);
+    			/*Read the axi fifo ISR*/
+    			axi_dest = mod_desc_arr[interrupt_num]->axi_addr_ctl + AXI_STREAM_ISR;
+    			if(direct_read(axi_dest, (void *)&status, 4, NORMAL_READ) ) {
+    				printk(KERN_INFO"[pci_isr]: !!!!!!!!ERROR direct_read\n");
+    				return ERROR;
+    			}
+    			verbose_isr_printk(KERN_INFO"[pci_isr]: Stream FIFO ISR status: 0x%08x\n", status);
 
-			/*clear the axi fifo ISR*/
-			status = status & 0x04000000;																																					//clear the status observed masked wtih RX complete
-			if(direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
-				printk(KERN_INFO"[pci_isr]: !!!!!!!!ERROR direct_write\n");
-				return ERROR;
-			}
+    			/*clear the axi fifo ISR*/
+    			status = status & 0x04000000;																																					//clear the status observed masked wtih RX complete
+    			if(direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
+    				printk(KERN_INFO"[pci_isr]: !!!!!!!!ERROR direct_write\n");
+    				return ERROR;
+    			}
 
-			if(atomic_read(mod_desc_arr[interrupt_num]->in_read_fifo_count) == 0 && mod_desc_arr[interrupt_num]->file_open) {
+    			if(atomic_read(mod_desc_arr[interrupt_num]->in_read_fifo_count) == 0 && mod_desc_arr[interrupt_num]->file_open) {
 
-				//debug message
-				if(kfifo_len(&read_fifo) > 4) {
-					verbose_isr_printk(KERN_INFO"[pci_isr]: kfifo stored elements: %d\n", kfifo_len(&read_fifo));
-				}
+    				//debug message
+    				if(kfifo_len(&read_fifo) > 4) {
+    					verbose_isr_printk(KERN_INFO"[pci_isr]: kfifo stored elements: %d\n", kfifo_len(&read_fifo));
+    				}
 
-				//if the read fifo isn't full and the file is open, write the mod_desc in
-				if(!kfifo_is_full(&read_fifo)) {
-					atomic_inc(mod_desc_arr[interrupt_num]->in_read_fifo_count);
-					kfifo_in_spinlocked(&read_fifo, &mod_desc_arr[interrupt_num], 1, &fifo_lock_read);
-				}
-				else {
-					verbose_isr_printk(KERN_INFO"[pci_isr]: kfifo is full, not writing mod desc\n");
-				}
-			}
-			else if(!mod_desc_arr[interrupt_num]->file_open) {
-				verbose_isr_printk(KERN_INFO"[pci_isr]: file is closed, not writing mod_desc\n");
-			}
-			else {
-				verbose_isr_printk(KERN_INFO"[pci_isr]: kfifo already contains axi_steam_fifo mod desc\n");
-			}
+    				//if the read fifo isn't full and the file is open, write the mod_desc in
+    				if(!kfifo_is_full(&read_fifo)) {
+    					atomic_inc(mod_desc_arr[interrupt_num]->in_read_fifo_count);
+    					kfifo_in_spinlocked(&read_fifo, &mod_desc_arr[interrupt_num], 1, &fifo_lock_read);
+    				}
+    				else {
+    					verbose_isr_printk(KERN_INFO"[pci_isr]: kfifo is full, not writing mod desc\n");
+    				}
+    			}
+    			else if(!mod_desc_arr[interrupt_num]->file_open) {
+    				verbose_isr_printk(KERN_INFO"[pci_isr]: file is closed, not writing mod_desc\n");
+    			}
+    			else {
+    				verbose_isr_printk(KERN_INFO"[pci_isr]: kfifo already contains axi_steam_fifo mod desc\n");
+    			}
 
-			//for ring buffer peripherals (axi streaming) there is now data so we should read
-			atomic_set(&thread_q_read, 1); // wake up if empty
-			wake_up_interruptible(&thread_q_head_read);
+    			//for ring buffer peripherals (axi streaming) there is now data so we should read
+    			atomic_set(&thread_q_read, 1); // wake up if empty
+    			wake_up_interruptible(&thread_q_head_read);
 
-			verbose_isr_printk(KERN_INFO"[pci_isr]: Waking up the read thread\n");
-		}
-		else {
-			atomic_set(mod_desc_arr[interrupt_num]->atomic_poll, 1); //non threaded way
-			//for non ring buffer peripherals (memory)
-			//wake_up(&wq_periph);
-			wake_up(&mod_desc_arr[interrupt_num]->poll_wq);
-			verbose_isr_printk(KERN_INFO"[pci_isr]: Waking up the Poll(normal)\n");
-		}
+    			verbose_isr_printk(KERN_INFO"[pci_isr]: Waking up the read thread\n");
+    		}
+    		else {
+    			atomic_set(mod_desc_arr[interrupt_num]->atomic_poll, 1); //non threaded way
+    			//for non ring buffer peripherals (memory)
+    			//wake_up(&wq_periph);
+    			wake_up(&mod_desc_arr[interrupt_num]->poll_wq);
+    			verbose_isr_printk(KERN_INFO"[pci_isr]: Waking up the Poll(normal)\n");
+    		}
 
-		vec_serviced = vec_serviced | num2vec(interrupt_num);
+    		vec_serviced = vec_serviced | num2vec(interrupt_num);
+        }
 
 		//get next interrupt number
 		isr_status = isr_status & ~num2vec(interrupt_num);
 		verbose_isr_printk(KERN_INFO"[pci_isr]: vectors serviced is: ('0x%08x')\n", vec_serviced);
 		verbose_isr_printk(KERN_INFO"[pci_isr]: interrupt status register vector is: ('0x%08x')\n", isr_status);
-		interrupt_num = vec2num(isr_status);
 	}
 
 
@@ -1472,12 +1867,20 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->rx_dest = 0x0;
 
 	s->file_open = true;
+	#if (XDMA_AWS == 0)
+
+	s->xdma_dev = lro_global;
+
+	#endif
 
 	init_waitqueue_head(&s->poll_wq);
 	verbose_printk(KERN_INFO"[pci_%x_open]: minor number %x detected\n", s->minor, s->minor);
 
 	/*set the private data field of the file pointer for file op use*/
 	filep->private_data = s;
+
+
+
 
 	verbose_printk(KERN_INFO"[pci_%x_open]: file open complete.\n", s->minor);
 	return SUCCESS;
@@ -1491,7 +1894,7 @@ int pci_release(struct inode *inode, struct file *filep)
 	 * Might need to find a way to kfree() the other open
 	 * instances of the file. Or restrict that each file
 	 * only be open once. */
-	int in_read_fifo_count, in_write_fifo_count, try_count = 0;
+	int in_read_fifo_count, in_write_fifo_count, attempts = 1000;
 	struct mod_desc* mod_desc;
 
 	//printk(KERN_INFO"[pci_release]: Attempting to close file minor number: %d\n", mod_desc->minor);
@@ -1521,26 +1924,33 @@ int pci_release(struct inode *inode, struct file *filep)
 
 	in_read_fifo_count = atomic_read(mod_desc->in_read_fifo_count);
 	//wake up the read threads until we clear our mod_desc out of them so we can free the memory assiociated with them.
-	while(in_read_fifo_count != 0){
+	while(attempts-- > 0 && in_read_fifo_count != 0){
 		verbose_printk(KERN_INFO"[pci_%x_release]: in_read_fifo_count(%d) is not zero! waking thread\n", mod_desc->minor, in_read_fifo_count);
 		atomic_set(&thread_q_read, 1);
 		wake_up_interruptible(&thread_q_head_read);
 		schedule();					//think we want to schedule here to give thread time to do work
 		in_read_fifo_count = atomic_read(mod_desc->in_read_fifo_count);
-		//if(try_count ++ > 1000) break; // giveup
 	}
+    //remove items from the in_read_fifo
+    while(atomic_read(mod_desc->in_read_fifo_count) > 0) {
+        atomic_dec(mod_desc->in_read_fifo_count);
+    }
+
 
 	in_write_fifo_count = atomic_read(mod_desc->in_write_fifo_count);
-	try_count = 0;
+	attempts = 1000;
 	//wake up the write threads until we clear our mod_desc out of them so we can free the memory assiociated with them.
-	while(in_write_fifo_count != 0){
+	while(attempts-- > 0 && in_write_fifo_count != 0){
 		verbose_printk(KERN_INFO"[pci_%x_release]: in_write_fifo_count(%d) is not zero! waking thread\n", mod_desc->minor, in_write_fifo_count);
 		atomic_set(&thread_q_write, 1);
 		wake_up_interruptible(&thread_q_head_write);
 		schedule();					//think we want to schedule here to give thread time to do work
 		in_write_fifo_count = atomic_read(mod_desc->in_write_fifo_count);
-		//if(try_count ++ > 1000) break; // giveup
 	}
+    //remove items from the in_read_fifo
+    while(atomic_read(mod_desc->in_write_fifo_count) > 0) {
+        atomic_dec(mod_desc->in_write_fifo_count);
+    }
 
 	kfree((const void*)mod_desc->start_time);
 	kfree((const void*)mod_desc->stop_time);
@@ -1583,6 +1993,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	struct statistics * stats; //= kmalloc(sizeof(struct statistics), GFP_KERNEL);
 	struct timespec diff;
 	int minor;
+    int i;
 
 	mod_desc = filep->private_data;
 	minor = mod_desc->minor;
@@ -1600,6 +2011,24 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 
 	switch(cmd){
+
+		case WRITE_REG:
+			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Writing data at offset:%08llx\n", minor, arg_loc);
+			if( direct_write(mod_desc->axi_addr + arg_loc, mod_desc->dma_write_addr+arg_loc, 4, NORMAL_WRITE) ) {
+				printk(KERN_INFO"[pci_isr]: !!!!!!!!ERROR direct_read\n");
+				return ERROR;
+			}
+
+		break;
+
+		case READ_REG:
+			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Reading data at offset:%08llx\n", minor, arg_loc);
+			if( direct_read(mod_desc->axi_addr + arg_loc, mod_desc->dma_write_addr+arg_loc, 4, NORMAL_READ) ) {
+				printk(KERN_INFO"[pci_isr]: !!!!!!!!ERROR direct_read\n");
+				return ERROR;
+			}
+
+		break;
 
 		case SET_AXI_DEVICE:
 			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting Peripheral AXI Address: 0x%llx\n", minor, arg_loc);
@@ -1631,25 +2060,10 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			break;
 
 		case SET_DMA_SIZE:
-			printk(KERN_INFO"[pci_%x_ioctl]: Setting Peripheral DMA size:%llx\n", minor, arg_loc);
-			mod_desc->dma_size = (size_t)arg_loc;
-			//if(((u64)dma_current_offset + arg_loc) > (u64)((char*)dma_buffer_base + dma_buffer_size)) {
-			if(((u64)dma_current_offset + arg_loc*2) > dma_buffer_size) {
-				printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR! DMA Buffer z memory!\n", minor);
-				return ERROR;
-			}
-			else {
-				mod_desc->dma_size = (size_t)arg_loc;
-				verbose_printk(KERN_INFO"[[pci_%x_ioctl]: The current system memory dma offset:0x%x\n", minor, dma_current_offset);
-				mod_desc->dma_offset_read = dma_current_offset;				//set the dma start address for the peripheral read
-				mod_desc->dma_offset_write = dma_current_offset + mod_desc->dma_size; //set the dma start address for the peripheral write
-				mod_desc->dma_write_addr = dma_buffer_base + (u64)dma_current_offset + mod_desc->dma_size;				//actual pointer to kernel buffer
-				verbose_printk(KERN_INFO"[pci_%x_ioctl]: DMA kernel write address set to:0x%p\n", minor, mod_desc->dma_write_addr);
-				mod_desc->dma_read_addr = dma_buffer_base + (u64)dma_current_offset;				//actual pointer to kernel buffer
-				verbose_printk(KERN_INFO"[pci_%x_ioctl]: DMA kernel read address set to:0x%p\n", minor, mod_desc->dma_read_addr);
-				dma_current_offset = dma_current_offset + (u32)(2*mod_desc->dma_size);				//update the current dma allocation pointer, 2 buffers (R/W)
-				verbose_printk(KERN_INFO"[pci_%x_ioctl]: Success setting peripheral DMA\n", minor);
-			}
+            if( dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size, arg_loc) ) {
+                printk(KERN_INFO"[pci_%x_ioctl]: \t!!!!set dma FAILURE!!!!.\n", minor);
+                return ERROR;
+            }
 
 			break;
 
@@ -1680,8 +2094,17 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting device file size:%llu\n", minor, mod_desc->file_size);
 
 			/*initialize the DMA for the file*/
-			if( dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size) ) {
-				printk(KERN_INFO"[pci_%x_ioctl]: \t!!!!file open FAILURE!!!!.\n", minor);
+            if(mod_desc->set_dma_flag == 0) {
+        		if( dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size, mod_desc->dma_size) ) {
+        			printk(KERN_INFO"[pci_%x_ioctl]: \t!!!! DMA init FAILURE!!!!\n", minor);
+        			return ERROR;
+    			 }
+        	}
+
+			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Returning dma size:%zu\n", minor, mod_desc->dma_size);
+
+			if( copy_to_user((void *)arg, &(mod_desc->dma_size), sizeof(size_t)) ) {
+				verbose_printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR copy_to_user\n", minor);
 				return ERROR;
 			}
 			break;
@@ -1760,7 +2183,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		case GET_DRIVER_STATISTICS:
 			stats = (struct statistics *)kmalloc(sizeof(struct statistics), GFP_KERNEL);
 			if( copy_from_user(stats, (void *)arg, sizeof(struct statistics)) ) {
-				printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR copy_to_user\n", minor);
+				printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR copy_from_user\n", minor);
 				return ERROR;
 			}
 			//	statistics = (struct statistics *)arg;
@@ -1855,30 +2278,19 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 							return ERROR;
 						}
 
+                        //testing setting first to be no incr address mode
+                        // if( sv_do_addrmode_set(mod_desc->xdma_dev->sgdma_char_dev[0][0]->engine, 1) ) {
+                        //     return ERROR;
+                        // }
+                        // if( sv_do_addrmode_set(mod_desc->xdma_dev->sgdma_char_dev[0][1]->engine, 1) ) {
+                        //     return ERROR;
+                        // }
 					}
 					break;
 
 				default:printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR, improper mode type!\n", minor);
 			}
 			break;
-
-		case WRITE_REG:
-		verbose_printk(KERN_INFO"[pci_%x_ioctl]: Writing data at offset:%08llx\n", minor, arg_loc);
-		if( direct_write(mod_desc->axi_addr + arg_loc, mod_desc->dma_write_addr+arg_loc, 4, NORMAL_WRITE) ) {
-			printk(KERN_INFO"[pci_isr]: !!!!!!!!ERROR direct_read\n");
-			return ERROR;
-		}
-
-		break;
-
-		case READ_REG:
-		verbose_printk(KERN_INFO"[pci_%x_ioctl]: Reading data at offset:%08llx\n", minor, arg_loc);
-		if( direct_read(mod_desc->axi_addr + arg_loc, mod_desc->dma_write_addr+arg_loc, 4, NORMAL_READ) ) {
-			printk(KERN_INFO"[pci_isr]: !!!!!!!!ERROR direct_read\n");
-			return ERROR;
-		}
-
-		break;
 
 		default:printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR, no command found.\n", minor);
 	}
@@ -2010,7 +2422,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	}
 
 	if(mod_desc->set_dma_flag == 0) {
-		if( dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size) ) {
+		if( dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size, mod_desc->dma_size) ) {
 			printk(KERN_INFO"[pci_%x_write]: \t!!!! DMA init FAILURE!!!!\n", minor);
 			return ERROR;
 			 }
@@ -2160,7 +2572,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 			axi_dest = mod_desc->axi_addr + *f_pos;
 
-			mmap_addr_offset = ((size_t)buf - mod_desc->mmap_write_start_addr);		//(difference between vitrual write address and given buffer)
+			mmap_addr_offset = ((size_t)buf - mod_desc->mmap_start_addr);		//(difference between vitrual write address and given buffer)
 
 			if(mod_desc->keyhole_config & 0x1)
 				transfer_type = KEYHOLE_WRITE;
@@ -2179,13 +2591,14 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				//don't do copy from user copy directly from buffer given because it is mmap'd
 
 				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: writing peripheral with starting value(mmap): 0x%p\n", minor, (void *)(mod_desc->dma_write_addr));
-				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: DMA offset write value: %llx\n", minor, (u64)mod_desc->dma_offset_write);
+				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: dma buffer offset write value: %llx\n", minor, (u64)mod_desc->dma_offset_write);
 				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: writing peripheral using a transfer_type: 0x%x, offset: %llx\n", minor, transfer_type, *f_pos);
 
-				verbose_pci_write_printk(KERN_INFO"[user_peripheral_%x_write]: data_transfer AXI Address: 0x%llx, buf: 0x%p, len: 0x%zx\n",
-							minor, axi_dest, mod_desc->dma_write_addr, count);
+				verbose_pci_write_printk(KERN_INFO"[user_peripheral_%x_write]: data_transfer AXI Address(mmap): 0x%llx, buf: 0x%p, len: 0x%zx\n",
+							minor, axi_dest, buf, count);
 
-				if(data_transfer(axi_dest, mod_desc->dma_write_addr + mmap_addr_offset, count, transfer_type, (u64)mod_desc->dma_offset_write) ) {
+				//for mmap the data is really in the read buffer only, so use read_addr and offset_read for now
+				if(data_transfer(mod_desc, axi_dest, mod_desc->dma_read_addr + mmap_addr_offset, count, transfer_type, (u64)mod_desc->dma_read_addr) ) {
 					printk(KERN_INFO"[pci_%x_write]: !!!!!!!!ERROR writing to User Peripheral\n", minor);
 					return ERROR;
 				}
@@ -2223,13 +2636,13 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				buffer = mod_desc->dma_write_addr;
 
 				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: writing peripheral with starting value: 0x%p\n", minor, (void *)(mod_desc->dma_write_addr));
-				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: DMA offset write value: %llx\n", minor, (u64)mod_desc->dma_offset_write);
+				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: dma buffer offset write value: %llx\n", minor, (u64)mod_desc->dma_offset_write);
 				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: writing peripheral using a transfer_type: 0x%x, offset: %llx\n", minor, transfer_type, *f_pos);
 
 				verbose_pci_write_printk(KERN_INFO"[user_peripheral_%x_write]: data_transfer AXI Address: 0x%llx, buf: 0x%p, len: 0x%zx\n",
 							minor, axi_dest, mod_desc->dma_write_addr, count);
 
-				if(data_transfer(axi_dest, mod_desc->dma_write_addr, count, transfer_type, (u64)mod_desc->dma_offset_write) ) {
+				if(data_transfer(mod_desc, axi_dest, mod_desc->dma_write_addr, count, transfer_type, (u64)mod_desc->dma_offset_write) ) {
 					printk(KERN_INFO"[pci_%x_write]: !!!!!!!!ERROR writing to User Peripheral\n", minor);
 					return ERROR;
 				}
@@ -2338,7 +2751,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	}
 
 	if(mod_desc->set_dma_flag == 0) {
-	 if( dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size) ) {
+	 if( dma_file_init(mod_desc, dma_buffer_base, dma_buffer_size, mod_desc->dma_size) ) {
 			printk(KERN_INFO"[pci_%x_read]: \t!!!! DMA init FAILURE!!!!.\n", minor);
 			return ERROR;
 		}
@@ -2530,7 +2943,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			// Here we will decide whether to do a zero copy DMA, or to read directly from the peripheral
 			axi_dest = mod_desc->axi_addr + *f_pos + internal_offset;
 
-			mmap_addr_offset = ((size_t)buf - mod_desc->mmap_read_start_addr);		//(difference between vitrual write address and given buffer)
+			mmap_addr_offset = ((size_t)buf - mod_desc->mmap_start_addr);		//(difference between vitrual write address and given buffer)
 
 			if(mod_desc->keyhole_config & 0x1)
 				transfer_type = KEYHOLE_READ;
@@ -2559,7 +2972,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 				verbose_pci_read_printk(KERN_INFO"[user_peripheral_%x_read]: current file offset is: %llu + %llu \n", minor, *f_pos, internal_offset);
 
 				verbose_pci_read_printk(KERN_INFO"[user_peripheral_%x_read]: data_transfer AXI Address(mmap): 0x%llx, buf: 0x%p, len: 0x%zx\n",	minor, axi_dest, buf, count);
-				if(data_transfer(axi_dest, mod_desc->dma_read_addr + mmap_addr_offset, count, transfer_type, (u64)mod_desc->dma_offset_read) ) {
+				if(data_transfer(mod_desc, axi_dest, mod_desc->dma_read_addr + mmap_addr_offset, count, transfer_type, (u64)mod_desc->dma_offset_read) ) {
 					printk(KERN_INFO"[user_peripheral_%x_read]: !!!!!!!!ERROR reading data from User Peripheral\n", minor);
 					return ERROR;
 				}
@@ -2574,7 +2987,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 				verbose_pci_read_printk(KERN_INFO"[user_peripheral_%x_read]: data_transfer AXI Address: 0x%llx, buf: 0x%p + 0x%llx, len: 0x%zx\n",
 							minor, axi_dest, mod_desc->dma_read_addr, (u64)mod_desc->dma_offset_read, count);
-				if(data_transfer(axi_dest, mod_desc->dma_read_addr, count, transfer_type, (u64)mod_desc->dma_offset_read) ) {
+				if(data_transfer(mod_desc, axi_dest, mod_desc->dma_read_addr, count, transfer_type, (u64)mod_desc->dma_offset_read) ) {
 					printk(KERN_INFO"[user_peripheral_%x_read]: !!!!!!!!ERROR reading data from User Peripheral\n", minor);
 					return ERROR;
 				}
@@ -2686,22 +3099,11 @@ int pci_mmap(struct file *filep, struct vm_area_struct *vma) {
 		printk(KERN_INFO "[pci_%x_mmap]: WARNING: vm_pgoff != 0, vm_pg_off ignored \n", minor);
 	}
 
-	if((vma->vm_flags & VM_READ) == VM_READ && (vma->vm_flags & VM_WRITE) == VM_WRITE){
+//fix me, using the "read" buffer for everything, change to 1 buffer
+	if((vma->vm_flags & VM_READ) == VM_READ || (vma->vm_flags & VM_WRITE) == VM_WRITE){
 		printk(KERN_INFO "[pci_%x_mmap]: Using dma_mmap_coherent for read/write space\n", minor);
 		ret = dma_mmap_coherent(NULL, vma, mod_desc->dma_read_addr,	dma_addr_base+mod_desc->dma_offset_read, length);
-		mod_desc->mmap_read_start_addr = vma->vm_start;
-
-	}
-	else if((vma->vm_flags & VM_READ) == VM_READ){
-		printk(KERN_INFO "[pci_%x_mmap]: Using dma_mmap_coherent for read space\n", minor);
-		ret = dma_mmap_coherent(NULL, vma, mod_desc->dma_read_addr,	dma_addr_base+mod_desc->dma_offset_read, length);
-		mod_desc->mmap_read_start_addr = vma->vm_start;
-
-	}
-	else if((vma->vm_flags & VM_WRITE) == VM_WRITE){
-		printk(KERN_INFO "[pci_%x_mmap]: Using dma_mmap_coherent for write space\n", minor);
-		ret = dma_mmap_coherent(NULL, vma, mod_desc->dma_write_addr,	dma_addr_base+mod_desc->dma_offset_write, length);
-		mod_desc->mmap_write_start_addr = vma->vm_start;
+		mod_desc->mmap_start_addr = vma->vm_start;
 
 	}
 	else {

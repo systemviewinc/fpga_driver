@@ -496,7 +496,7 @@ static void engine_err_handle(struct xdma_engine *engine,
 	dbg_tfr("%s engine was %d descriptors into transfer (with %d desc)\n",
 		engine->name, desc_completed, transfer->desc_num);
 	dbg_tfr("%s engine status = %d\n", engine->name, engine->status);
-	
+
 	/* mark transfer as failed */
 	transfer->state = TRANSFER_STATE_FAILED;
 	xdma_engine_stop(engine);
@@ -1676,7 +1676,7 @@ static void transfer_abort(struct xdma_engine *engine,
 	if (head == transfer)
                list_del(engine->transfer_list.next);
 	else
-		pr_info("engine %s, transfer 0x%p NOT found, 0x%p.\n", 
+		pr_info("engine %s, transfer 0x%p NOT found, 0x%p.\n",
 			engine->name, transfer, head);
 }
 
@@ -1712,14 +1712,14 @@ int xdma_xfer_submit(void *channel, enum dma_data_direction dir, u64 ep_addr,
 		BUG_ON(!sgt->nents);
 		nents = sgt->nents;
 	}
-	
+
 	while (nents) {
 		unsigned long flags;
-		unsigned int xfer_nents = min_t(unsigned int, 
+		unsigned int xfer_nents = min_t(unsigned int,
 					nents, XDMA_TRANSFER_MAX_DESC);
 		struct xdma_transfer *transfer;
 
-		/* build transfer */	
+		/* build transfer */
 		transfer = transfer_create(engine, ep_addr, &sg, xfer_nents);
 		if (!transfer) {
 			dbg_tfr("OOM.\n");
@@ -2082,12 +2082,12 @@ static int irq_setup(struct xdma_dev *lro, struct pci_dev *pdev)
 				w = (val<<24) | (val<<16) | (val<<8)| val;
 				// Program IRQ Block Channel vactor and IRQ Block User vector with Legacy interrupt value
 				reg = lro->bar[lro->config_bar_idx] + 0x2080;   // IRQ user
-				write_register(w, reg);      
+				write_register(w, reg);
 				write_register(w, reg+0x4);
 				write_register(w, reg+0x8);
 				write_register(w, reg+0xC);
 				reg = lro->bar[lro->config_bar_idx] + 0x20A0;   // IRQ Block
-				write_register(w, reg);     
+				write_register(w, reg);
 				write_register(w, reg+0x4);
 			}
 		}
@@ -2383,7 +2383,7 @@ int xdma_device_open(struct pci_dev *pdev, xdma_channel_tuple **tuple_p)
 	read_interrupts(lro);
 
 	lro->feature_id = find_feature_id(lro);
-	
+
 	xdev_list_add(lro);
 
 	for (i = 0, j = 0; i < XDMA_CHANNEL_NUM_MAX; i++) {
@@ -2444,7 +2444,7 @@ int sv_xdma_device_open(struct pci_dev *pdev, struct xdma_dev *lro, xdma_channel
 	read_interrupts(lro);
 
 	lro->feature_id = find_feature_id(lro);
-	
+
 	xdev_list_add(lro);
 
 	for (i = 0, j = 0; i < XDMA_CHANNEL_NUM_MAX; i++) {
@@ -2618,7 +2618,7 @@ EXPORT_SYMBOL_GPL(xdma_user_isr_enable);
 int xdma_user_isr_disable(struct pci_dev *pdev, unsigned int mask)
 {
 	struct xdma_dev *lro;
-	
+
 	if (!pdev)
 		return -EINVAL;
 

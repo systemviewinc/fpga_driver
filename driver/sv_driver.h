@@ -12,8 +12,14 @@
  ***********************************************************
  */
 
+#ifndef SV_DRIVER_H
+#define SV_DRIVER_H
+
 #include <linux/kthread.h>
 #include <linux/kfifo.h>
+
+#define XDMA_AWS 0
+
 
 /*These are the CDMA R/W types */
 #ifndef KEYHOLE_WRITE
@@ -40,25 +46,25 @@
 #define RING_BUFF_SIZE_MULTIPLIER 2
 /********* printk statements *********/
 #define verbose_printk printk
-//#define verbose_data_xfer_printk printk
-//#define verbose_cdma_printk printk
-//#define verbose_dma_printk printk
+#define verbose_data_xfer_printk printk
+#define verbose_cdma_printk printk
+#define verbose_dma_printk printk
 //#define verbose_cdmaq_printk printk
 //#define verbose_dmaq_printk printk
-//#define verbose_axi_fifo_read_printk printk
-//#define verbose_axi_fifo_write_printk printk
-//#define verbose_isr_printk printk
+#define verbose_axi_fifo_read_printk printk
+#define verbose_axi_fifo_write_printk printk
+#define verbose_isr_printk printk
 //#define verbose_poll_printk printk
 //#define very_verbose_poll_printk printk
-//#define verbose_axi_fifo_d2r_printk printk
-//#define verbose_direct_write_printk printk
-//#define verbose_direct_read_printk printk
+#define verbose_axi_fifo_d2r_printk printk
+#define verbose_direct_write_printk printk
+#define verbose_direct_read_printk printk
 //#define verbose_llseek_printk printk
-//#define verbose_pci_read_printk printk
-//#define verbose_pci_write_printk printk
-//#define verbose_mmap_printk printk
-//#define verbose_read_thread_printk printk
-//#define verbose_write_thread_printk printk
+#define verbose_pci_read_printk printk
+#define verbose_pci_write_printk printk
+#define verbose_mmap_printk printk
+#define verbose_read_thread_printk printk
+#define verbose_write_thread_printk printk
 
 
 #ifndef verbose_llseek_printk
@@ -166,7 +172,7 @@
 #define BAR_MAX_NUM			5
 #define PCIE_RESOURCES_MAX_NUM			6
 
-
+#define MAX_FILE_DESC 12
 
 
 #define MAX_NUM_MASTERS 2
@@ -185,17 +191,27 @@ enum xfer_type {
 	INC_DA	 = 2*INC_SA,
 	INC_BOTH = INC_DA|INC_SA
 };
+#if (XDMA_AWS == 1)
+	/******************************** AWS XDMA related **********************************/
+	#include "libxdma.h"
+	#include "libxdma_api.h"
+	extern uint pcie_use_xdma;
+	extern struct xdma_dev *xdma_dev_s;
+	extern int xdma_num_channels;
+	extern xdma_channel_tuple* xdma_channel_list;
+	#define XDMA_TIMEOUT_IN_MSEC				(3 * 1000)
+	extern dma_addr_t dma_addr_base; /**< The hardware DMA Allocation Address */
+#else
+/******************************** NON XDMA related **********************************/
+	#include "xdma-core.h"
+	#include "sv_xdma.h"
 
-/******************************** AWS XDMA related **********************************/
-#include "libxdma.h"
-#include "libxdma_api.h"
-extern uint pcie_use_xdma;
-extern struct xdma_dev *xdma_dev_s;
-extern int xdma_num_channels;
-extern xdma_channel_tuple* xdma_channel_list;
-#define XDMA_TIMEOUT_IN_MSEC				(3 * 1000)
-extern dma_addr_t dma_addr_base; /**< The hardware DMA Allocation Address */
-
+	extern uint pcie_use_xdma;
+	extern struct xdma_dev *xdma_dev_s;
+	extern int xdma_num_channels;
+	#define XDMA_TIMEOUT_IN_MSEC				(3 * 1000)
+	extern dma_addr_t dma_addr_base; /**< The hardware DMA Allocation Address */
+#endif
 /******************************** Xilinx Register Offsets **********************************/
 
 extern const u32 AXI_STREAM_ISR;	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
@@ -261,12 +277,6 @@ extern atomic_t cdma_q;
 extern u32 dma_current_offset;
 extern u32 dma_garbage_offset;
 extern u32 dma_garbage_size;
-/*these are used in the data_transfer function to check for out of range memory r/w */
-extern unsigned long pci_bar_addr[BAR_MAX_NUM];
-extern unsigned long pci_bar_end[BAR_MAX_NUM];
-extern uint num_bars;
-
-extern char * pci_bar_vir_addr[BAR_MAX_NUM];		 //hardware base virtual address
 
 /*this is the user peripheral address offset*/
 //extern u64 bar_0_axi_offset;
@@ -322,11 +332,8 @@ struct mod_desc {
 	atomic_t * in_write_fifo_count;		/**< The number of times the mod_desc is in the write fifo, once it reaches 0 we can kfree it */
 	atomic_t * mmap_count;						/**< The number of current mmaps if it is zero we will read/write the using the mmap section of memory */
 
-	unsigned long mmap_read_start_addr;
-	unsigned long mmap_read_end_addr;
-
-	unsigned long mmap_write_start_addr;
-	unsigned long mmap_write_end_addr;
+	unsigned long mmap_start_addr;
+	unsigned long mmap_end_addr;
 
 	bool file_open;							/**< True if file is open, used to process the mod_desc (or throw it away) in read/write threads */
 
@@ -338,9 +345,9 @@ struct mod_desc {
 	u32 dma_offset_write;				/**< The Offset byte of the allocated DMA buffer for WRITE from dma_buffer_base */
 	u32 dma_offset_read_write;				/**< The Offset byte of the allocated DMA buffer for WRITE from dma_buffer_base */
 
-	char * dma_write_addr;			/**< This is the pointer to the start of DMA buffer for WRITE in virtual address space */
-	char * dma_read_addr;			/**< This is the pointer to the start of DMA buffer for READ in virtual address space */
-	char * dma_read_write_addr;			/**< This is the pointer to the start of DMA buffer for READ in virtual address space */
+	char __iomem* dma_write_addr;			/**< This is the pointer to the start of DMA buffer for WRITE in virtual address space */
+	char __iomem* dma_read_addr;			/**< This is the pointer to the start of DMA buffer for READ in virtual address space */
+	char __iomem* dma_read_write_addr;			/**< This is the pointer to the start of DMA buffer for READ in virtual address space */
 
 
 	int tx_bytes;				/**< This is the TX byte count for statistics generation */
@@ -378,17 +385,34 @@ struct mod_desc {
 
 	u32 tx_dest;	/**< Last wrote RLR value if non-zero this has to be used */
 	u32 rx_dest;	/**< Last read RLR value if non-zero this has to be used */
+
+
+#if (XDMA_AWS == 0)
+	struct xdma_dev *xdma_dev;
+#endif
+
+
 };
 
 struct mmap_info {
-    char *data; 					/**< the data **/
-    int reference;       	/**< how many times it is mmapped **/
+	char *data; 					/**< the data **/
+	int reference;					/**< how many times it is mmapped **/
 };
+
+//todo use this
+struct bar_info {
+	unsigned long pci_bar_addr[BAR_MAX_NUM];
+	unsigned long pci_bar_end[BAR_MAX_NUM];
+	uint num_bars;
+	char * pci_bar_vir_addr[BAR_MAX_NUM];		 //hardware base virtual address
+};
+
+extern struct bar_info * bars;
 
 //DECLARE_KFIFO(read_fifo, struct mod_desc*, 4096);
 
 
-extern struct mod_desc * mod_desc_arr[12];
+extern struct mod_desc * mod_desc_arr[MAX_FILE_DESC];
 
 /** File Statistics Struct
  *	@brief This is a data structure that contains fields for calculating bandwidth of R/W to a
@@ -452,6 +476,9 @@ int cdma_config_set(u32 bit_vec, int set_unset, int cdma_num);
  * @param transfer_type determines keyhole read or regular read
 */
 int direct_read(u64 axi_address, void *buf, size_t count, int transfer_type);
+
+u32 read_reg(u64 axi_address);
+
 /**
  * @brief This function issues a write from the host to the desired axi address.
  * @param axi_address 64b AXI address to write to.
@@ -470,7 +497,7 @@ int direct_write(u64 axi_address, void *buf, size_t count, int transfer_type);
  * @param transfer_type determines R/W or R/W with keyhole.
  * @param dma_offset The DMA offset of memory region if DMA transfer is selected.
 */
-int data_transfer(u64 axi_address, void *buf, size_t count, int transfer_type, u64 dma_offset);
+int data_transfer(struct mod_desc * mod_desc, u64 axi_address, void *buf, size_t count, int transfer_type, u64 dma_offset);
 /**
  * @brief This function is used for interrupt processing. it returns the integer value of the
  * least significant set bit position.
@@ -507,7 +534,7 @@ void int_ctlr_init(u64 axi_address);
  * @param dma_buffer_base the current DMA allocated region offset to be assigned
  * @param dma_buffer_size The size of the DMA buffer.
 */
-int dma_file_init(struct mod_desc *mod_desc, char * dma_buffer_base, u64 dma_buffer_size);
+int dma_file_init(struct mod_desc *mod_desc, char *dma_buffer_base, u64 dma_buffer_size, size_t dma_size);
 /**
  * @brief This function performs calls appropriate functions for Reading from the AXI Streaming FIFO and puts the data into the ring buffer.
  * @param count The number of bytes to read from the AXI streaming FIFO.
@@ -603,3 +630,4 @@ size_t axi_stream_fifo_d2r(struct mod_desc * mod_desc);
 //int read_data(struct mod_desc * mod_desc);
 int read_data(struct mod_desc * mod_desc, int read_size);
 // ******************************************************************
+#endif //SV_DRIVER_H

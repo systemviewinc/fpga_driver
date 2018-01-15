@@ -13,7 +13,7 @@
 #include <linux/version.h>
 
 /* Switch debug printing on/off */
-#define XDMA_DEBUG 0
+#define XDMA_DEBUG 1
 
 /* SECTION: Preprocessor macros/constants */
 #define XDMA_BAR_NUM (6)
@@ -354,7 +354,7 @@ struct xdma_irq {
 /* XDMA PCIe device specific book-keeping */
 struct xdma_dev {
 	struct list_head list_head;
-        struct list_head rcu_node;
+	struct list_head rcu_node;
 
 	unsigned long magic;		/* structure ID for sanity checks */
 	struct pci_dev *pci_dev;	/* pci device struct from probe() */
