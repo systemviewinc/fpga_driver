@@ -561,14 +561,14 @@ static int dma_transfer(struct mod_desc * mod_desc, u64 l_sa, u64 l_da, u32 l_bt
 		}
 		return (ret < 0 ? ret : 0);
 #else
-		printk(KERN_INFO"\t\t[dma_transfer]: Do transfer here: ______ (TODO) \n");
+		verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: Do transfer here: ______ (TODO) \n");
 		//write data
 
 		loff_t pos = 0;
 		int rc = 0;
 
-		printk(KERN_INFO"\t\t[dma_transfer]: mod_desc %p \n", mod_desc);
-		printk(KERN_INFO"\t\t[dma_transfer]: xdma_dev %p \n", mod_desc->xdma_dev);
+		verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: mod_desc %p \n", mod_desc);
+		verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: xdma_dev %p \n", mod_desc->xdma_dev);
 
 		//engine->rx_buffer = rvmalloc(RX_BUF_SIZE);
 		//rvfree(engine->rx_buffer, RX_BUF_SIZE);
@@ -576,20 +576,20 @@ static int dma_transfer(struct mod_desc * mod_desc, u64 l_sa, u64 l_da, u32 l_bt
 
 		void* new_buf = rvmalloc(l_btt);
 		if (new_buf == NULL) {
-			printk(KERN_INFO"\t\t[dma_transfer]: rvmalloc failed \n");
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: rvmalloc failed \n");
 			return -ENOMEM;
 		}
 
 		//copy data into vrmalloc buffer (new_buf)
-		printk(KERN_INFO"\t\t[dma_transfer]: memcpy(new_buf0x%p,l_sa 0x%p,dma_read_addr 0x%x)\n", new_buf, mod_desc->dma_read_addr, l_btt);
+		verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: memcpy(new_buf0x%p,l_sa 0x%p,dma_read_addr 0x%x)\n", new_buf, mod_desc->dma_read_addr, l_btt);
 		memcpy(new_buf, mod_desc->dma_read_addr, l_btt);
 
 		if(xfer_type & HOST_READ) { // host to device
-			printk(KERN_INFO"\t\t[dma_transfer]: lro h2c %p \n", mod_desc->xdma_dev->sgdma_char_dev[0][0]);
-			printk(KERN_INFO"\t\t[dma_transfer]: engine %p \n", mod_desc->xdma_dev->sgdma_char_dev[0][0]->engine);
-			printk(KERN_INFO"\t\t[dma_transfer]: given buffer %p \n",l_sa);
-			printk(KERN_INFO"\t\t[dma_transfer]: read buffer %p \n", mod_desc->dma_read_addr);
-			printk(KERN_INFO"\t\t[dma_transfer]: pos 0x%x \n", pos);
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: lro h2c %p \n", mod_desc->xdma_dev->sgdma_char_dev[0][0]);
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: engine %p \n", mod_desc->xdma_dev->sgdma_char_dev[0][0]->engine);
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: given buffer %p \n",l_sa);
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: read buffer %p \n", mod_desc->dma_read_addr);
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: pos 0x%x \n", pos);
 
 
 			//rc = sv_char_sgdma_read_write(mod_desc->xdma_dev->sgdma_char_dev[0][0], mod_desc->dma_write_addr, l_btt, &pos, 1);
@@ -597,7 +597,7 @@ static int dma_transfer(struct mod_desc * mod_desc, u64 l_sa, u64 l_da, u32 l_bt
 
 			if(rc == l_btt) {	//successfully transfered all bytes
 
-				printk(KERN_INFO"\t\t[dma_transfer]: HOST_READ memcpy(new_buf0x%p,dma_read_addr 0x%p,new_buf 0x%x)\n", mod_desc->dma_read_addr, new_buf, l_btt);
+				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: HOST_READ memcpy(new_buf0x%p,dma_read_addr 0x%p,new_buf 0x%x)\n", mod_desc->dma_read_addr, new_buf, l_btt);
 				memcpy(mod_desc->dma_read_addr, new_buf, l_btt);
 
 
@@ -605,28 +605,28 @@ static int dma_transfer(struct mod_desc * mod_desc, u64 l_sa, u64 l_da, u32 l_bt
 				return 0;
 			}
 			//else we did not transfer the l_btt amount of data
-			printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma transfed 0x%x bytes, should have transfered 0x%x bytes \n",rc, l_btt);
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma transfed 0x%x bytes, should have transfered 0x%x bytes \n",rc, l_btt);
 
 		} else if(xfer_type & HOST_WRITE) { // device to host
-			printk(KERN_INFO"\t\t[dma_transfer]: lro c2h %p \n", mod_desc->xdma_dev->sgdma_char_dev[0][1]);
-			printk(KERN_INFO"\t\t[dma_transfer]: engine %p \n", mod_desc->xdma_dev->sgdma_char_dev[0][1]->engine);
-			printk(KERN_INFO"\t\t[dma_transfer]: buffer %p \n", l_da);
-			printk(KERN_INFO"\t\t[dma_transfer]: write buffer %p \n", mod_desc->dma_read_addr);
-			printk(KERN_INFO"\t\t[dma_transfer]: pos 0x%x \n", pos);
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: lro c2h %p \n", mod_desc->xdma_dev->sgdma_char_dev[0][1]);
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: engine %p \n", mod_desc->xdma_dev->sgdma_char_dev[0][1]->engine);
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: buffer %p \n", l_da);
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: write buffer %p \n", mod_desc->dma_read_addr);
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: pos 0x%x \n", pos);
 
 
 			//rc = sv_char_sgdma_read_write(mod_desc->xdma_dev->sgdma_char_dev[0][1], mod_desc->dma_read_addr, l_btt, &pos, 0);
 			rc = sv_char_sgdma_read_write(mod_desc->xdma_dev->sgdma_char_dev[0][1], (char *)new_buf, l_btt, &pos, 0);
 			if(rc == l_btt) {	//successfully transfered all bytes
 
-				printk(KERN_INFO"\t\t[dma_transfer]: HOST_WRITE memcpy(new_buf0x%p,dma_read_addr 0x%p,new_buf 0x%x)\n", mod_desc->dma_read_addr, new_buf, l_btt);
+				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: HOST_WRITE memcpy(new_buf0x%p,dma_read_addr 0x%p,new_buf 0x%x)\n", mod_desc->dma_read_addr, new_buf, l_btt);
 				memcpy(mod_desc->dma_read_addr, new_buf, l_btt);
 
 				rvfree(new_buf, l_btt);
 				return 0;
 			}
 			//else we did not transfer the l_btt amount of data
-			printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma transfed 0x%x bytes, should have transfered 0x%x bytes \n",rc, l_btt);
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma transfed 0x%x bytes, should have transfered 0x%x bytes \n",rc, l_btt);
 		}
 
 		rvfree(new_buf, l_btt);

@@ -112,9 +112,9 @@ int sv_map_single_bar(struct xdma_dev *lro, struct bar_info *bars, struct pci_de
 		bars->pci_bar_vir_addr[idx] = lro->bar[idx];		 //hardware base virtual address
 		bars->num_bars++;
 
-		printk(KERN_INFO"[sv_map_single_bar]: pci bar %d addr is:0x%lx \n", idx, bars->pci_bar_vir_addr[idx]);
-		printk(KERN_INFO"[sv_map_single_bar]: pci bar %d start is:0x%lx end is:0x%lx\n", idx, bars->pci_bar_addr[idx], bars->pci_bar_end[idx]);
-		printk(KERN_INFO"[sv_map_single_bar]: pci bar %d size is:0x%lx\n", idx, map_len);
+		dbg_init("[sv_map_single_bar]: pci bar %d addr is:0x%lx \n", idx, bars->pci_bar_vir_addr[idx]);
+		dbg_init("[sv_map_single_bar]: pci bar %d start is:0x%lx end is:0x%lx\n", idx, bars->pci_bar_addr[idx], bars->pci_bar_end[idx]);
+		dbg_init("[sv_map_single_bar]: pci bar %d size is:0x%lx\n", idx, map_len);
 
 	return (int)map_len;
 }
@@ -155,24 +155,24 @@ ssize_t sv_char_sgdma_read_write(struct xdma_char * lro_char, char __user *buf, 
 
 
 
-	printk(KERN_INFO"\t\t[sv_char_sgdma_read_write]: buf %p \n", buf);
-	printk(KERN_INFO"\t\t[sv_char_sgdma_read_write]: count %x \n", lro_char);
-	printk(KERN_INFO"\t\t[sv_char_sgdma_read_write]: pos %p \n", pos);
-	printk(KERN_INFO"\t\t[sv_char_sgdma_read_write]: lro_char %x \n", dir_to_dev);
+	dbg_tfr("\t\t[sv_char_sgdma_read_write]: buf %p \n", buf);
+	dbg_tfr("\t\t[sv_char_sgdma_read_write]: count %x \n", lro_char);
+	dbg_tfr("\t\t[sv_char_sgdma_read_write]: pos %p \n", pos);
+	dbg_tfr("\t\t[sv_char_sgdma_read_write]: lro_char %x \n", dir_to_dev);
 
 
-	printk(KERN_INFO"\t\t[sv_char_sgdma_read_write]: lro_char %p \n", lro_char);
+	dbg_tfr("\t\t[sv_char_sgdma_read_write]: lro_char %p \n", lro_char);
 
 
 	lro = lro_char->lro;
 	 BUG_ON(!lro);
 	BUG_ON(lro->magic != MAGIC_DEVICE);
 
-	printk(KERN_INFO"\t\t[sv_char_sgdma_read_write]: lro %p \n", lro);
+	dbg_tfr("\t\t[sv_char_sgdma_read_write]: lro %p \n", lro);
 
 
 	engine = lro_char->engine;
-	printk(KERN_INFO"\t\t[sv_char_sgdma_read_write]: engine %p \n", engine);
+	dbg_tfr("\t\t[sv_char_sgdma_read_write]: engine %p \n", engine);
 
 
 	/* XXX detect non-supported directions XXX */
