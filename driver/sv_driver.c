@@ -22,6 +22,11 @@
 #include <linux/uaccess.h>
 #include <linux/interrupt.h>
 #include <linux/sched.h>
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
+#include <linux/sched/task.h>
+#endif
+
 #include <linux/slab.h>
 #include <linux/msi.h>
 #include <linux/poll.h>
@@ -306,7 +311,8 @@ MODULE_DEVICE_TABLE(pci, ids);
 #if (XDMA_AWS == 1)
 	/******************************** AWS XDMA related **********************************/
 	struct xdma_dev *xdma_dev_s;
-	int xdma_num_channels;
+    int xdma_c2h_num_channels = 0;
+    int xdma_h2c_num_channels = 0;
 	xdma_channel_tuple* xdma_channel_list = NULL;
 
 	u32 build_vector_reg(u32 a, u32 b, u32 c, u32 d) ;
@@ -317,7 +323,10 @@ MODULE_DEVICE_TABLE(pci, ids);
 
 #else
 /******************************** NON XDMA related **********************************/
-struct xdma_dev *lro_global = NULL;
+    struct xdma_dev *lro_global = NULL;
+    int xdma_c2h_num_channels = 0;
+    int xdma_h2c_num_channels = 0;
+
 
 #endif
 
@@ -608,8 +617,6 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		if(msi_msix_capable(pci_dev_struct, PCI_CAP_ID_MSIX)) {
 			verbose_printk(KERN_INFO"[probe:%s]: MSIX capable XDMA\n", pci_devName);
 
-
-
 		}
 		//MSI
 		else if (msi_msix_capable(pci_dev_struct, PCI_CAP_ID_MSI)) {
@@ -644,19 +651,19 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
     			goto disable_device;
     		}
 
+            xdma_init_sv(lro_global);
+
+
+
             printk(KERN_INFO"[probe:%s]: Using IRQ#%d with 0x%p\n", pci_devName, pci_dev_struct->irq, &pci_dev_struct);
 
             /* enable user interrupts */
         	user_interrupts_enable(lro_global, ~0);
 
-
-
 		}
 		//LEGACY
 		else {
 			verbose_printk(KERN_INFO"[probe:%s]: Legacy interupts XDMA\n", pci_devName);
-
-
 
 		}
 	}
@@ -946,7 +953,13 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 			for (i = 0 ; i < req_nvec ; i++)
 				sv_msix_entry[i].entry = i;
 			// request all vectors
-			if(0 > pci_enable_msix(pci_dev_struct, sv_msix_entry, req_nvec)) {
+
+            #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0)
+                if (pci_enable_msix(pci_dev_struct, &sv_msix_entry, req_nvec))
+            #else
+                if (pci_enable_msix_exact(pci_dev_struct, &sv_msix_entry, req_nvec))
+            #endif
+
 				printk(KERN_INFO"[probe:%s]: Enable MSI-X failed\n", pci_devName);
 				goto disable_device;
 			}
@@ -974,14 +987,14 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 				printk(KERN_INFO"[probe:%s]: entry %d, vector IRQ#%d\n", pci_devName, i, xdma_dev_s->entry[i].vector);
 			}
 
-			xdma_num_channels = sv_xdma_device_open(pci_dev_struct, xdma_dev_s, &xdma_channel_list);
-			if(xdma_num_channels < 0) {
+			xdma_c2h_num_channels = xdma_h2c_num_channels = sv_xdma_device_open(pci_dev_struct, xdma_dev_s, &xdma_channel_list);
+			if(xdma_num_xdma_c2h_num_channelschannels < 0) {
 				printk(KERN_INFO"[probe:%s]: sv_xdma_device_open failed\n", pci_devName);
 				goto disable_device;
 			}
 
-			xdma_init_sv(xdma_num_channels);
-			verbose_printk(KERN_INFO"[probe:%s]: xdma initialized with %d channels\n", pci_devName, xdma_num_channels);
+			xdma_init_sv(xdma_c2h_num_channels);
+			verbose_printk(KERN_INFO"[probe:%s]: xdma initialized with %d channels\n", pci_devName, xdma_c2h_num_channels);
 			//}
 		} else if (msi_msix_capable(pci_dev_struct, PCI_CAP_ID_MSI)) {
 
@@ -1013,14 +1026,14 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 			// 	printk(KERN_INFO"[probe:%s]: entry %d, vector IRQ#%d\n", pci_devName, i, xdma_dev_s->entry[i].vector);
 			// }
 
-			xdma_num_channels = sv_xdma_device_open(pci_dev_struct, xdma_dev_s, &xdma_channel_list);
-			if(xdma_num_channels < 0) {
+			xdma_c2h_num_channels = xdma_h2c_num_channels = sv_xdma_device_open(pci_dev_struct, xdma_dev_s, &xdma_channel_list);
+			if(xdma_c2h_num_channels < 0) {
 				printk(KERN_INFO"[probe:%s]: sv_xdma_device_open failed\n", pci_devName);
 				goto disable_device;
 			}
 
-			xdma_init_sv(xdma_num_channels);
-			verbose_printk(KERN_INFO"[probe:%s]: xdma initialized with %d channels\n", pci_devName, xdma_num_channels);
+			xdma_init_sv(xdma_c2h_num_channels);
+			verbose_printk(KERN_INFO"[probe:%s]: xdma initialized with %d channels\n", pci_devName, xdma_c2h_num_channels);
 
 		} else {
 			printk(KERN_INFO"[probe:%s]: MSI/MSI-X not detected - using legacy interrupts\n", pci_devName);
@@ -2036,7 +2049,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			break;
 
 		case SET_AXI_CTL_DEVICE:
-			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting Peripheral CTL AXI Address: 0x%llx\n", minor, arg_loc);
+			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting Peripheral control AXI Address: 0x%llx\n", minor, arg_loc);
 			mod_desc->axi_addr_ctl = arg_loc&(0xFFFFFFFFFFFFFFFF);
 			break;
 
@@ -3101,7 +3114,7 @@ int pci_mmap(struct file *filep, struct vm_area_struct *vma) {
 
 //fix me, using the "read" buffer for everything, change to 1 buffer
 	if((vma->vm_flags & VM_READ) == VM_READ || (vma->vm_flags & VM_WRITE) == VM_WRITE){
-		printk(KERN_INFO "[pci_%x_mmap]: Using dma_mmap_coherent for read/write space\n", minor);
+		verbose_mmap_printk(KERN_INFO "[pci_%x_mmap]: Using dma_mmap_coherent for read/write space\n", minor);
 		ret = dma_mmap_coherent(NULL, vma, mod_desc->dma_read_addr,	dma_addr_base+mod_desc->dma_offset_read, length);
 		mod_desc->mmap_start_addr = vma->vm_start;
 

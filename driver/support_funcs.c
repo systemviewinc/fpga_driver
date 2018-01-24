@@ -22,6 +22,10 @@
 #include <linux/interrupt.h>
 #include <linux/sched.h>
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
+#include <linux/sched/task.h>
+#endif
+
 #include <linux/slab.h>
 #include <linux/msi.h>
 #include <linux/poll.h>
@@ -90,8 +94,6 @@ static int xdma_query(int);
 static int cdma_query(void);
 static dma_addr_t xdma_h2c_buff[XDMA_CHANNEL_NUM_MAX];
 static dma_addr_t xdma_c2h_buff[XDMA_CHANNEL_NUM_MAX];
-static void * xdma_h2c_da[XDMA_CHANNEL_NUM_MAX];
-static void * xdma_c2h_da[XDMA_CHANNEL_NUM_MAX];
 static int cdma_use_count[CDMA_MAX_NUM];
 /******************************** Support functions ***************************************/
 
@@ -507,7 +509,6 @@ static int dma_transfer(struct mod_desc * mod_desc, u64 l_sa, u64 l_da, u32 l_bt
 				sg_table.sgl = &sg;
 				sg_table.nents = 1;
 				//xfer_mem = (char *)dma_buffer_base + ((char *)l_sa - (char *)dma_addr_base);
-				//memcpy(xdma_h2c_da[xdma_channel],xfer_mem,xfer_size);
 				sg_dma_address(&sg) = l_sa;//(dma_addr_t)xdma_h2c_buff[xdma_channel];
 
 				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer] DMA_TO_DEVICE l_sa: 0x%p, l_da: 0x%p, xdma_b: 0x%p, xfer_size: %d, BTT: %d\n",
@@ -561,7 +562,6 @@ static int dma_transfer(struct mod_desc * mod_desc, u64 l_sa, u64 l_da, u32 l_bt
 		}
 		return (ret < 0 ? ret : 0);
 #else
-		verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: Do transfer here: ______ (TODO) \n");
 		//write data
 
 		loff_t pos = 0;
@@ -584,30 +584,42 @@ static int dma_transfer(struct mod_desc * mod_desc, u64 l_sa, u64 l_da, u32 l_bt
 		verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: memcpy(new_buf0x%p,l_sa 0x%p,dma_read_addr 0x%x)\n", new_buf, mod_desc->dma_read_addr, l_btt);
 		memcpy(new_buf, mod_desc->dma_read_addr, l_btt);
 
-		if(xfer_type & HOST_READ) { // host to device
+		if(xfer_type & HOST_READ) { // host to card
 			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: lro h2c %p \n", mod_desc->xdma_dev->sgdma_char_dev[0][0]);
 			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: engine %p \n", mod_desc->xdma_dev->sgdma_char_dev[0][0]->engine);
 			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: given buffer %p \n",l_sa);
 			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: read buffer %p \n", mod_desc->dma_read_addr);
 			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: pos 0x%x \n", pos);
 
+			while (xdma_channel == -1 && --attempts != 0) {
+				xdma_channel = xdma_query(DMA_TO_DEVICE);
+				if(xdma_channel == -1) schedule();
+			}
 
 			//rc = sv_char_sgdma_read_write(mod_desc->xdma_dev->sgdma_char_dev[0][0], mod_desc->dma_write_addr, l_btt, &pos, 1);
-			rc = sv_char_sgdma_read_write(mod_desc->xdma_dev->sgdma_char_dev[0][0], (char *)new_buf, l_btt, &pos, 1);
+			rc = sv_char_sgdma_read_write(mod_desc->xdma_dev->sgdma_char_dev[xdma_channel][0], (char *)new_buf, l_btt, &pos, 1);
 
 			if(rc == l_btt) {	//successfully transfered all bytes
 
 				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: HOST_READ memcpy(new_buf0x%p,dma_read_addr 0x%p,new_buf 0x%x)\n", mod_desc->dma_read_addr, new_buf, l_btt);
 				memcpy(mod_desc->dma_read_addr, new_buf, l_btt);
 
-
 				rvfree(new_buf, l_btt);
+				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: unlock h2c %i\n", xdma_channel);
+				mutex_unlock(&xdma_h2c_sem[xdma_channel]);
+
 				return 0;
 			}
 			//else we did not transfer the l_btt amount of data
-			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma transfed 0x%x bytes, should have transfered 0x%x bytes \n",rc, l_btt);
+			printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma transfed 0x%x bytes, should have transfered 0x%x bytes \n",rc, l_btt);
 
-		} else if(xfer_type & HOST_WRITE) { // device to host
+			rvfree(new_buf, l_btt);
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: unlock h2c %i\n", xdma_channel);
+			mutex_unlock(&xdma_h2c_sem[xdma_channel]);
+			return ERROR;
+
+
+		} else if(xfer_type & HOST_WRITE) { // card to host
 			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: lro c2h %p \n", mod_desc->xdma_dev->sgdma_char_dev[0][1]);
 			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: engine %p \n", mod_desc->xdma_dev->sgdma_char_dev[0][1]->engine);
 			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: buffer %p \n", l_da);
@@ -615,21 +627,37 @@ static int dma_transfer(struct mod_desc * mod_desc, u64 l_sa, u64 l_da, u32 l_bt
 			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: pos 0x%x \n", pos);
 
 
+			while (xdma_channel == -1 && --attempts != 0) {
+				xdma_channel = xdma_query(DMA_FROM_DEVICE);
+				if(xdma_channel == -1) schedule();
+			}
+
 			//rc = sv_char_sgdma_read_write(mod_desc->xdma_dev->sgdma_char_dev[0][1], mod_desc->dma_read_addr, l_btt, &pos, 0);
-			rc = sv_char_sgdma_read_write(mod_desc->xdma_dev->sgdma_char_dev[0][1], (char *)new_buf, l_btt, &pos, 0);
+			rc = sv_char_sgdma_read_write(mod_desc->xdma_dev->sgdma_char_dev[xdma_channel][1], (char *)new_buf, l_btt, &pos, 0);
 			if(rc == l_btt) {	//successfully transfered all bytes
 
 				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: HOST_WRITE memcpy(new_buf0x%p,dma_read_addr 0x%p,new_buf 0x%x)\n", mod_desc->dma_read_addr, new_buf, l_btt);
 				memcpy(mod_desc->dma_read_addr, new_buf, l_btt);
 
 				rvfree(new_buf, l_btt);
+				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: unlock c2h %i\n", xdma_channel);
+				mutex_unlock(&xdma_c2h_sem[xdma_channel]);
 				return 0;
 			}
 			//else we did not transfer the l_btt amount of data
-			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma transfed 0x%x bytes, should have transfered 0x%x bytes \n",rc, l_btt);
+			printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma transfed 0x%x bytes, should have transfered 0x%x bytes \n",rc, l_btt);
+			rvfree(new_buf, l_btt);
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: unlock c2h %i\n", xdma_channel);
+			mutex_unlock(&xdma_c2h_sem[xdma_channel]);
+			return ERROR;
 		}
 
 		rvfree(new_buf, l_btt);
+
+		if (ret < 0) {
+			mutex_unlock(&xdma_h2c_sem[xdma_channel]);
+			return ret;
+		}
 
 
 		return rc;
@@ -765,7 +793,7 @@ int write_data(struct mod_desc * mod_desc)
 		return ERROR;
 		}
 
-	axi_dest = mod_desc->axi_addr + AXI_STREAM_TDFD;
+	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDFD;
 	//now we want to cdma write_header_size amount of data
 
 	room_till_end = ((mod_desc->dma_size - wth) & ~(dma_byte_width-1));					 //make it divisible by dma_byte_width
@@ -1075,6 +1103,7 @@ int pcie_ctl_init(u64 axi_pcie_ctl, u64 dma_addr_base)
 	return 0;
 }
 
+#if (XDMA_AWS == 1)
 /**
  * This function will intiialize the XDMA channels
  */
@@ -1084,18 +1113,41 @@ int xdma_init_sv(int num_channels)
 	for (i = 0 ; i < num_channels; i++) {
 		mutex_init(&xdma_h2c_sem[i]);
 		mutex_init(&xdma_c2h_sem[i]);
-		xdma_h2c_da[i] = dma_alloc_coherent(NULL, (size_t)4096, &xdma_h2c_buff[i], GFP_KERNEL);
-		xdma_c2h_da[i] = dma_alloc_coherent(NULL, (size_t)4096, &xdma_c2h_buff[i], GFP_KERNEL);
-		if (!xdma_c2h_da[i] || !xdma_h2c_da[i]) {
-			verbose_printk(KERN_INFO"vsi_driver:[xdma_init] cannot allocated xdma buffer 0x%p 0x%p\n",
-							 (void *)xdma_c2h_da[i], (void *)xdma_h2c_da[i]);
-		} else {
-			verbose_printk(KERN_INFO"vsi_driver:[xdma_init] callocated xdma buffer 0x%p 0x%p\n",
-							 (void *)xdma_c2h_da[i],(void *)xdma_h2c_da[i]);
+	}
+	return 0;
+}
+#else
+/**
+ * This function will intiialize the XDMA channels
+ */
+int xdma_init_sv(struct xdma_dev *lro)
+{
+	int i;
+	for (i = 0 ; i < XDMA_CHANNEL_NUM_MAX; i++) {
+		if(lro->sgdma_char_dev[i][0] != NULL){
+			printk(KERN_INFO"[xdma_init_sv]:Found h2c engine %i\n", i);
+			mutex_init(&xdma_h2c_sem[i]);
+			xdma_h2c_num_channels++;
+		}
+		else{
+			printk(KERN_INFO"[xdma_init_sv]:Did not find h2c engine %i\n", i);
+		}
+		if(lro->sgdma_char_dev[i][1] != NULL){
+			printk(KERN_INFO"[xdma_init_sv]:Found c2h engine %i\n", i);
+			mutex_init(&xdma_c2h_sem[i]);
+			xdma_c2h_num_channels++;
+		}
+		else {
+			printk(KERN_INFO"[xdma_init_sv]:Did not find c2h engine %i\n", i);
 		}
 	}
 	return 0;
 }
+#endif
+
+
+
+
 
 
 /**
@@ -1484,7 +1536,7 @@ static int xdma_query(int direction)
 {
 	int i;
 	if(direction == DMA_TO_DEVICE) {
-		for (i = 0 ; i < xdma_num_channels; i++)
+		for (i = 0 ; i < xdma_h2c_num_channels; i++)
 			if(!mutex_is_locked(&xdma_h2c_sem[i])) {
 				if(!mutex_trylock(&xdma_h2c_sem[i]) ){
 					verbose_dmaq_printk(KERN_INFO"\t\t\t[dma_queue]: Mutex trylock failed.\n");
@@ -1494,7 +1546,7 @@ static int xdma_query(int direction)
 				return i;
 			}
 	} else if(direction == DMA_FROM_DEVICE) {
-		for (i = 0 ; i < xdma_num_channels; i++)
+		for (i = 0 ; i < xdma_c2h_num_channels; i++)
 			if(!mutex_is_locked(&xdma_c2h_sem[i])) {
 				if(!mutex_trylock(&xdma_c2h_sem[i]) ) {
 					verbose_dmaq_printk(KERN_INFO"\t\t\t[dma_queue]: Mutex trylock failed.\n");
@@ -1960,7 +2012,7 @@ size_t axi_stream_fifo_read(size_t count, char * buf_base_addr, u64 hw_base_addr
 
 	//}
 	room_till_end = ( (buf_size - ring_pointer_offset) & ~(dma_byte_width-1));				 //make it divisible by dma_byte_width
-	axi_dest = mod_desc->axi_addr + AXI_STREAM_RDFD;
+	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RDFD;
 
 	if(count > room_till_end) {			//needs to be 2 cdma transfers
 		remaining = count-room_till_end;
@@ -2043,7 +2095,7 @@ size_t axi_stream_fifo_read_direct(size_t count, char * buf_base_addr, u64 hw_ba
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: count = %zd.\n", count);
 	}
 
-	axi_dest = mod_desc->axi_addr + AXI_STREAM_RDFD;
+	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_RDFD;
 
 	if(count > buf_size) {			//needs to be 2 cdma transfers
 		//there is not enough room in the buffer

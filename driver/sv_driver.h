@@ -49,16 +49,16 @@
 // #define verbose_data_xfer_printk printk
 // #define verbose_cdma_printk printk
 // #define verbose_dma_printk printk
-//#define verbose_cdmaq_printk printk
-//#define verbose_dmaq_printk printk
+// #define verbose_cdmaq_printk printk
+// #define verbose_dmaq_printk printk
 // #define verbose_axi_fifo_read_printk printk
 // #define verbose_axi_fifo_write_printk printk
 // #define verbose_isr_printk printk
 //#define verbose_poll_printk printk
 //#define very_verbose_poll_printk printk
 // #define verbose_axi_fifo_d2r_printk printk
-// #define verbose_direct_write_printk printk
-// #define verbose_direct_read_printk printk
+//#define verbose_direct_write_printk printk
+//#define verbose_direct_read_printk printk
 //#define verbose_llseek_printk printk
 // #define verbose_pci_read_printk printk
 // #define verbose_pci_write_printk printk
@@ -197,7 +197,9 @@ enum xfer_type {
 	#include "libxdma_api.h"
 	extern uint pcie_use_xdma;
 	extern struct xdma_dev *xdma_dev_s;
-	extern int xdma_num_channels;
+	extern int xdma_h2c_num_channels;
+	extern int xdma_c2h_num_channels;
+
 	extern xdma_channel_tuple* xdma_channel_list;
 	#define XDMA_TIMEOUT_IN_MSEC				(3 * 1000)
 	extern dma_addr_t dma_addr_base; /**< The hardware DMA Allocation Address */
@@ -208,7 +210,9 @@ enum xfer_type {
 
 	extern uint pcie_use_xdma;
 	extern struct xdma_dev *xdma_dev_s;
-	extern int xdma_num_channels;
+	extern int xdma_h2c_num_channels;
+	extern int xdma_c2h_num_channels;
+
 	#define XDMA_TIMEOUT_IN_MSEC				(3 * 1000)
 	extern dma_addr_t dma_addr_base; /**< The hardware DMA Allocation Address */
 #endif
@@ -441,8 +445,13 @@ struct bar_mapping {
 };
 
 // ********************** support functions **************************
-
+#if (XDMA_AWS == 1)
 int xdma_init_sv(int num_channels);
+#else
+int xdma_init_sv(struct xdma_dev *lro);
+#endif
+
+
 /**
  * @brief This function is used to initiate a CDMA Transfer. It requires
  * a locked CDMA resource an AXI Start Address, AXI Destination Address,
