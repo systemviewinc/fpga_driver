@@ -769,7 +769,7 @@ int write_data(struct mod_desc * mod_desc)
 		printk(KERN_INFO"[write_data]: !!!!!!!!ERROR reading AXI_STREAM_ISR register.\n");
 		return ERROR;
 	}
-	verbose_printk(KERN_INFO"[write_data]: AXI_STREAM_ISR register: ('0x%08x')\n", buf);
+	verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: AXI_STREAM_ISR register: ('0x%08x')\n", buf);
 
 	//update wth pointer
 	atomic_set(mod_desc->wth, wth);
