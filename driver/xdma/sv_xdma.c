@@ -7,7 +7,7 @@
 #include "xbar_sys_parameters.h"
 #include "version.h"
 
-#include "sv_driver.h"
+#include "../sv_driver.h"
 
 
 /* map_bars() -- map device regions into kernel virtual address space
@@ -155,24 +155,22 @@ ssize_t sv_char_sgdma_read_write(struct xdma_char * lro_char, char __user *buf, 
 
 
 
-	dbg_tfr("\t\t[sv_char_sgdma_read_write]: buf %p \n", buf);
-	dbg_tfr("\t\t[sv_char_sgdma_read_write]: count %x \n", lro_char);
-	dbg_tfr("\t\t[sv_char_sgdma_read_write]: pos %p \n", pos);
-	dbg_tfr("\t\t[sv_char_sgdma_read_write]: lro_char %x \n", dir_to_dev);
-
-
-	dbg_tfr("\t\t[sv_char_sgdma_read_write]: lro_char %p \n", lro_char);
+	// dbg_tfr("\t\t[sv_char_sgdma_read_write]: buf %p \n", buf);
+	// dbg_tfr("\t\t[sv_char_sgdma_read_write]: count %x \n", count);
+	// dbg_tfr("\t\t[sv_char_sgdma_read_write]: pos %p \n", pos);
+	// dbg_tfr("\t\t[sv_char_sgdma_read_write]: lro_char %x \n", dir_to_dev);
+	// dbg_tfr("\t\t[sv_char_sgdma_read_write]: lro_char %p \n", lro_char);
 
 
 	lro = lro_char->lro;
 	 BUG_ON(!lro);
 	BUG_ON(lro->magic != MAGIC_DEVICE);
 
-	dbg_tfr("\t\t[sv_char_sgdma_read_write]: lro %p \n", lro);
+	// dbg_tfr("\t\t[sv_char_sgdma_read_write]: lro %p \n", lro);
 
 
 	engine = lro_char->engine;
-	dbg_tfr("\t\t[sv_char_sgdma_read_write]: engine %p \n", engine);
+	// dbg_tfr("\t\t[sv_char_sgdma_read_write]: engine %p \n", engine);
 
 
 	/* XXX detect non-supported directions XXX */
