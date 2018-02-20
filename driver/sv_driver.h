@@ -18,9 +18,6 @@
 #include <linux/kthread.h>
 #include <linux/kfifo.h>
 
-#define XDMA_AWS 0
-
-
 /*These are the CDMA R/W types */
 #ifndef KEYHOLE_WRITE
 #define KEYHOLE_WRITE 2
@@ -57,8 +54,8 @@
 //#define verbose_poll_printk printk
 //#define very_verbose_poll_printk printk
 #define verbose_axi_fifo_d2r_printk printk
-#define verbose_direct_write_printk printk
-#define verbose_direct_read_printk printk
+//#define verbose_direct_write_printk printk
+//#define verbose_direct_read_printk printk
 //#define verbose_llseek_printk printk
 #define verbose_pci_read_printk printk
 #define verbose_pci_write_printk printk
@@ -191,16 +188,7 @@ enum xfer_type {
 	INC_DA = 8,
 	INC_BOTH = INC_DA|INC_SA
 };
-#if (XDMA_AWS == 1)
-	/******************************** AWS XDMA related **********************************/
-	#include "aws/libxdma.h"
-	#include "aws/libxdma_api.h"
-	extern uint pcie_use_xdma;
-	extern struct xdma_dev *xdma_dev_s;
 
-	extern xdma_channel_tuple* xdma_channel_list;
-	#define XDMA_TIMEOUT_IN_MSEC				(3 * 1000)
-#else
 /******************************** NON XDMA related **********************************/
 	#include "xdma/xdma-core.h"
 	#include "xdma/sv_xdma.h"
@@ -209,7 +197,6 @@ enum xfer_type {
 	extern struct xdma_dev *xdma_dev_s;
 
 	#define XDMA_TIMEOUT_IN_MSEC				(3 * 1000)
-#endif
 /******************************** Xilinx Register Offsets **********************************/
 #define AXI_STREAM_ISR	 	0x00	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
 #define AXI_STREAM_IER	 	0x04	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
@@ -260,8 +247,12 @@ enum xfer_type {
 /********************************************************************************************/
 
 
-extern int dma_max_write_size ;	 /**< AWS PCI/e max write size	*/
-extern int dma_max_read_size ;	 /**< AWS PCI/e max read size	*/
+
+#if defined(CONFIG_PCI_MSI)
+#define MAX_INTERRUPTS MAX_USER_IRQ
+static struct msix_entry sv_msix_entry[32];
+#endif
+
 
 
 /* Shared Global Variables */
@@ -271,31 +262,11 @@ extern int dma_byte_width;
 
 extern int back_pressure;	/**< This variable is set at insmod that tells whether the read ring buffers should backpressure to HW or overwrite */
 
-/*CDMA Semaphore*/
 extern uint cdma_address[CDMA_MAX_NUM]; 		/**< Holds AXI Base address of CDMA 1 */
 extern int cdma_count;
 
-/*These are the interrupt and mutex wait variables */
-extern wait_queue_head_t thread_q_head_write;
-extern wait_queue_head_t thread_q_head_read;
-extern wait_queue_head_t pci_write_head;
-/*this is the CDMA wait condition variable*/
-extern int cdma_comp[CDMA_MAX_NUM];
-extern atomic_t cdma_atom[CDMA_MAX_NUM];
-
-extern atomic_t thread_q_read;
-extern atomic_t thread_q_write;
-extern spinlock_t fifo_lock_read;
-extern spinlock_t fifo_lock_write;
-
-extern atomic_t driver_tx_bytes;
-extern atomic_t driver_rx_bytes;
-extern atomic_t driver_start_flag;
-extern atomic_t driver_stop_flag;
-extern struct timespec driver_start_time;
-extern struct timespec driver_stop_time;
-
 extern struct sv_mod_dev *svd_global;
+
 
 /** Module Description Struct
  *	@brief This is the data structure that is stored inside the private section of each file
@@ -308,10 +279,6 @@ struct sv_mod_dev {
 	char * dma_buffer_base;	/**< This is the start of the DMA region virtual address */
 	u32 dma_current_offset;	/**< This variable holds the current offset of the DMA Allocation */
 	u64 dma_buffer_size; /**< Default value for size of DMA Allocation, Max is 4MB, this is set through insmod */
-	u32 dma_garbage_offset;	/**< This offset memory region is used for dumping data when back pressure is not enabled */
-	u32 dma_garbage_size;	/**< This size of memory region is used for dumping data when back pressure is not enabled */
-	u32 dma_internal_offset; /**< The current offset of the internal DMA regions. The driver uses these for register R/W */
-	u32 dma_internal_size; /**< The size of the internal DMA regions. The driver uses these for register R/W */
 
 	u64 axi_intc_addr; /**< Global Variable that stores the Interrupt Controller AXI Address */
 	u64 axi_pcie_m; /**< Global Variable that stores the data transport IP Slave AXI Address as seen from the CDMA*/
@@ -325,8 +292,6 @@ struct sv_mod_dev {
 	int dma_max_write_size ;	 /**< AWS PCI/e max write size	*/
 	int dma_max_read_size ;	 /**< AWS PCI/e max read size	*/
 
-	int aws_config_idx ;	/**< AWS XDMA configuration bar */
-
 	/*CDMA Semaphores*/
 	struct mutex cdma_sem[CDMA_MAX_NUM];
 
@@ -338,7 +303,24 @@ struct sv_mod_dev {
 	atomic_t sw_interrupt_rx; /**< Global Atomic Variable for Driver Statistics */
 	bool interrupt_set;
 
+	/*These are the interrupt and mutex wait variables */
+	wait_queue_head_t pci_write_head; /**< The Wait Queue for the blocking/sleeping pci_write function */
 
+	// Write Thread data
+	spinlock_t fifo_lock_write; /**< The Spinlock Variable for writing to the WRITE FIFO */
+	struct task_struct * thread_struct_write; /**< task_struct used in creation of WRITE Thread */
+	atomic_t thread_q_write; /**< The Wait variable for the WRITE Thread */
+	wait_queue_head_t  thread_q_head_write; /**< waitq for events */
+
+	// Read Thread data
+	spinlock_t fifo_lock_read; /**< The Spinlock Variable for writing to the READ FIFO */
+	struct task_struct * thread_struct_read; /**< task_struct used in creation of READ Thread */
+	atomic_t thread_q_read; /**< The Wait variable for the READ Thread */
+	wait_queue_head_t thread_q_head_read; /**< waitq for events */
+
+
+	DECLARE_KFIFO(write_fifo, struct file_desc*, 8192); /**< sets up the struct WRITE FIFO */
+	DECLARE_KFIFO(read_fifo, struct file_desc*, 8192); /**< sets up the struct READ FIFO */
 
 	/*Driver Statistics*/
 	atomic_t driver_tx_bytes; /**< Global Atomic Variable for Driver Statistics */
@@ -431,11 +413,7 @@ struct file_desc {
 	u32 tx_dest;	/**< Last wrote RLR value if non-zero this has to be used */
 	u32 rx_dest;	/**< Last read RLR value if non-zero this has to be used */
 
-
-#if (XDMA_AWS == 0)
 	struct xdma_dev *xdma_dev;
-#endif
-
 
 };
 
@@ -453,9 +431,6 @@ struct bar_info {
 };
 
 extern struct bar_info * bars;
-
-//DECLARE_KFIFO(read_fifo, struct file_desc*, 4096);
-
 
 extern struct file_desc * file_desc_arr[MAX_FILE_DESC];
 
@@ -475,22 +450,9 @@ struct statistics
 	int cdma_usage_cnt;
 };
 
-/** Bar mapping structure
- */
-struct bar_mapping {
-	resource_size_t bar_start;
-	resource_size_t bar_len;
-	resource_size_t map_len;
-	int is_config_bar;
-	void *__iomem	bar;
-};
-
 // ********************** support functions **************************
-#if (XDMA_AWS == 1)
-int xdma_init_sv(int num_channels);
-#else
+
 int xdma_init_sv(struct xdma_dev *lro);
-#endif
 
 
 /**
@@ -641,12 +603,12 @@ int read_thread(void *in_param);
  * @brief This function is called by the driver to create the write thread.
  * @param file_desc The struct containing all the file variables.
 */
-struct task_struct* create_thread_write(struct kfifo * write_fifo);
+struct task_struct* create_thread_write(struct sv_mod_dev * svd);
 /**
  * @brief This function is called by the driver to create the read thread.
  * @param read_fifo the kernel FIFO data structure for the global read FIFO.
 */
-struct task_struct* create_thread_read(struct kfifo * read_fifo);
+struct task_struct* create_thread_read(struct sv_mod_dev * svd);
 /**
  * @brief This function is called by the write thread to write data to the FPGA.
  * This function performs calls appropriate functions for writing to the AXI Streaming FIFO.

@@ -96,39 +96,9 @@ int read_data(struct file_desc * file_desc, int read_size, void * buffer_addr)
 			//----------------------------------------------drop data----------------------------------------------
 			verbose_read_thread_printk(KERN_INFO"[read_data]: Needing to garbage data, max_can_read: %d < read_size: %d \n", max_can_read, read_size);
 
-			while (drop_count < read_size) { //also garbage the trailer
-				if(( read_size - drop_count + 2*sizeof(size_t) ) > file_desc->svd->dma_garbage_size){//garbage buffer cannot fit in our read
-					drop_count_inc = axi_stream_fifo_read_direct(file_desc, (size_t)(file_desc->svd->dma_garbage_size - 2*sizeof(size_t)),
-											 file_desc->svd->dma_buffer_base + file_desc->svd->dma_garbage_offset, file_desc->svd->axi_pcie_m + file_desc->svd->dma_garbage_offset, (size_t)file_desc->svd->dma_garbage_size);
-				} else {	//read out the data
-					drop_count_inc = axi_stream_fifo_read_direct(file_desc, (size_t)(read_size-drop_count),
-											 file_desc->svd->dma_buffer_base + file_desc->svd->dma_garbage_offset, file_desc->svd->axi_pcie_m + file_desc->svd->dma_garbage_offset, (size_t)file_desc->svd->dma_garbage_size);
-				}
-				if(drop_count_inc == ERROR) {
-					//This seems to happen when removing the driver, return error so we don't get stuck in the loop
-					//look into the release code to fix
-					printk(KERN_INFO"[read_data]: !!!!!!!!ERROR DROP_COUNT READ.....\n");
-					return ERROR;
-				}
-				// extra debug message for drops
-				verbose_read_thread_printk(KERN_INFO"[read_data]: drop loop DROP_COUNT_INC %d DROP COUNT: %d > READ_SIZE: %d.....\n", drop_count_inc, drop_count, read_size);
-				drop_count += drop_count_inc;
-			}
-
-			if(drop_count > read_size) {
-				printk(KERN_INFO"[read_data]: !!!!!!!!ERROR DROP COUNT: %d > READ_SIZE: %d.....\n", drop_count, read_size);
-			}
-
-			file_desc->axi_fifo_rlr = file_desc->axi_fifo_rdfo = 0;
-
-			if(drop_count > 0) {
-				verbose_read_thread_printk(KERN_INFO"[read_data]: DROP_COUNT: Just dropped %d bytes from HW\n", drop_count);
-			} else {
-				//this shouldn't happen
-				printk(KERN_INFO"[read_data]: !!!!!!!!ERROR DROP_COUNT: < 1.....\n");
-				//break;
-				return ERROR;
-			}
+			//move user pointer to hw pointer to clear out the data in the ring buffer
+			atomic_set(file_desc->rfu, rfh);
+			atomic_set(file_desc->read_ring_buf_full, 0);
 		}
 	} else {
 		//the ring buffer has room!
@@ -333,7 +303,7 @@ int write_data(struct file_desc * file_desc, void * buffer_addr)
 	verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: write ring_buffer: WTH: %d WTK: %d\n", wth, atomic_read(file_desc->wtk));
 
 	atomic_set(file_desc->pci_write_q, 1);
-	wake_up_interruptible(&pci_write_head);
+	wake_up_interruptible(&file_desc->svd->pci_write_head);
 
 	verbose_axi_fifo_write_printk(KERN_INFO"[axi_stream_fifo_write]: Leaving write_data\n");
 
@@ -459,17 +429,16 @@ size_t axi_stream_fifo_read(struct file_desc * file_desc, size_t count, void * b
 
 	//}
 	room_till_end = ( (buf_size - ring_pointer_offset) & ~(dma_byte_width-1));				 //make it divisible by dma_byte_width
-	axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_RDFD;
+	axi_dest = file_desc->axi_addr + AXI_STREAM_RDFD;
 
 	if(count > room_till_end) {			//needs to be 2 cdma transfers
 		remaining = count-room_till_end;
 
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: dma_transfer 1 AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset, room_till_end);
 		//if(dma_transfer(file_desc, axi_dest, hw_base_addr+(u64)ring_pointer_offset, room_till_end, KEYHOLE_READ, (HOST_WRITE|INC_DA))) { //unsuccessful CDMA transmission
-		if(dma_transfer(file_desc, axi_dest, hw_base_addr, room_till_end, KEYHOLE_READ, ring_pointer_offset) ) { //unsuccessful CDMA transmission
+		if(dma_transfer(file_desc, axi_dest, buffer_addr, room_till_end, KEYHOLE_READ, ring_pointer_offset) ) { //unsuccessful CDMA transmission
 			printk(KERN_INFO"[axi_stream_fifo_read]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 		}
-
 
 		//extra verbose debug message
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: first 4 bytes 0x%08x\n", *((u32*)(buffer_addr+ring_pointer_offset)));
@@ -478,7 +447,7 @@ size_t axi_stream_fifo_read(struct file_desc * file_desc, size_t count, void * b
 		//end of buffer reached
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: dma_transfer 2 AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset, remaining);
 		//if(dma_transfer(file_desc, axi_dest, hw_base_addr+(u64)ring_pointer_offset, remaining, KEYHOLE_READ, (HOST_WRITE|INC_DA)) ) { //unsuccessful CDMA transmission
-		if(dma_transfer(file_desc, axi_dest, hw_base_addr, remaining, KEYHOLE_READ, ring_pointer_offset) ) { //unsuccessful CDMA transmission
+		if(dma_transfer(file_desc, axi_dest, buffer_addr, remaining, KEYHOLE_READ, ring_pointer_offset) ) { //unsuccessful CDMA transmission
 			printk(KERN_INFO"[axi_stream_fifo_read]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 		}
 		ring_pointer_offset = get_new_ring_pointer(remaining, ring_pointer_offset, (int)buf_size, dma_byte_width);
@@ -486,7 +455,7 @@ size_t axi_stream_fifo_read(struct file_desc * file_desc, size_t count, void * b
 	} else {														//only 1 cdma transfer
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: dma_transfer AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset , count);
 		//if(dma_transfer(file_desc, axi_dest, ((u64)hw_base_addr+ring_pointer_offset), count, KEYHOLE_READ, (HOST_WRITE|INC_DA)) ) { //unsuccessful CDMA transmission
-		if(dma_transfer(file_desc, axi_dest, hw_base_addr, count, KEYHOLE_READ, ring_pointer_offset ) ) { //unsuccessful CDMA transmission
+		if(dma_transfer(file_desc, axi_dest, buffer_addr, count, KEYHOLE_READ, ring_pointer_offset ) ) { //unsuccessful CDMA transmission
 			printk(KERN_INFO"[axi_stream_fifo_read]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 		}
 
@@ -733,6 +702,7 @@ int copy_from_ring_buffer(struct file_desc * file_desc, void* buf, size_t count,
 	d2r = data_in_buffer(rfh, rfu, full, file_desc->dma_size);
 
 	verbose_pci_read_printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: the amount of bytes being copied from the ring buffer: %zu\n", file_desc->minor, count);
+	verbose_pci_read_printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: the amount of data in the ring buffer: %zu\n", file_desc->minor, d2r);
 
 
 	//if there is data in the ring buffer
@@ -800,9 +770,7 @@ int copy_from_ring_buffer(struct file_desc * file_desc, void* buf, size_t count,
 				//extra verbose debug message
 				verbose_pci_read_printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: first 4 bytes 0x%08x\n", file_desc->minor, *((u32*)(buffer_addr+rfu)));
 				rfu = get_new_ring_pointer((int)count, rfu, (int)file_desc->dma_size, dma_byte_width);
-
 			}
-
 
 			verbose_pci_read_printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: bytes copied to user 0x%zx\n", file_desc->minor, count);
 			bytes = count;
@@ -837,7 +805,7 @@ int copy_from_ring_buffer(struct file_desc * file_desc, void* buf, size_t count,
 		bytes = 0;
 	}
 
-	return 0;
+	return bytes;
 }
 
 

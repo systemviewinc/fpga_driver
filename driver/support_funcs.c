@@ -50,8 +50,6 @@ static struct mutex xdma_h2c_sem[XDMA_CHANNEL_NUM_MAX];
 static struct mutex xdma_c2h_sem[XDMA_CHANNEL_NUM_MAX];
 static int xdma_query(int);
 static int cdma_query(void);
-static dma_addr_t xdma_h2c_buff[XDMA_CHANNEL_NUM_MAX];
-static dma_addr_t xdma_c2h_buff[XDMA_CHANNEL_NUM_MAX];
 static int cdma_use_count[CDMA_MAX_NUM];
 /******************************** Support functions ***************************************/
 
@@ -62,7 +60,9 @@ static int cdma_use_count[CDMA_MAX_NUM];
  * read_fifo the kernel FIFO data structure for the global read FIFO.
  */
 int read_thread(void *in_param) {
-	struct kfifo* read_fifo = (struct kfifo*)in_param;
+	struct sv_mod_dev* svd = (struct sv_mod_dev*)in_param;
+	struct kfifo* read_fifo = (struct kfifo*) &svd->read_fifo;
+
 	struct file_desc * file_desc;
 	int read_incomplete;
 	int d2r;
@@ -73,12 +73,11 @@ int read_thread(void *in_param) {
 	while(!kthread_should_stop()) {
 		verbose_read_thread_printk(KERN_INFO"[read_thread]: waiting in wait_event_interruptible for data!!\n");
 		//waits until thread_q_read is true or we should stop the thread (previous methods of exitings weren't working -MM)
-		if( wait_event_interruptible(thread_q_head_read, ( atomic_read(&thread_q_read) == 1 || kthread_should_stop() )) ){
+		if( wait_event_interruptible(svd->thread_q_head_read, ( atomic_read(&svd->thread_q_read) == 1 || kthread_should_stop() )) ){
 
 				}
-		atomic_set(&thread_q_read, 0); // the threaded way
+		atomic_set(&svd->thread_q_read, 0); // the threaded way
 		verbose_read_thread_printk(KERN_INFO"[read_thread]: woke up the read thread have data!!\n");
-
 		// process reads as long as there is something in the read fifo
 		while (!kfifo_is_empty(read_fifo) && ! kthread_should_stop()) {
 			//while the kfifo has data
@@ -115,18 +114,18 @@ int read_thread(void *in_param) {
 						//write the file_desc back in if the fifo is not full and it isn't already in the fifo
 						if(!kfifo_is_full(read_fifo)) {
 							atomic_inc(file_desc->in_read_fifo_count);
-							kfifo_in_spinlocked(read_fifo, &file_desc, 1, &fifo_lock_read);
+							kfifo_in_spinlocked(read_fifo, &file_desc, 1, &file_desc->svd->fifo_lock_read);
 						} else {
 							printk(KERN_INFO"[read_thread]: kfifo is full, not writing mod desc\n");
 						}
 
 						//if we needed backpressure wait here for a read to take data out of the buffer so we have room -MM
 						verbose_read_thread_printk(KERN_INFO"[read_thread]: ring buffer is full waiting in wait_event_interruptible!!\n");
-										if( wait_event_interruptible(thread_q_head_read, ( atomic_read(&thread_q_read) == 1 || kthread_should_stop() )) ){
+										if( wait_event_interruptible(svd->thread_q_head_read, ( atomic_read(&file_desc->svd->thread_q_read) == 1 || kthread_should_stop() )) ){
 
 										}
 						//waits until thread_q_read is true or we should stop the thread (previous methods of exitings weren't working -MM)
-						atomic_set(&thread_q_read, 0);	// the threaded way
+						atomic_set(&svd->thread_q_read, 0);	// the threaded way
 
 						schedule();
 						//set d2r to zero to get out of while loop
@@ -162,7 +161,9 @@ int read_thread(void *in_param) {
  * write_fifo the kernel FIFO data structure for the global write FIFO.
  */
 int write_thread(void *in_param) {
-	struct kfifo* write_fifo = (struct kfifo*)in_param;
+	struct sv_mod_dev* svd = (struct sv_mod_dev*)in_param;
+	struct kfifo* write_fifo = (struct kfifo*) &svd->write_fifo;
+
 	struct file_desc * file_desc;
 	int write_incomplete;
 	int d2w;
@@ -173,10 +174,11 @@ int write_thread(void *in_param) {
 	verbose_write_thread_printk(KERN_INFO"[write_thread]: started !!\n");
 	while(!kthread_should_stop()){
 		verbose_write_thread_printk(KERN_INFO"[write_thread]: waiting in wait_event_interruptible, write buffer empty!!\n");
-		if( wait_event_interruptible(thread_q_head_write, ( atomic_read(&thread_q_write) == 1 || kthread_should_stop() )) ) {
+
+		if( wait_event_interruptible(svd->thread_q_head_write, ( atomic_read(&svd->thread_q_write) == 1 || kthread_should_stop() )) ) {
 
 		}
-		atomic_set(&thread_q_write, 0); // the threaded way
+		atomic_set(&svd->thread_q_write, 0); // the threaded way
 		verbose_write_thread_printk(KERN_INFO"[write_thread]: woke up the write thread!!\n");
 
 		// process write as long as there is something in the write fifo
@@ -213,7 +215,7 @@ int write_thread(void *in_param) {
 						//write the file_desc back in if the fifo is not full and it isn't already in the fifo
 						if(!kfifo_is_full(write_fifo)) {
 							atomic_inc(file_desc->in_write_fifo_count);
-							kfifo_in_spinlocked(write_fifo, &file_desc, 1, &fifo_lock_write);
+							kfifo_in_spinlocked(write_fifo, &file_desc, 1, &svd->fifo_lock_write);
 						}
 						else {
 							printk(KERN_INFO"[write_thread]: kfifo is full, not writing mod desc\n");
@@ -221,12 +223,12 @@ int write_thread(void *in_param) {
 
 						//if we needed backpressure wait here for a write to take data out of the buffer so we have room -MM
 						verbose_write_thread_printk(KERN_INFO"[write_thread]: waiting in wait_event_interruptible write buffer full!!\n");
-						wait_event_interruptible_timeout(thread_q_head_write,
-										 ( atomic_read(&thread_q_write) == 1 || kthread_should_stop() ),
+						wait_event_interruptible_timeout(svd->thread_q_head_write,
+										 ( atomic_read(&svd->thread_q_write) == 1 || kthread_should_stop() ),
 										 msecs_to_jiffies(1));
 
 						//waits until thread_q_write is true or we should stop the thread (previous methods of exitings weren't working -MM)
-						atomic_set(&thread_q_write, 0);	// the threaded way
+						atomic_set(&file_desc->svd->thread_q_write, 0);	// the threaded way
 
 						schedule();
 						//set d2w to zero to get out of while loop
@@ -276,8 +278,6 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 {
 	u32 max_xfer_size;
 	int ret = 0, cdma_num = -1, xdma_channel = -1, attempts = 10000;
-	struct sg_table sg_table;
-	struct scatterlist sg;
 	u32 xfer_type, l_btt = count;
 	u64 l_sa, l_da;
 
@@ -316,9 +316,9 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 			printk(KERN_INFO"\t\t[dma_transfer]: could not get cdma will sleep 10 msecs cdma_use(%d,%d,%d,%d)\n",
 						 cdma_use_count[0],cdma_use_count[1],cdma_use_count[2],cdma_use_count[3]);
 			if (xfer_type & HOST_WRITE)
-				wait_event_interruptible_timeout(thread_q_head_write,1,msecs_to_jiffies(10));
+				wait_event_interruptible_timeout(file_desc->svd->thread_q_head_write,1,msecs_to_jiffies(10));
 			else
-				wait_event_interruptible_timeout(thread_q_head_read,1,msecs_to_jiffies(10));
+				wait_event_interruptible_timeout(file_desc->svd->thread_q_head_read,1,msecs_to_jiffies(10));
 			attempts = 1000;
 			goto cdma_retry;
 		}
@@ -351,77 +351,6 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 	}
 	else if(pcie_use_xdma) {
 		// if xdma AWS or XIL function
-#if (XDMA_AWS == 1)
-		verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: Using XDMA \n");
-		if(xfer_type & HOST_READ) { // host to device
-			// get a free channel
-			while (xdma_channel == -1 && --attempts != 0) {
-				xdma_channel = xdma_query(DMA_TO_DEVICE);
-				if(xdma_channel == -1) schedule();
-			}
-
-			// break up transfers to size
-			do {
-				int xfer_size = l_btt > file_desc->svd->dma_max_read_size ? file_desc->svd->dma_max_read_size : l_btt;
-				// create the scatter gather list
-				sg_init_table(&sg, 1);
-				sg_dma_len(&sg) = xfer_size;
-				sg_table.sgl = &sg;
-				sg_table.nents = 1;
-				//xfer_mem = (char *)dma_buffer_base + ((char *)l_sa - (char *)dma_addr_base);
-				sg_dma_address(&sg) = l_sa;//(dma_addr_t)xdma_h2c_buff[xdma_channel];
-
-				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer] DMA_TO_DEVICE l_sa: 0x%p, l_da: 0x%p, xdma_b: 0x%p, xfer_size: %d, BTT: %d\n",
-								(void*)l_sa, (void*)l_da, (void*)xdma_h2c_buff[xdma_channel], xfer_size, l_btt);
-				ret = xdma_xfer_submit(xdma_channel_list[xdma_channel].h2c,
-									 DMA_TO_DEVICE,
-									 l_da,
-									 &sg_table,
-									 true,
-									 XDMA_TIMEOUT_IN_MSEC);
-				if (ret < 0) {
-					mutex_unlock(&xdma_h2c_sem[xdma_channel]);
-					return ret;
-				}
-				if(xfer_type & INC_SA) l_sa += xfer_size;
-				if(xfer_type & INC_DA) l_da += xfer_size;
-				l_btt -= xfer_size;
-				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: tranfer complete DMA_TO_DEVICE remain %d\n", l_btt);
-			} while (l_btt);
-			mutex_unlock(&xdma_h2c_sem[xdma_channel]);
-			verbose_dmaq_printk(KERN_INFO"\t\t\t[dma_queue]: unlock xdma_channel = %d \n", xdma_channel);
-		} else if(xfer_type & HOST_WRITE) { // device to host
-			while (xdma_channel == -1 && --attempts != 0) {
-				xdma_channel = xdma_query(DMA_FROM_DEVICE);
-				if(xdma_channel == -1) schedule();
-			}
-			// break up transfers to size
-			do {
-				int xfer_size = l_btt > file_desc->svd->dma_max_read_size ? file_desc->svd->dma_max_read_size : l_btt;
-				// create the scatter gather list
-				sg_init_table(&sg, 1);
-				sg_dma_len(&sg) = l_btt;
-				sg_table.sgl = &sg;
-				sg_table.nents = 1;
-				sg_dma_address(&sg) = (dma_addr_t)xdma_c2h_buff;
-				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: DMA_FROM_DEVICE l_sa 0x%p l_da 0x%p xfer_size %d\n", (void*)l_sa, (void*)l_da, xfer_size);
-				ret = xdma_xfer_submit(xdma_channel_list[xdma_channel].c2h, DMA_FROM_DEVICE, l_sa, &sg_table, true, XDMA_TIMEOUT_IN_MSEC);
-				if(ret < 0) {
-					mutex_unlock(&xdma_c2h_sem[xdma_channel]);
-					return ret;
-				}
-				//xfer_mem = (char *)dma_buffer_base + ((char *)l_da - (char *)dma_addr_base);
-				//memcpy(xfer_mem, xdma_c2h_da[xdma_channel],xfer_size);
-				if (xfer_type & INC_SA) l_sa += xfer_size;
-				if (xfer_type & INC_DA) l_da += xfer_size;
-				l_btt -= xfer_size;
-				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: tranfer complete DMA_FROM_DEVICE\n");
-			} while (l_btt);
-			mutex_unlock(&xdma_c2h_sem[xdma_channel]);
-			verbose_dma_printk(KERN_INFO"\t\t\t[dma_transfer]: unlock xdma_channel = %d \n", xdma_channel);
-		}
-		return (ret < 0 ? ret : 0);
-#else
 		//write data
 		loff_t pos = axi_address;
 		int rc = 0;
@@ -485,7 +414,6 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 			return ret;
 		}
 		return rc;
-#endif
 	}
 	else{
 		verbose_printk(KERN_INFO"\t\t[dma_transfer]: !!!!!!!!ERROR: unknown transfer type.\n");
@@ -499,26 +427,26 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
  *
  *
  */
-struct task_struct* create_thread_write(struct kfifo * write_fifo) {
+struct task_struct* create_thread_write(struct sv_mod_dev * svd) {
 
 	struct task_struct * kthread_heap;
-	kthread_heap = kthread_create(write_thread, write_fifo, "vsi_write_thread");
+	kthread_heap = kthread_create(write_thread, svd, "vsi_write_thread");
 
 	if((kthread_heap)) {
-		printk(KERN_INFO"[vsi_init]: Write Thread Created\n");
+		printk(KERN_INFO"[Create_thread_write]: Write Thread Created\n");
 		wake_up_process(kthread_heap);
 	}
 	get_task_struct(kthread_heap);		//hold struct incase the thread ends early
 	return kthread_heap;
 }
 
-struct task_struct* create_thread_read(struct kfifo * read_fifo) {
+struct task_struct* create_thread_read(struct sv_mod_dev * svd) {
 
 	struct task_struct * kthread_heap;
-	kthread_heap = kthread_create(read_thread, read_fifo, "vsi_read_thread");
+	kthread_heap = kthread_create(read_thread, svd, "vsi_read_thread");
 
 	if((kthread_heap)) {
-		printk(KERN_INFO"[vsi_init]: Read Thread Created\n");
+		printk(KERN_INFO"[Create_thread_read]: Read Thread Created\n");
 		wake_up_process(kthread_heap);
 	}
 	get_task_struct(kthread_heap);		//hold struct incase the thread ends early
@@ -755,10 +683,10 @@ int dma_file_deinit(struct file_desc *file_desc, size_t dma_size) {
 
 	//wait for the software intterupt
 	if(wait_event_interruptible_timeout(sw_interrupt_wq, atomic_read(&svd->sw_interrupt_rx) == 1 , msecs_to_jiffies(1))) {
-		printk(KERN_INFO"[axi_intc_init]: Recieved SW interrupt: Passed!\n");
+		printk(KERN_INFO"[axi_intc_init]: Received SW interrupt: Passed!\n");
 	}
 	else{
-		printk(KERN_INFO"[axi_intc_init]: Recieved SW interrupt: FAILED!\n");
+		printk(KERN_INFO"[axi_intc_init]: ERROR no SW interrupt: FAILED!\n");
 	}
 
 	/*Write to the Master Enable Register (MER) */
@@ -899,20 +827,7 @@ int pcie_ctl_init(u64 axi_pcie_ctl, u64 dma_addr_base)
 	return 0;
 }
 
-#if (XDMA_AWS == 1)
-/**
- * This function will intiialize the XDMA channels
- */
-int xdma_init_sv(int num_channels)
-{
-	int i;
-	for (i = 0 ; i < num_channels; i++) {
-		mutex_init(&xdma_h2c_sem[i]);
-		mutex_init(&xdma_c2h_sem[i]);
-	}
-	return 0;
-}
-#else
+
 /**
  * This function will intiialize the XDMA channels
  */
@@ -939,9 +854,6 @@ int xdma_init_sv(struct xdma_dev *lro)
 	}
 	return 0;
 }
-#endif
-
-
 
 
 
@@ -1669,10 +1581,6 @@ struct sv_mod_dev *alloc_sv_dev_instance(u64 dma_size)
 	sv_dev->dma_buffer_base = NULL;
 	sv_dev->dma_current_offset = -1;
 	sv_dev->dma_buffer_size = dma_size;
-	sv_dev->dma_garbage_offset = -1;
-	sv_dev->dma_garbage_size = 4096;
-	sv_dev->dma_internal_offset = -1;
-	sv_dev->dma_internal_size = 4096;
 
 	sv_dev->axi_intc_addr = -1;
 	sv_dev->axi_pcie_m = NULL;
@@ -1683,14 +1591,33 @@ struct sv_mod_dev *alloc_sv_dev_instance(u64 dma_size)
 	sv_dev->dma_max_write_size = 0;
 	sv_dev->dma_max_read_size = 0;
 
-	sv_dev->aws_config_idx = -1;
-
 	sv_dev->xdma_c2h_num_channels = 0;
 	sv_dev->xdma_h2c_num_channels = 0;
 
 	sv_dev->bars = NULL;
 	atomic_set(&sv_dev->sw_interrupt_rx, 0);
 	sv_dev->interrupt_set = false;
+
+	init_waitqueue_head(&sv_dev->thread_q_head_write);
+	init_waitqueue_head(&sv_dev->thread_q_head_read);
+	init_waitqueue_head(&sv_dev->pci_write_head);
+
+	sv_dev->thread_struct_write = NULL;
+	sv_dev->thread_struct_read = NULL;
+
+	atomic_set(&sv_dev->thread_q_write, 0);
+	atomic_set(&sv_dev->thread_q_read, 0);
+
+	INIT_KFIFO(sv_dev->read_fifo);
+	INIT_KFIFO(sv_dev->write_fifo);
+
+	printk(KERN_INFO"probe() read_fifo = 0x%p\n", &sv_dev->read_fifo);
+	printk(KERN_INFO"probe() write_fifo = 0x%p\n", &sv_dev->write_fifo);
+
+
+	/*FIFO init stuff*/
+	spin_lock_init(&sv_dev->fifo_lock_read);
+	spin_lock_init(&sv_dev->fifo_lock_write);
 
 	atomic_set(&sv_dev->driver_tx_bytes, 0); /**< Global Atomic Variable for Driver Statistics */
 	atomic_set(&sv_dev->driver_rx_bytes, 0);/**< Global Atomic Variable for Driver Statistics */
