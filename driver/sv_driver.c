@@ -684,7 +684,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 #else
 	//request IRQ
 	verbose_printk(KERN_INFO"[probe:%s]: request interrupt\n", pci_devName);
-	if(0 > request_irq(pci_dev_struct->irq, &pci_isr, IRQF_TRIGGER_RISING | IRQF_SHARED, pci_devName, pci_dev_struct)){
+	if(0 > request_irq(pci_dev_struct->irq, &pci_isr, IRQF_SHARED, pci_devName, pci_dev_struct)){
 		printk(KERN_INFO"[probe:%s]: request IRQ error\n", pci_devName);
 		sv_pci_remove(dev);
 		return ERROR;
@@ -1257,7 +1257,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 			verbose_isr_printk(KERN_INFO"[pci_isr]: Stream FIFO ISR status: 0x%08x\n", status);
 
 			/*clear the axi fifo ISR*/
-			status = status & 0x04000000;																																					//clear the status observed masked wtih RX complete
+			status = status & 0x04000000;	 //clear the status observed masked wtih RX complete
 			if(direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
 				printk(KERN_INFO"[pci_isr]: !!!!!!!!ERROR direct_write\n");
 				return ERROR;

@@ -621,11 +621,8 @@ int write_data(struct mod_desc * mod_desc)
 	size_t write_header_size;
 	u64 axi_dest;
 	u32 buf, read_reg;
-<<<<<<< HEAD
-=======
 	u32 data_in_fifo;
 	int attempts = 100;
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 
 	wth = atomic_read(mod_desc->wth);
 	wtk = atomic_read(mod_desc->wtk);
@@ -678,13 +675,8 @@ int write_data(struct mod_desc * mod_desc)
 	verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: vacancy: (0x%x)(bytes)\n", (u32)read_reg);
 	verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: d2w: (0x%x)(bytes)\n", (u32)d2w);
 
-<<<<<<< HEAD
-	/*write to TDR register*/
-=======
-
 	/*write to TDR register*/
 
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TDR;
 	buf = mod_desc->tx_dest;
 	verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: Wrote 0x%x to TDR!!.\n", mod_desc->tx_dest);
@@ -734,8 +726,6 @@ int write_data(struct mod_desc * mod_desc)
 	}
 
 
-<<<<<<< HEAD
-=======
 	// Make sure there is enough data in the fifo to transmit
 	do {
 
@@ -762,7 +752,6 @@ int write_data(struct mod_desc * mod_desc)
 	}
 
 
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 	/*write to ctl interface*/
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_TLR;
 	buf = (u32)write_header_size;
@@ -772,8 +761,6 @@ int write_data(struct mod_desc * mod_desc)
 		return ERROR;
 	}
 
-<<<<<<< HEAD
-=======
 	//Report status after transfer
 	axi_dest = mod_desc->axi_addr_ctl + AXI_STREAM_ISR;
 	if( direct_read(axi_dest, (void*)(&buf), 4, NORMAL_READ) ) {
@@ -782,7 +769,6 @@ int write_data(struct mod_desc * mod_desc)
 	}
 	verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: AXI_STREAM_ISR register: ('0x%08x')\n", buf);
 
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 	//update wth pointer
 	atomic_set(mod_desc->wth, wth);
 	//if the ring buffer was full it is no longer

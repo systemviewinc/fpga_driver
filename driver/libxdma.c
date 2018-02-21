@@ -24,11 +24,7 @@
 #define DRV_MODULE_NAME		"edma"
 #ifdef __LIBXDMA_MOD__
 #define DRV_MODULE_DESC		"Xilinx XDMA Base Driver"
-<<<<<<< HEAD
-#define DRV_MODULE_VERSION	"1.0"
-=======
 #define DRV_MODULE_VERSION	"1.0.29"
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 #define DRV_MODULE_RELDATE	"Feb. 2017"
 
 static char version[] =
@@ -136,7 +132,6 @@ static u64 find_feature_id(const struct xdma_dev *lro)
 	return low | (high << 32);
 }
 
-<<<<<<< HEAD
 static void interrupt_status(struct xdma_dev *lro)
 {
 	struct interrupt_regs *reg = (struct interrupt_regs *)
@@ -162,8 +157,6 @@ static void interrupt_status(struct xdma_dev *lro)
 	dbg_irq("channel_int_pending = 0x%08x\n", w);
 }
 
-=======
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 /* channel_interrupts_enable -- Enable interrupts we are interested in */
 static void channel_interrupts_enable(struct xdma_dev *lro, u32 mask)
 {
@@ -722,10 +715,7 @@ static void engine_service_work(struct work_struct *work)
 	engine_service(engine);
 
 	/* re-enable interrupts for this engine */
-<<<<<<< HEAD
-=======
 	//VSI added or sv_driver
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 	if(engine->lro->msix_enabled || engine->lro->sv_driver){
 		write_register(engine->interrupt_enable_mask_value,
 			       &engine->regs->interrupt_enable_mask_w1s);
@@ -872,15 +862,9 @@ static irqreturn_t xdma_channel_irq(int irq, void *dev_id)
 			XDMA_OFS_INT_CTRL);
 
 	/* Disable the interrupt for this engine */
-<<<<<<< HEAD
 	//channel_interrupts_disable(lro, engine->irq_bitmask);
 	engine->interrupt_enable_mask_value = read_register(&engine->regs->interrupt_enable_mask);
 	write_register(engine->interrupt_enable_mask_value, &engine->regs->interrupt_enable_mask_w1c);
-=======
-	write_register(engine->interrupt_enable_mask_value,
-			 &engine->regs->interrupt_enable_mask_w1c);
-
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 	/* Dummy read to flush the above write */
 	read_register(&irq_regs->channel_int_pending);
 	/* Schedule the bottom half */
@@ -1536,10 +1520,7 @@ static int engine_init(struct xdma_engine *engine, struct xdma_dev *lro,
 	INIT_WORK(&engine->work, engine_service_work);
 
 	/* Configure per-engine MSI-X vector if MSI-X is enabled */
-<<<<<<< HEAD
-=======
 	//VSI added or sv_driver
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 	if (lro->msix_enabled || lro->sv_driver) {
 		rc = engine_msix_setup(engine);
 		if (rc) {
@@ -1571,11 +1552,8 @@ static int engine_init(struct xdma_engine *engine, struct xdma_dev *lro,
 	/* Apply engine configurations */
 	write_register(reg_value, &engine->regs->interrupt_enable_mask);
 
-<<<<<<< HEAD
-=======
 	engine->interrupt_enable_mask_value = reg_value;
 
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 	/* all engine setup completed successfully */
 	return 0;
 }
@@ -1848,10 +1826,7 @@ int arch_msi_check_device(struct pci_dev *dev, int nvec, int type)
 #endif
 
 /* type = PCI_CAP_ID_MSI or PCI_CAP_ID_MSIX */
-<<<<<<< HEAD
-=======
 //VSI removed static
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 int msi_msix_capable(struct pci_dev *dev, int type)
 {
 	struct pci_bus *bus;
@@ -1909,11 +1884,7 @@ static struct xdma_dev *alloc_dev_instance(struct pci_dev *pdev)
 
 	return lro;
 }
-<<<<<<< HEAD
-
-=======
 //VSI added function
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 struct xdma_dev *sv_alloc_dev_instance(struct pci_dev *pdev)
 {
 	struct xdma_dev *lro;
@@ -2024,11 +1995,7 @@ static int set_dma_mask(struct pci_dev *pdev)
 
 	return rc;
 }
-<<<<<<< HEAD
-
-=======
 //VSI removed static
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 u32 build_vector_reg(u32 a, u32 b, u32 c, u32 d)
 {
 	u32 reg_val = 0;
@@ -2185,30 +2152,11 @@ static u32 get_engine_id(struct engine_regs *regs)
 static void remove_engines(struct xdma_dev *lro)
 {
 	struct xdma_engine *engine;
-<<<<<<< HEAD
 	int i;
-=======
 	int channel;
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
-
 	BUG_ON(!lro);
 
 	/* iterate over channels */
-<<<<<<< HEAD
-	for (i = 0; i < XDMA_CHANNEL_NUM_MAX; i++) {
-		engine = &lro->engine_h2c[i];
-		if (engine->magic == MAGIC_ENGINE) {
-			dbg_sg("Remove %s, %d", engine->name,i);
-			engine_destroy(lro, engine);
-			dbg_sg("%s, %d removed", engine->name,i);
-		}
-
-		engine = &lro->engine_c2h[i];
-		if (engine->magic == MAGIC_ENGINE) {
-			dbg_sg("Remove %s, %d", engine->name, i);
-			engine_destroy(lro, engine);
-			dbg_sg("%s, %d removed", engine->name, i);
-=======
 	for (channel = 0; channel < XDMA_CHANNEL_NUM_MAX; channel++) {
 		engine = &lro->engine_h2c[channel];
 		if (engine->magic == MAGIC_ENGINE) {
@@ -2222,7 +2170,6 @@ static void remove_engines(struct xdma_dev *lro)
 			dbg_sg("Remove %s, %d", engine->name, engine->channel);
 			engine_destroy(lro, engine);
 			dbg_sg("%s, %d removed", engine->name, engine->channel);
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 		}
 	}
 }
@@ -2308,8 +2255,6 @@ fail:
 	return rc;
 }
 
-<<<<<<< HEAD
-=======
 static void pci_check_extended_tag(struct xdma_dev *xdev, struct pci_dev *pdev)
 {
 	u16 cap;
@@ -2393,7 +2338,6 @@ static void pci_clear_intr_status(struct pci_dev *pdev)
 	}
 }
 
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 int xdma_device_open(struct pci_dev *pdev, xdma_channel_tuple **tuple_p)
 {
 	int i, j;
@@ -2417,13 +2361,10 @@ int xdma_device_open(struct pci_dev *pdev, xdma_channel_tuple **tuple_p)
 		goto err_enable;
 	}
 
-<<<<<<< HEAD
-=======
 	pci_clear_intr_status(pdev);
 
 	pci_enable_relaxed_ordering(pdev);
 
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 	/* enable bus master capability */
 	dbg_init("pci_set_master()\n");
 	pci_set_master(pdev);
@@ -2440,17 +2381,12 @@ int xdma_device_open(struct pci_dev *pdev, xdma_channel_tuple **tuple_p)
 	if (rc)
 		goto err_map;
 
-<<<<<<< HEAD
-=======
 	pci_check_extended_tag(lro, pdev);
 
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 	rc = set_dma_mask(pdev);
 	if (rc)
 		goto err_mask;
 
-<<<<<<< HEAD
-=======
 	/* clear out all irq enable masks */
 	channel_interrupts_disable(lro, ~0);
 	user_interrupts_disable(lro, ~0);
@@ -2458,7 +2394,6 @@ int xdma_device_open(struct pci_dev *pdev, xdma_channel_tuple **tuple_p)
 
 	pci_keep_intx_enabled(pdev);
 
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 	rc = irq_setup(lro, pdev);
 	if (rc)
 		goto err_interrupts;
@@ -2507,12 +2442,7 @@ err_alloc:
 	kfree(tuple);
 	return rc;
 }
-EXPORT_SYMBOL_GPL(xdma_device_open);
-<<<<<<< HEAD
-
-=======
 //VSI added function
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 int sv_xdma_device_open(struct pci_dev *pdev, struct xdma_dev *lro, xdma_channel_tuple **tuple_p)
 {
 	int i, j;
@@ -2609,12 +2539,7 @@ void xdma_device_close(struct pci_dev *pdev, xdma_channel_tuple *tuple)
 	if (tuple)
 		kfree(tuple);
 }
-EXPORT_SYMBOL_GPL(xdma_device_close);
-<<<<<<< HEAD
-
-=======
 //VSI added function
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 void sv_xdma_device_close(struct pci_dev *pdev, struct xdma_dev *lro, xdma_channel_tuple *tuple)
 {
 	if (!pdev)
