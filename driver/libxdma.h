@@ -13,11 +13,7 @@
 #include <linux/version.h>
 
 /* Switch debug printing on/off */
-<<<<<<< HEAD
-#define XDMA_DEBUG 1
-=======
 #define XDMA_DEBUG 0
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 
 /* SECTION: Preprocessor macros/constants */
 #define XDMA_BAR_NUM (6)
@@ -173,21 +169,12 @@ enum dev_capabilities {
 
 struct config_regs {
 	u32 identifier;
-<<<<<<< HEAD
-	u32 bus_dev;
-	u32 max_payload_size;
-	u32 max_read_size;
-	u32 reserved_1[1];
-	u32 msi_enable;
-} __packed;
-=======
 	u32 bus_dev;				//VSI added
 	u32 max_payload_size;			//VSI added
 	u32 max_read_size;			//VSI added
 	u32 reserved_1[1];			//VSI set to 1
 	u32 msi_enable;
 } __packed;					//VSI set to packed
->>>>>>> 259f2baddead3c00734ac9ab8d1c8b4880cc4234
 
 /**
  * SG DMA Controller status and control registers
