@@ -16,15 +16,24 @@
 
 #include <linux/kthread.h>
 #include <linux/kfifo.h>
+#include <linux/ioctl.h>
+#include <linux/types.h>
+
+#include "xdma-core.h"
+#include "../sv_driver.h"
 
 
+
+//forward declations
 struct bar_info;
 struct mod_desc;
+struct file_desc;
 
 
+int sv_xdma_map_single_bar(struct xdma_dev *lro, struct bar_info *bars, struct pci_dev *dev, int idx);
 int sv_xdma_map_bars(struct xdma_dev *lro, struct bar_info *bars, struct pci_dev *dev);
-int sv_map_single_bar(struct xdma_dev *lro, struct bar_info *bars, struct pci_dev *dev, int idx);
-ssize_t sv_char_sgdma_read_write(struct xdma_char * lro_char, char __user *buf, size_t count, loff_t *pos, int dir_to_dev);
+void sv_xdma_unmap_bars(struct xdma_dev *lro, struct bar_info *bars, struct pci_dev *dev);
+ssize_t sv_char_sgdma_read_write(struct file_desc * file_desc, struct xdma_char * lro_char, char __user *buf, size_t count, loff_t *pos, int dir_to_dev);
 int sv_do_addrmode_set(struct xdma_engine *engine, unsigned long dst);
 
 // ******************************************************************

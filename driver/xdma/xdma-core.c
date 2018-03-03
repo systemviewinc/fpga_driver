@@ -4132,7 +4132,8 @@ int probe_scan_for_msi(struct xdma_dev *lro, struct pci_dev *pdev)
 		for (i = 0; i < req_nvec; i++)
 			lro->entry[i].entry = i;
 
-		rc = pci_enable_msix(pdev, lro->entry, req_nvec);
+		// we don't call this function in VSI, comment out for compatiblity
+		//rc = pci_enable_msix(pdev, lro->entry, req_nvec);
 		if (rc < 0)
 			dbg_init("Couldn't enable MSI-X mode: rc = %d\n", rc);
 

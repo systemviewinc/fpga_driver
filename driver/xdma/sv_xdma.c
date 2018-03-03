@@ -8,7 +8,7 @@
 #include "version.h"
 
 #include "../sv_driver.h"
-
+#include "sv_xdma.h"
 
 /* map_bars() -- map device regions into kernel virtual address space
  *
@@ -27,7 +27,7 @@ int sv_xdma_map_bars(struct xdma_dev *lro, struct bar_info *bars, struct pci_dev
 	for (i = 0; i < XDMA_BAR_NUM; i++) {
 		int bar_len;
 
-		bar_len = sv_map_single_bar(lro, bars, dev, i);
+		bar_len = sv_xdma_map_single_bar(lro, bars, dev, i);
 		if (bar_len == 0) {
 			continue;
 		} else if (bar_len < 0) {
@@ -65,12 +65,12 @@ int sv_xdma_map_bars(struct xdma_dev *lro, struct bar_info *bars, struct pci_dev
 	goto success;
 fail:
 	/* unwind; unmap any BARs that we did map */
-	unmap_bars(lro, dev);
+	sv_xdma_unmap_bars(lro, bars, dev);
 success:
 	return rc;
 }
 
-int sv_map_single_bar(struct xdma_dev *lro, struct bar_info *bars, struct pci_dev *dev, int idx)
+int sv_xdma_map_single_bar(struct xdma_dev *lro, struct bar_info *bars, struct pci_dev *dev, int idx)
 {
 	resource_size_t bar_start;
 	resource_size_t bar_len;
@@ -84,20 +84,20 @@ int sv_map_single_bar(struct xdma_dev *lro, struct bar_info *bars, struct pci_de
 
 	/* do not map BARs with length 0. Note that start MAY be 0! */
 	if (!bar_len) {
-		dbg_init("BAR #%d is not present - skipping\n", idx);
+		dbg_bar("BAR #%d is not present - skipping\n", idx);
 		return 0;
 	}
 
 	/* BAR size exceeds maximum desired mapping? */
 	if (bar_len > INT_MAX) {
-		dbg_init("Limit BAR %d mapping from %llu to %d bytes\n", idx, (u64)bar_len, INT_MAX);
+		dbg_bar("Limit BAR %d mapping from %llu to %d bytes\n", idx, (u64)bar_len, INT_MAX);
 		map_len = (resource_size_t)INT_MAX;
 	}
 	/*
 	 * map the full device memory or IO region into kernel virtual
 	 * address space
 	 */
-	dbg_init("BAR%d: %llu bytes to be mapped.\n", idx, (u64)map_len);
+	dbg_bar("BAR%d: %llu bytes to be mapped.\n", idx, (u64)map_len);
 	lro->bar[idx] = pci_iomap(dev, idx, map_len);
 
 	if (!lro->bar[idx]) {
@@ -105,18 +105,36 @@ int sv_map_single_bar(struct xdma_dev *lro, struct bar_info *bars, struct pci_de
 		return -1;
 	}
 
-	dbg_init("BAR%d at 0x%llx mapped at 0x%p, length=%llu(/%llu)\n", idx,
+	dbg_bar("BAR%d at 0x%llx mapped at 0x%p, length=%llu(/%llu)\n", idx,
 		(u64)bar_start, lro->bar[idx], (u64)map_len, (u64)bar_len);
 
-		bars->pci_bar_end[idx] = bars->pci_bar_addr[idx]+map_len;
-		bars->pci_bar_vir_addr[idx] = lro->bar[idx];		 //hardware base virtual address
-		bars->num_bars++;
+	bars->pci_bar_end[idx] = bars->pci_bar_addr[idx]+map_len;
+	bars->pci_bar_vir_addr[idx] = lro->bar[idx];		 //hardware base virtual address
+	bars->num_bars++;
 
-		dbg_init("[sv_map_single_bar]: pci bar %d addr is:0x%lx \n", idx, bars->pci_bar_vir_addr[idx]);
-		dbg_init("[sv_map_single_bar]: pci bar %d start is:0x%lx end is:0x%lx\n", idx, bars->pci_bar_addr[idx], bars->pci_bar_end[idx]);
-		dbg_init("[sv_map_single_bar]: pci bar %d size is:0x%lx\n", idx, map_len);
+	dbg_bar("[sv_map_single_bar]: pci bar %d addr is:0x%lx \n", idx, bars->pci_bar_vir_addr[idx]);
+	dbg_bar("[sv_map_single_bar]: pci bar %d start is:0x%lx end is:0x%lx\n", idx, bars->pci_bar_addr[idx], bars->pci_bar_end[idx]);
+	dbg_bar("[sv_map_single_bar]: pci bar %d size is:0x%lx\n", idx, map_len);
 
 	return (int)map_len;
+}
+
+/*
+ * Unmap the BAR regions that had been mapped earlier using map_bars()
+ */
+void sv_xdma_unmap_bars(struct xdma_dev *lro, struct bar_info *bars, struct pci_dev *dev)
+{
+	int i;
+
+	for (i = 0; i < XDMA_BAR_NUM; i++) {
+		/* is this BAR mapped? */
+		if (lro->bar[i]) {
+			/* unmap BAR */
+			pci_iounmap(dev, lro->bar[i]);
+			/* mark as unmapped */
+			lro->bar[i] = bars->pci_bar_vir_addr[i] = NULL;
+		}
+	}
 }
 
 
@@ -134,14 +152,11 @@ int sv_map_single_bar(struct xdma_dev *lro, struct bar_info *bars, struct pci_de
  * descriptor table. submit the transfer. wait for the interrupt handler
  * to wake us on completion.
  */
-
-
-ssize_t sv_char_sgdma_read_write(struct xdma_char * lro_char, char __user *buf, size_t count, loff_t *pos, int dir_to_dev)
+ssize_t sv_char_sgdma_read_write(struct file_desc * file_desc, struct xdma_char * lro_char, char __user *buf, size_t count, loff_t *pos, int dir_to_dev)
 {
 	int rc;
 	ssize_t res = 0;
-	int counter;
-	int seq = counter++;
+	int seq = file_desc->svd->dma_usage_cnt++;
 
 	struct xdma_dev *lro;
 	struct xdma_engine *engine;

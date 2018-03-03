@@ -11,38 +11,38 @@
  *				 the data movement code and xilinx specific IP controllers such as CDMA.
  ***********************************************************
  */
+ #include <linux/kernel.h>
+ #include <linux/module.h>
+ #include <linux/pci.h>
+ #include <linux/init.h>
+ #include <linux/version.h>
+ #include <linux/fs.h>
+ #include <linux/uaccess.h>
+ #include <linux/interrupt.h>
+ #include <linux/sched.h>
 
-#include <linux/kernel.h>
-#include <linux/module.h>
-#include <linux/pci.h>
-#include <linux/init.h>
-#include <linux/version.h>
-#include <linux/fs.h>
-#include <linux/uaccess.h>
-#include <linux/interrupt.h>
-#include <linux/sched.h>
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
+ #include <linux/sched/task.h>
+ #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
-#include <linux/sched/task.h>
-#endif
+ #include <linux/slab.h>
+ #include <linux/msi.h>
+ #include <linux/poll.h>
+ #include <linux/string.h>
+ #include <linux/delay.h>
+ #include <linux/moduleparam.h>
+ #include <linux/of.h>
+ #include <linux/of_irq.h>
+ #include <linux/platform_device.h>
+ #include <linux/mutex.h>
+ #include <linux/atomic.h>
+ #include <linux/spinlock.h>
+ //#include <stdint.h>
+ #include "sv_driver.h"
+ #include "xdma/sv_xdma.h"
 
-#include <linux/slab.h>
-#include <linux/msi.h>
-#include <linux/poll.h>
-#include <linux/string.h>
-#include <linux/delay.h>
-#include <linux/moduleparam.h>
-#include <linux/of.h>
-#include <linux/of_irq.h>
-#include <linux/platform_device.h>
-#include <linux/mutex.h>
-#include <linux/atomic.h>
-#include <linux/spinlock.h>
-//#include <stdint.h>
-#include "sv_driver.h"
-//debug
-#include <linux/time.h>
-
+ //debug
+ #include <linux/time.h>
 
 /******************************** Local Scope Globals ***************************************/
 
@@ -273,7 +273,6 @@ int write_thread(void *in_param) {
  * @param BTT Number of bytes to transfer.
  * @param keyhole_en Instructs the CDMA to to a keyhole transaction or not
 */
-//int dma_transfer(struct file_desc * file_desc, u64 l_sa, u64 l_da, u32 l_btt, int keyhole_en, u32 xfer_type)
 int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_t count, int transfer_type, u64 dma_offset)
 {
 	u32 max_xfer_size;
@@ -284,12 +283,12 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 
 	if((transfer_type == NORMAL_READ) || (transfer_type == KEYHOLE_READ)) {
 		l_sa = axi_address;				//source address is axi_address when we read
-		l_da = file_desc->svd->axi_pcie_m + dma_offset; //the AXI address written to the CDMA
+		l_da = file_desc->svd->axi_pcie_m + file_desc->dma_offset_read + dma_offset; //the AXI address written to the CDMA
 
 		xfer_type = (HOST_WRITE|(transfer_type == KEYHOLE_READ ? INC_DA : INC_BOTH));		//DMA writes to the host when we read from the card --fix
 	}
 	else if((transfer_type == NORMAL_WRITE) || (transfer_type == KEYHOLE_WRITE)) {
-		l_sa = file_desc->svd->axi_pcie_m + dma_offset; //the AXI address written to the CDMA
+		l_sa = file_desc->svd->axi_pcie_m + file_desc->dma_offset_write + dma_offset; //the AXI address written to the CDMA
 		l_da = axi_address;				//destination address is axi_address when we write
 
 		xfer_type = (HOST_READ|(transfer_type == KEYHOLE_WRITE ? INC_SA : INC_BOTH));		//DMA reads from the host when we write from the card --fix
@@ -298,8 +297,6 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 		verbose_printk(KERN_INFO"\t\t[dma_transfer]: !!!!!!!!ERROR: unknown transfer type.\n");
 		return ERROR;
 	}
-	verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: **** Starting XDMA transfer ****\n");
-
 
 	if(file_desc->svd->cdma_capable > 0){
 		//----------------------------------------------------------------------
@@ -350,26 +347,23 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 		//----------------------------------------------------------------------
 	}
 	else if(pcie_use_xdma) {
-		// if xdma AWS or XIL function
-		//write data
+		//----------------------------------------------------------------------
+		//--------------------------do a XDMA Transfer--------------------------
+		//----------------------------------------------------------------------
 		loff_t pos = axi_address;
 		int rc = 0;
 
-		verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: file_desc %p \n", file_desc);
-		verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: xdma_dev %p \n", file_desc->xdma_dev);
+        verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: Using XDMA \n");
 
 		if(xfer_type & HOST_READ) { // host to card AKA WRITE
-			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: lro h2c %p \n", file_desc->xdma_dev->sgdma_char_dev[0][0]);
-			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: engine %p \n", file_desc->xdma_dev->sgdma_char_dev[0][0]->engine);
-			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: given buffer %p \n", buf+dma_offset);
-			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: write buffer %p \n", file_desc->write_buffer);
-			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: pos 0x%x \n", pos);
 
 			while (xdma_channel == -1 && --attempts != 0) {
 				xdma_channel = xdma_query(DMA_TO_DEVICE);
 				if(xdma_channel == -1) schedule();
 			}
-			rc = sv_char_sgdma_read_write(file_desc->xdma_dev->sgdma_char_dev[0][0], buf+dma_offset, l_btt, &pos, 1);
+            verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: xdma xfer write address 0x%p offset 0x%x\n",  buf+dma_offset, (u32)pos);
+
+			rc = sv_char_sgdma_read_write(file_desc, file_desc->xdma_dev->sgdma_char_dev[0][0], buf+dma_offset, l_btt, &pos, 1);
 
 			if(rc == l_btt) {	//successfully transfered all bytes
 				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: unlock h2c %i\n", xdma_channel);
@@ -384,19 +378,14 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 
 
 		} else if(xfer_type & HOST_WRITE) { // card to host AKA READ
-			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: lro c2h %p \n", file_desc->xdma_dev->sgdma_char_dev[0][1]);
-			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: engine %p \n", file_desc->xdma_dev->sgdma_char_dev[0][1]->engine);
-			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: given buffer %p \n", buf+dma_offset);
-			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: read buffer %p \n", file_desc->read_buffer);
-			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: pos 0x%x \n", pos);
-
 
 			while (xdma_channel == -1 && --attempts != 0) {
 				xdma_channel = xdma_query(DMA_FROM_DEVICE);
 				if(xdma_channel == -1) schedule();
 			}
 
-			rc = sv_char_sgdma_read_write(file_desc->xdma_dev->sgdma_char_dev[0][1], buf+dma_offset, l_btt, &pos, 0);
+            verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: xdma xfer read address 0x%p offset 0x%x\n",  buf+dma_offset, (u32)pos);
+			rc = sv_char_sgdma_read_write(file_desc, file_desc->xdma_dev->sgdma_char_dev[0][1], buf+dma_offset, l_btt, &pos, 0);
 
 			if(rc == l_btt) {	//successfully transfered all bytes
 				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: unlock c2h %i\n", xdma_channel);
@@ -414,6 +403,9 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 			return ret;
 		}
 		return rc;
+		//----------------------------------------------------------------------
+		//--------------------------XDMA Transfer done--------------------------
+		//----------------------------------------------------------------------
 	}
 	else{
 		verbose_printk(KERN_INFO"\t\t[dma_transfer]: !!!!!!!!ERROR: unknown transfer type.\n");
@@ -641,7 +633,7 @@ int dma_file_deinit(struct file_desc *file_desc, size_t dma_size) {
  * @brief This function initialized the interrupt controller in the FPGA.
  * @param axi_address The 64b AXI address of the Interrupt Controller (set through insmod).
  */
- void axi_intc_init(struct sv_mod_dev *svd, u64 axi_address)
+ void axi_intc_init(struct sv_mod_dev *svd, uint axi_address)
 {
 	u32 status;
 	u64 axi_dest;
@@ -864,7 +856,7 @@ int xdma_init_sv(struct xdma_dev *lro)
  * cdma_address the AXI address of the CDMA
  * dma_addr_base Used to set the dma translation address to the PCIe control reg.
  */
-int cdma_init(int cdma_num, uint cdma_addr)
+int cdma_init(struct sv_mod_dev *svd, int cdma_num, uint cdma_addr)
 {
 	u64 axi_dest;
 	u32 cdma_status;
@@ -875,7 +867,7 @@ int cdma_init(int cdma_num, uint cdma_addr)
 	}
 
 	cdma_address[cdma_num] = cdma_addr;
-	mutex_init(&svd_global->cdma_sem[cdma_num]);
+	mutex_init(&svd->cdma_sem[cdma_num]);
 
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: *******************Setting CDMA AXI Address:%x ******************************************\n", cdma_num, cdma_address[cdma_num]);
 
@@ -963,10 +955,9 @@ int cdma_init(int cdma_num, uint cdma_addr)
 		printk(KERN_INFO"\t\t[cdma_idle_%x_init]: \t!!!!!!!!ERROR: in direct_read!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
+    svd->cdma_set[cdma_num] = 1;
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA config after configuring: ('0x%08x')\n", cdma_num, cdma_status);
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: ****************Setting CDMA AXI Address:%x Complete*************************************\n", cdma_num, cdma_addr);
-
-	svd_global->cdma_set[cdma_num] = 1;
 
 	return 0;
 }
@@ -1051,9 +1042,6 @@ int data_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size
 		}
 		i++;
 	}
-	if(!in_range){
-		verbose_data_xfer_printk(KERN_INFO"[data_transfer]: address 0x%llx out of range using DMA %d\n", axi_address, file_desc->svd->cdma_capable);
-	}
 
 	//if data is small or the cdma is not initialized and in range
 	if(in_range == 1) {
@@ -1071,6 +1059,7 @@ int data_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size
 
 
 	} else if(file_desc->svd->cdma_capable > 0 || pcie_use_xdma) {
+		verbose_data_xfer_printk(KERN_INFO"[data_transfer]: address 0x%llx using DMA \n", axi_address);
 		status = dma_transfer(file_desc, axi_address, buf, count, transfer_type, 0);
 		if(status != 0) { //unsuccessful CDMA transmission
 			printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR on CDMA READ!!!.\n");
@@ -1289,7 +1278,7 @@ int cdma_transfer(struct file_desc * file_desc, u64 SA, u64 DA, u32 BTT, int key
 	u32 DA_MSB;
 	u32 DA_LSB;
 
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: **** Starting CDMA %d transfer ****\n", file_desc->svd->cdma_usage_cnt);
+	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: **** Starting CDMA %d transfer ****\n", file_desc->svd->dma_usage_cnt);
 
 	SA_MSB = (u32)(SA>>32);
 	SA_LSB = (u32)SA;
@@ -1326,7 +1315,7 @@ int cdma_transfer(struct file_desc * file_desc, u64 SA, u64 DA, u32 BTT, int key
 	}
 
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: Using CDMA %d\n", cdma_num);
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: ********* CDMA TRANSFER %d INITIALIZATION *************\n", file_desc->svd->cdma_usage_cnt);
+	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: ********* CDMA TRANSFER %d INITIALIZATION *************\n", file_desc->svd->dma_usage_cnt);
 
 	// Step 3. Write the desired transfer source address to the Source Address (SA) register. The
 	// transfer data at the source address must be valid and ready for transfer. If the address
@@ -1387,7 +1376,7 @@ int cdma_transfer(struct file_desc * file_desc, u64 SA, u64 DA, u32 BTT, int key
 		}
 	}
 
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: ********* CDMA TRANSFER %d FINISHED *************\n", file_desc->svd->cdma_usage_cnt++);
+	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: ********* CDMA TRANSFER %d FINISHED *************\n", file_desc->svd->dma_usage_cnt++);
 
 	return 0;
 }
@@ -1562,6 +1551,108 @@ int cdma_ack(int cdma_num, u64 sa, u64 da, u32 btt)
 }
 
 
+/* map_bars() -- map device regions into kernel virtual address space
+ *
+ * Map the device memory regions into kernel virtual address space after
+ * verifying their sizes respect the minimum sizes needed
+ */
+int sv_map_bars(struct bar_info *bars, struct pci_dev *dev)
+{
+	int rc;
+	int i;
+	int bar_id_list[XDMA_BAR_NUM];
+	int bar_id_idx = 0;
+
+	/* iterate through all the BARs */
+	for (i = 0; i < XDMA_BAR_NUM; i++) {
+		int bar_len;
+
+		bar_len = sv_map_single_bar(bars, dev, i);
+		if (bar_len == 0) {
+			continue;
+		} else if (bar_len < 0) {
+			rc = -1;
+			goto fail;
+		}
+
+		bar_id_list[bar_id_idx] = i;
+		bar_id_idx++;
+	}
+
+	/* successfully mapped all required BAR regions */
+	rc = 0;
+	goto success;
+fail:
+	/* unwind; unmap any BARs that we did map */
+	sv_unmap_bars(bars, dev);
+success:
+	return rc;
+}
+
+int sv_map_single_bar( struct bar_info *bars, struct pci_dev *dev, int idx)
+{
+	resource_size_t bar_start;
+	resource_size_t bar_len;
+	resource_size_t map_len;
+
+	bar_start = pci_resource_start(dev, idx);
+	bar_len = pci_resource_len(dev, idx);
+	map_len = bar_len;
+
+
+	/* do not map BARs with length 0. Note that start MAY be 0! */
+	if (!bar_len) {
+		dbg_bar("BAR #%d is not present - skipping\n", idx);
+		return 0;
+	}
+
+	/* BAR size exceeds maximum desired mapping? */
+	if (bar_len > INT_MAX) {
+		dbg_bar("Limit BAR %d mapping from %llu to %d bytes\n", idx, (u64)bar_len, INT_MAX);
+		map_len = (resource_size_t)INT_MAX;
+	}
+	/*
+	 * map the full device memory or IO region into kernel virtual
+	 * address space
+	 */
+	dbg_bar("BAR%d: %llu bytes to be mapped.\n", idx, (u64)map_len);
+	bars->pci_bar_vir_addr[idx] = pci_iomap(dev, idx, map_len);
+
+	if (!bars->pci_bar_vir_addr[idx]) {
+		dbg_bar("Could not map BAR %d", idx);
+		return -1;
+	}
+
+	dbg_bar("BAR%d at 0x%llx mapped at 0x%p, length=%llu(/%llu)\n", idx,
+		(u64)bar_start, bars->pci_bar_vir_addr[idx], (u64)map_len, (u64)bar_len);
+
+	bars->pci_bar_end[idx] = bars->pci_bar_addr[idx]+map_len;
+	bars->num_bars++;
+
+	dbg_bar("[sv_map_single_bar]: pci bar %d addr is:0x%lx \n", idx, bars->pci_bar_vir_addr[idx]);
+	dbg_bar("[sv_map_single_bar]: pci bar %d start is:0x%lx end is:0x%lx\n", idx, bars->pci_bar_addr[idx], bars->pci_bar_end[idx]);
+	dbg_bar("[sv_map_single_bar]: pci bar %d size is:0x%lx\n", idx, map_len);
+
+	return (int)map_len;
+}
+
+/*
+ * Unmap the BAR regions that had been mapped earlier using map_bars()
+ */
+void sv_unmap_bars(struct bar_info *bars, struct pci_dev *dev)
+{
+	int i;
+
+	for (i = 0; i < XDMA_BAR_NUM; i++) {
+		/* is this BAR mapped? */
+		if (bars->pci_bar_vir_addr[i]) {
+			/* unmap BAR */
+			pci_iounmap(dev, bars->pci_bar_vir_addr[i]);
+			/* mark as unmapped */
+			bars->pci_bar_vir_addr[i] = NULL;
+		}
+	}
+}
 
 struct sv_mod_dev *alloc_sv_dev_instance(u64 dma_size)
 {
@@ -1586,7 +1677,7 @@ struct sv_mod_dev *alloc_sv_dev_instance(u64 dma_size)
 	sv_dev->axi_pcie_m = NULL;
 
 	sv_dev->cdma_capable = 0;
-	sv_dev->cdma_usage_cnt = 0;
+	sv_dev->dma_usage_cnt = 0;
 
 	sv_dev->dma_max_write_size = 0;
 	sv_dev->dma_max_read_size = 0;

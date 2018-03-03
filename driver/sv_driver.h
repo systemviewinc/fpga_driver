@@ -17,6 +17,8 @@
 
 #include <linux/kthread.h>
 #include <linux/kfifo.h>
+#include "xdma/xdma-core.h"
+#include "xdma/sv_xdma.h"
 
 /*These are the CDMA R/W types */
 #ifndef KEYHOLE_WRITE
@@ -62,7 +64,7 @@
 #define verbose_mmap_printk printk
 #define verbose_read_thread_printk printk
 #define verbose_write_thread_printk printk
-
+#define pr_bar 1
 
 #ifndef verbose_llseek_printk
 #define verbose_llseek_printk(...)
@@ -124,6 +126,12 @@
 #ifndef verbose_write_thread_printk
 #define verbose_write_thread_printk(...)
 #endif
+
+#ifndef dbg_bar
+#define dbg_bar(fmt, ...) pr_debug("%s():" fmt, __func__, ##__VA_ARGS__)
+#endif
+
+
 
 /******************************/
 
@@ -190,13 +198,10 @@ enum xfer_type {
 };
 
 /******************************** NON XDMA related **********************************/
-	#include "xdma/xdma-core.h"
-	#include "xdma/sv_xdma.h"
+extern uint pcie_use_xdma;
+extern struct xdma_dev *xdma_dev_s;
 
-	extern uint pcie_use_xdma;
-	extern struct xdma_dev *xdma_dev_s;
-
-	#define XDMA_TIMEOUT_IN_MSEC				(3 * 1000)
+#define XDMA_TIMEOUT_IN_MSEC				(3 * 1000)
 /******************************** Xilinx Register Offsets **********************************/
 #define AXI_STREAM_ISR	 	0x00	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
 #define AXI_STREAM_IER	 	0x04	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
@@ -250,7 +255,6 @@ enum xfer_type {
 
 #if defined(CONFIG_PCI_MSI)
 #define MAX_INTERRUPTS MAX_USER_IRQ
-static struct msix_entry sv_msix_entry[32];
 #endif
 
 
@@ -280,14 +284,14 @@ struct sv_mod_dev {
 	u32 dma_current_offset;	/**< This variable holds the current offset of the DMA Allocation */
 	u64 dma_buffer_size; /**< Default value for size of DMA Allocation, Max is 4MB, this is set through insmod */
 
-	u64 axi_intc_addr; /**< Global Variable that stores the Interrupt Controller AXI Address */
+	uint axi_intc_addr; /**< Global Variable that stores the Interrupt Controller AXI Address */
 	u64 axi_pcie_m; /**< Global Variable that stores the data transport IP Slave AXI Address as seen from the CDMA*/
 	u8 cdma_set[CDMA_MAX_NUM]; /**< Global variable that stores which CDMAs have been initialized. (currently only using 2 CDMAs) */
 
 	unsigned int irq_num; /**< Global variable that stores the IRQ number that is probed from the device */
 
 	int cdma_capable; /**< Global variable that is a flag to tell if the driver has been initialized properly to use the CDMA(s), holds the number of cdmas init'd */
-	int cdma_usage_cnt; /**< Global variable to count the number of CDMA uses. Used for statistics gathering */
+	int dma_usage_cnt; /**< Global variable to count the number of CDMA uses. Used for statistics gathering */
 
 	int dma_max_write_size ;	 /**< AWS PCI/e max write size	*/
 	int dma_max_read_size ;	 /**< AWS PCI/e max read size	*/
@@ -318,6 +322,9 @@ struct sv_mod_dev {
 	atomic_t thread_q_read; /**< The Wait variable for the READ Thread */
 	wait_queue_head_t thread_q_head_read; /**< waitq for events */
 
+	#if defined(CONFIG_PCI_MSI)
+	struct msix_entry sv_msix_entry[32];
+	#endif
 
 	DECLARE_KFIFO(write_fifo, struct file_desc*, 8192); /**< sets up the struct WRITE FIFO */
 	DECLARE_KFIFO(read_fifo, struct file_desc*, 8192); /**< sets up the struct READ FIFO */
@@ -447,7 +454,7 @@ struct statistics
 	unsigned long ns;
 	int cdma_attempt;
 	int ip_not_ready;
-	int cdma_usage_cnt;
+	int dma_usage_cnt;
 };
 
 // ********************** support functions **************************
@@ -480,7 +487,6 @@ int cdma_transfer(struct file_desc * file_desc, u64 l_sa, u64 l_da, u32 l_btt, i
 int data_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_t count, int transfer_type);
 
 
-//int dma_transfer(struct file_desc * file_desc, u64 l_sa, u64 l_da, u32 l_btt, int keyhole_en, u32 xfer_type);
 int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_t count, int transfer_type, u64 dma_offset);
 
 /**
@@ -532,7 +538,7 @@ u32 num2vec(int num);
  * @param cdma_address the AXI address of the CDMA
  * @param dma_addr_base Used to set the dma translation address to the PCIe control reg.
 */
-int cdma_init(int cdma_num, uint cdma_address);
+int cdma_init(struct sv_mod_dev *svd, int cdma_num, uint cdma_address);
 /**
  * @brief This function writes the translation address (The DMA Hardware base address) to the
  * PCIe control register.
@@ -543,7 +549,7 @@ int pcie_ctl_init(u64 axi_address, u64 dma_addr_base);
  * @brief This function initialized the interrupt controller in the FPGA.
  * @param axi_address The 64b AXI address of the Interrupt Controller (set through insmod).
 */
-void axi_intc_init(struct sv_mod_dev *svd, u64 axi_address);
+void axi_intc_init(struct sv_mod_dev *svd, uint axi_address);
 
 void axi_intc_deinit(struct sv_mod_dev *svd);
 
@@ -662,5 +668,10 @@ int dma_file_deinit(struct file_desc *file_desc, size_t dma_size);
 
 int align_dma(int addr, int dma_byte_width);
 
+int sv_map_single_bar( struct bar_info *bars, struct pci_dev *dev, int idx);
+
+int sv_map_bars(struct bar_info *bars, struct pci_dev *dev);
+
+void sv_unmap_bars(struct bar_info *bars, struct pci_dev *dev);
 // ******************************************************************
 #endif //SV_DRIVER_H

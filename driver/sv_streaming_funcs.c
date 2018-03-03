@@ -12,38 +12,38 @@
  ***********************************************************
  */
 
-#include <linux/kernel.h>
-#include <linux/module.h>
-#include <linux/pci.h>
-#include <linux/init.h>
-#include <linux/version.h>
-#include <linux/fs.h>
-#include <linux/uaccess.h>
-#include <linux/interrupt.h>
-#include <linux/sched.h>
+ #include <linux/kernel.h>
+ #include <linux/module.h>
+ #include <linux/pci.h>
+ #include <linux/init.h>
+ #include <linux/version.h>
+ #include <linux/fs.h>
+ #include <linux/uaccess.h>
+ #include <linux/interrupt.h>
+ #include <linux/sched.h>
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
-#include <linux/sched/task.h>
-#endif
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
+ #include <linux/sched/task.h>
+ #endif
 
-#include <linux/slab.h>
-#include <linux/msi.h>
-#include <linux/poll.h>
-#include <linux/string.h>
-#include <linux/delay.h>
-#include <linux/moduleparam.h>
-#include <linux/of.h>
-#include <linux/of_irq.h>
-#include <linux/platform_device.h>
-#include <linux/mutex.h>
-#include <linux/atomic.h>
-#include <linux/spinlock.h>
-//#include <stdint.h>
-#include "sv_driver.h"
-//debug
-#include <linux/time.h>
+ #include <linux/slab.h>
+ #include <linux/msi.h>
+ #include <linux/poll.h>
+ #include <linux/string.h>
+ #include <linux/delay.h>
+ #include <linux/moduleparam.h>
+ #include <linux/of.h>
+ #include <linux/of_irq.h>
+ #include <linux/platform_device.h>
+ #include <linux/mutex.h>
+ #include <linux/atomic.h>
+ #include <linux/spinlock.h>
+ //#include <stdint.h>
+ #include "sv_driver.h"
+ #include "xdma/sv_xdma.h"
 
-
+ //debug
+ #include <linux/time.h>
 /**
  * This function is called by the read thread to read data from the FPGA.
  * read_size: the number of bytes to read from the fifo
@@ -214,7 +214,6 @@ int write_data(struct file_desc * file_desc, void * buffer_addr)
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_%d_data]: dma_transfer 1 ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
 							file_desc->minor, buffer_addr, wth, axi_dest, room_till_end);
 
-		//if(dma_transfer(file_desc, buffer_addr+wth, axi_dest, room_till_end, KEYHOLE_WRITE, (HOST_READ|INC_SA))) { //unsuccessful CDMA transmission
 		if(dma_transfer(file_desc, axi_dest, buffer_addr, room_till_end, KEYHOLE_WRITE, wth) ) { //unsuccessful CDMA transmission
 			verbose_printk(KERN_INFO"[write_data]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 		}
@@ -229,7 +228,6 @@ int write_data(struct file_desc * file_desc, void * buffer_addr)
 
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: dma_transfer 2 ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
 							buffer_addr, wth, axi_dest, remaining);
-		//if(dma_transfer(file_desc, buffer_addr+wth, axi_dest, remaining, KEYHOLE_WRITE, (HOST_READ|INC_SA))) { //unsuccessful CDMA transmission
 		if(dma_transfer(file_desc, axi_dest, buffer_addr, remaining, KEYHOLE_WRITE, wth) ) { //unsuccessful CDMA transmission
 			verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 		}
@@ -238,7 +236,6 @@ int write_data(struct file_desc * file_desc, void * buffer_addr)
 	} else {														//only 1 copy
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: dma_transfer ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
 							buffer_addr, wth, axi_dest, write_header_size);
-		//if(dma_transfer(file_desc, buffer_addr+wth, axi_dest, write_header_size, KEYHOLE_WRITE, (HOST_READ|INC_SA))) { //unsuccessful CDMA transmission
 		if(dma_transfer(file_desc, axi_dest, buffer_addr, write_header_size, KEYHOLE_WRITE, wth) ) { //unsuccessful CDMA transmission
 			verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 		}
@@ -435,7 +432,6 @@ size_t axi_stream_fifo_read(struct file_desc * file_desc, size_t count, void * b
 		remaining = count-room_till_end;
 
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: dma_transfer 1 AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset, room_till_end);
-		//if(dma_transfer(file_desc, axi_dest, hw_base_addr+(u64)ring_pointer_offset, room_till_end, KEYHOLE_READ, (HOST_WRITE|INC_DA))) { //unsuccessful CDMA transmission
 		if(dma_transfer(file_desc, axi_dest, buffer_addr, room_till_end, KEYHOLE_READ, ring_pointer_offset) ) { //unsuccessful CDMA transmission
 			printk(KERN_INFO"[axi_stream_fifo_read]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 		}
@@ -446,7 +442,6 @@ size_t axi_stream_fifo_read(struct file_desc * file_desc, size_t count, void * b
 		ring_pointer_offset = 0;
 		//end of buffer reached
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: dma_transfer 2 AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset, remaining);
-		//if(dma_transfer(file_desc, axi_dest, hw_base_addr+(u64)ring_pointer_offset, remaining, KEYHOLE_READ, (HOST_WRITE|INC_DA)) ) { //unsuccessful CDMA transmission
 		if(dma_transfer(file_desc, axi_dest, buffer_addr, remaining, KEYHOLE_READ, ring_pointer_offset) ) { //unsuccessful CDMA transmission
 			printk(KERN_INFO"[axi_stream_fifo_read]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 		}
@@ -454,7 +449,6 @@ size_t axi_stream_fifo_read(struct file_desc * file_desc, size_t count, void * b
 
 	} else {														//only 1 cdma transfer
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read]: dma_transfer AXI Address: 0x%llx, ring_buff address: 0x%llx + 0x%x, len: 0x%zx\n", axi_dest, hw_base_addr, ring_pointer_offset , count);
-		//if(dma_transfer(file_desc, axi_dest, ((u64)hw_base_addr+ring_pointer_offset), count, KEYHOLE_READ, (HOST_WRITE|INC_DA)) ) { //unsuccessful CDMA transmission
 		if(dma_transfer(file_desc, axi_dest, buffer_addr, count, KEYHOLE_READ, ring_pointer_offset ) ) { //unsuccessful CDMA transmission
 			printk(KERN_INFO"[axi_stream_fifo_read]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 		}
@@ -514,7 +508,7 @@ size_t axi_stream_fifo_read_direct(struct file_desc * file_desc, size_t count, c
 		verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: count = %zd.\n", count);
 	}
 
-	axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_RDFD;
+	axi_dest = file_desc->axi_addr + AXI_STREAM_RDFD;
 
 	if(count > buf_size) {			//needs to be 2 cdma transfers
 		//there is not enough room in the buffer
@@ -525,9 +519,7 @@ size_t axi_stream_fifo_read_direct(struct file_desc * file_desc, size_t count, c
 	//only 1 cdma transfer
 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: dma_transfer AXI Address: 0x%llx, ring_buff address: 0x%llx, len: 0x%zx\n", axi_dest, hw_base_addr , count);
 
-	//if(dma_transfer(file_desc, axi_dest, ((u64)hw_base_addr), count, KEYHOLE_READ, (HOST_WRITE|INC_DA))) { //unsuccessful CDMA transmission
 	if(dma_transfer(file_desc, axi_dest, hw_base_addr, count, KEYHOLE_READ, 0) ) { //unsuccessful CDMA transmission
-
 		printk(KERN_INFO"[axi_stream_fifo_read_direct]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 	}
 
@@ -823,7 +815,6 @@ int copy_to_ring_buffer(struct file_desc * file_desc, void* buf, size_t count, v
 	size_t room_till_end;
 	size_t remaining;
 	int bytes = 0;
-	void * rb_addr;
 
 	verbose_pci_write_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]: the amount of bytes being copied to the ring buffer: %zu\n", file_desc->minor, count);
 
