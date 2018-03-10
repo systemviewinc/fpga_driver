@@ -668,7 +668,7 @@ int dma_file_deinit(struct file_desc *file_desc, size_t dma_size);
 
 int align_dma(int addr, int dma_byte_width);
 
-int sv_map_single_bar( struct bar_info *bars, struct pci_dev *dev, int idx);
+int sv_map_single_bar(struct bar_info *bars, struct xdma_dev *lro, struct pci_dev *dev, int idx);
 
 int sv_map_bars(struct bar_info *bars, struct pci_dev *dev);
 

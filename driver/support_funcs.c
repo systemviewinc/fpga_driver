@@ -459,14 +459,7 @@ int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, size_t dma
 	int minor = file_desc->minor;
 
 	file_desc->dma_size = size = (size_t)PAGE_ALIGN(dma_size);
-
-	printk(KERN_INFO"[dma_%x_init]: Setting Peripheral DMA size:0x%llx\n", minor, file_desc->dma_size);
-	// if(((u64)file_desc->svd->dma_current_offset + file_desc->dma_size*2) > dma_buffer_size) {
-	// 	printk(KERN_INFO"[dma_%x_init]: !!!!!!!!ERROR! DMA Buffer out of memory!\n", minor);
-	// 	printk(KERN_INFO"[dma_%x_init]: Decrease file sizes or increase dma size insmod parameter\n", minor);
-	// 	return ERROR;
-	// }
-
+	printk(KERN_INFO"[dma_%x_init]: Setting Peripheral DMA size:0x%zx\n", minor, file_desc->dma_size);
 
 	//for xdma buffers also initialize a vmalloc_32 for the sg
 	if(xdma) {
@@ -531,12 +524,8 @@ int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, size_t dma
 		else{
 			printk(KERN_INFO"[dma_%x_init]: ERROR unknown flags\n", minor);
 			return ERROR;
-
 		}
-
 	}
-
-
 
 	if((flags & O_ACCMODE) == O_RDONLY){
 		verbose_printk(KERN_INFO"[dma_%x_init]: The current system memory dma offset:0x%x\n", minor, file_desc->svd->dma_current_offset);
@@ -545,8 +534,7 @@ int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, size_t dma
 		verbose_printk(KERN_INFO"[dma_%x_init]: DMA kernel write address set to:0x%p\n", minor, file_desc->dma_write_addr);
 		file_desc->svd->dma_current_offset += (u32)file_desc->dma_size;				//update the current dma allocation pointer, 2 buffers (R/W)
 		file_desc->set_dma_flag = 1;
-		printk(KERN_INFO"[dma_%x_init]: Success setting peripheral DMA(read only) for file minor: %d size %d\n", minor, file_desc->minor, file_desc->dma_size);
-
+		printk(KERN_INFO"[dma_%x_init]: Success setting peripheral DMA(read only) size %zu\n", minor, file_desc->dma_size);
 
 	}
 	else if((flags & O_ACCMODE) == O_WRONLY){
@@ -556,8 +544,7 @@ int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, size_t dma
 		verbose_printk(KERN_INFO"[dma_%x_init]: DMA kernel write address set to:0x%p\n", minor, file_desc->dma_write_addr);
 		file_desc->svd->dma_current_offset += (u32)file_desc->dma_size;				//update the current dma allocation pointer, 2 buffers (R/W)
 		file_desc->set_dma_flag = 1;
-		printk(KERN_INFO"[dma_%x_init]: Success setting peripheral DMA(write only) for file minor: %d size %d\n", minor, file_desc->minor, file_desc->dma_size);
-
+		printk(KERN_INFO"[dma_%x_init]: Success setting peripheral DMA(write only) size %zu\n", minor, file_desc->dma_size);
 
 	}
 	else if((flags & O_ACCMODE) == O_RDWR){
@@ -570,27 +557,18 @@ int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, size_t dma
 		verbose_printk(KERN_INFO"[dma_%x_init]: DMA kernel write address set to:0x%p\n", minor, file_desc->dma_write_addr);
 		file_desc->svd->dma_current_offset += (u32)(2*file_desc->dma_size);				//update the current dma allocation pointer, 2 buffers (R/W)
 		file_desc->set_dma_flag = 1;
-		printk(KERN_INFO"[dma_%x_init]: Success setting peripheral DMA for file minor: %d size %d\n", minor, file_desc->minor, file_desc->dma_size);
-
+		printk(KERN_INFO"[dma_%x_init]: Success setting peripheral DMA size %zu\n", minor, file_desc->dma_size);
 
 	}
 	else{
 		printk(KERN_INFO"[dma_%x_init]: ERROR unknown flags\n", minor);
 		return ERROR;
-
 	}
-
-	// for(i = 0; i < file_desc->dma_size/PAGE_SIZE; i++) {
-	// 	verbose_printk(KERN_INFO"[dma_%x_init]: SetPageReserved page %i\n", minor, i);
-	// 	//SetPageReserved(vmalloc_to_page(file_desc->dma_read_addr+PAGE_SIZE*i));
-	// 	//SetPageReserved(vmalloc_to_page(file_desc->dma_write_addr+PAGE_SIZE*i));
-	// }
 	return 0;
 }
 
 
 int dma_file_deinit(struct file_desc *file_desc, size_t dma_size) {
-	int i;
 	int minor = file_desc->minor;
 	unsigned long adr, size;
 
@@ -1567,7 +1545,7 @@ int sv_map_bars(struct bar_info *bars, struct pci_dev *dev)
 	for (i = 0; i < XDMA_BAR_NUM; i++) {
 		int bar_len;
 
-		bar_len = sv_map_single_bar(bars, dev, i);
+		bar_len = sv_map_single_bar(bars, NULL, dev, i);
 		if (bar_len == 0) {
 			continue;
 		} else if (bar_len < 0) {
@@ -1589,7 +1567,7 @@ success:
 	return rc;
 }
 
-int sv_map_single_bar( struct bar_info *bars, struct pci_dev *dev, int idx)
+int sv_map_single_bar(struct bar_info *bars, struct xdma_dev *lro, struct pci_dev *dev, int idx)
 {
 	resource_size_t bar_start;
 	resource_size_t bar_len;
@@ -1599,6 +1577,7 @@ int sv_map_single_bar( struct bar_info *bars, struct pci_dev *dev, int idx)
 	bar_len = pci_resource_len(dev, idx);
 	map_len = bar_len;
 
+    bars->pci_bar_vir_addr[idx] = NULL;
 
 	/* do not map BARs with length 0. Note that start MAY be 0! */
 	if (!bar_len) {
@@ -1618,6 +1597,10 @@ int sv_map_single_bar( struct bar_info *bars, struct pci_dev *dev, int idx)
 	dbg_bar("BAR%d: %llu bytes to be mapped.\n", idx, (u64)map_len);
 	bars->pci_bar_vir_addr[idx] = pci_iomap(dev, idx, map_len);
 
+    if(lro != NULL){
+        lro->bar[idx] = bars->pci_bar_vir_addr[idx];
+    }
+
 	if (!bars->pci_bar_vir_addr[idx]) {
 		dbg_bar("Could not map BAR %d", idx);
 		return -1;
@@ -1629,9 +1612,9 @@ int sv_map_single_bar( struct bar_info *bars, struct pci_dev *dev, int idx)
 	bars->pci_bar_end[idx] = bars->pci_bar_addr[idx]+map_len;
 	bars->num_bars++;
 
-	dbg_bar("[sv_map_single_bar]: pci bar %d addr is:0x%lx \n", idx, bars->pci_bar_vir_addr[idx]);
+    dbg_bar("[sv_map_single_bar]: pci bar %d addr is:0x%p \n", idx, bars->pci_bar_vir_addr[idx]);
 	dbg_bar("[sv_map_single_bar]: pci bar %d start is:0x%lx end is:0x%lx\n", idx, bars->pci_bar_addr[idx], bars->pci_bar_end[idx]);
-	dbg_bar("[sv_map_single_bar]: pci bar %d size is:0x%lx\n", idx, map_len);
+	dbg_bar("[sv_map_single_bar]: pci bar %d size is:0x%lx\n", idx, (unsigned long)map_len);
 
 	return (int)map_len;
 }
@@ -1656,7 +1639,6 @@ void sv_unmap_bars(struct bar_info *bars, struct pci_dev *dev)
 
 struct sv_mod_dev *alloc_sv_dev_instance(u64 dma_size)
 {
-	int i;
 	struct sv_mod_dev *sv_dev;
 
 	//BUG_ON(!pdev);
@@ -1674,7 +1656,7 @@ struct sv_mod_dev *alloc_sv_dev_instance(u64 dma_size)
 	sv_dev->dma_buffer_size = dma_size;
 
 	sv_dev->axi_intc_addr = -1;
-	sv_dev->axi_pcie_m = NULL;
+	sv_dev->axi_pcie_m = -1;
 
 	sv_dev->cdma_capable = 0;
 	sv_dev->dma_usage_cnt = 0;
@@ -1704,7 +1686,6 @@ struct sv_mod_dev *alloc_sv_dev_instance(u64 dma_size)
 
 	printk(KERN_INFO"probe() read_fifo = 0x%p\n", &sv_dev->read_fifo);
 	printk(KERN_INFO"probe() write_fifo = 0x%p\n", &sv_dev->write_fifo);
-
 
 	/*FIFO init stuff*/
 	spin_lock_init(&sv_dev->fifo_lock_read);

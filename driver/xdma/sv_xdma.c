@@ -27,7 +27,7 @@ int sv_xdma_map_bars(struct xdma_dev *lro, struct bar_info *bars, struct pci_dev
 	for (i = 0; i < XDMA_BAR_NUM; i++) {
 		int bar_len;
 
-		bar_len = sv_xdma_map_single_bar(lro, bars, dev, i);
+		bar_len = sv_map_single_bar(bars, lro, dev, i);
 		if (bar_len == 0) {
 			continue;
 		} else if (bar_len < 0) {
@@ -70,54 +70,6 @@ success:
 	return rc;
 }
 
-int sv_xdma_map_single_bar(struct xdma_dev *lro, struct bar_info *bars, struct pci_dev *dev, int idx)
-{
-	resource_size_t bar_start;
-	resource_size_t bar_len;
-	resource_size_t map_len;
-
-	bar_start = pci_resource_start(dev, idx);
-	bar_len = pci_resource_len(dev, idx);
-	map_len = bar_len;
-
-	lro->bar[idx] = NULL;
-
-	/* do not map BARs with length 0. Note that start MAY be 0! */
-	if (!bar_len) {
-		dbg_bar("BAR #%d is not present - skipping\n", idx);
-		return 0;
-	}
-
-	/* BAR size exceeds maximum desired mapping? */
-	if (bar_len > INT_MAX) {
-		dbg_bar("Limit BAR %d mapping from %llu to %d bytes\n", idx, (u64)bar_len, INT_MAX);
-		map_len = (resource_size_t)INT_MAX;
-	}
-	/*
-	 * map the full device memory or IO region into kernel virtual
-	 * address space
-	 */
-	dbg_bar("BAR%d: %llu bytes to be mapped.\n", idx, (u64)map_len);
-	lro->bar[idx] = pci_iomap(dev, idx, map_len);
-
-	if (!lro->bar[idx]) {
-		dbg_init("Could not map BAR %d", idx);
-		return -1;
-	}
-
-	dbg_bar("BAR%d at 0x%llx mapped at 0x%p, length=%llu(/%llu)\n", idx,
-		(u64)bar_start, lro->bar[idx], (u64)map_len, (u64)bar_len);
-
-	bars->pci_bar_end[idx] = bars->pci_bar_addr[idx]+map_len;
-	bars->pci_bar_vir_addr[idx] = lro->bar[idx];		 //hardware base virtual address
-	bars->num_bars++;
-
-	dbg_bar("[sv_map_single_bar]: pci bar %d addr is:0x%lx \n", idx, bars->pci_bar_vir_addr[idx]);
-	dbg_bar("[sv_map_single_bar]: pci bar %d start is:0x%lx end is:0x%lx\n", idx, bars->pci_bar_addr[idx], bars->pci_bar_end[idx]);
-	dbg_bar("[sv_map_single_bar]: pci bar %d size is:0x%lx\n", idx, map_len);
-
-	return (int)map_len;
-}
 
 /*
  * Unmap the BAR regions that had been mapped earlier using map_bars()
@@ -231,7 +183,6 @@ ssize_t sv_char_sgdma_read_write(struct file_desc * file_desc, struct xdma_char 
 
 int sv_do_addrmode_set(struct xdma_engine *engine, unsigned long dst)
 {
-	int rc;
 	u32 w = XDMA_CTRL_NON_INCR_ADDR;
 
 	dbg_perf("IOCTL_XDMA_ADDRMODE_SET\n");
@@ -245,112 +196,5 @@ int sv_do_addrmode_set(struct xdma_engine *engine, unsigned long dst)
 
 	engine_alignments(engine);
 
-	return rc;
+	return 0;
 }
-
-
-
-
-//things to copy
-//
-// int msix_irq_setup(struct xdma_dev *lro)
-// {
-// 	int i;
-// 	int rc;
-//
-// 	BUG_ON(!lro);
-// 	write_msix_vectors(lro);
-//
-// 	for (i = 0; i < MAX_USER_IRQ; i++) {
-// 		rc = request_irq(lro->entry[i].vector, xdma_user_irq, 0,
-// 			DRV_NAME, &lro->user_irq[i]);
-//
-// 		if (rc) {
-// 			dbg_init("Couldn't use IRQ#%d, rc=%d\n",
-// 				lro->entry[i].vector, rc);
-// 			break;
-// 		}
-//
-// 		dbg_init("Using IRQ#%d with 0x%p\n", lro->entry[i].vector,
-// 			&lro->user_irq[i]);
-// 	}
-//
-// 	/* If any errors occur, free IRQs that were successfully requested */
-// 	if (rc) {
-// 		while (--i >= 0)
-// 			free_irq(lro->entry[i].vector, &lro->user_irq[i]);
-// 		return -1;
-// 	}
-//
-// 	lro->irq_user_count = MAX_USER_IRQ;
-//
-// 	return 0;
-// }
-//
-// int irq_setup(struct xdma_dev *lro, struct pci_dev *pdev)
-// {
-// 	int rc = 0;
-// 	u32 irq_flag;
-// 	u8 val;
-// 	void *reg;
-// 	u32 w;
-//
-// 	BUG_ON(!lro);
-//
-// 	if (lro->msix_enabled) {
-// 		rc = msix_irq_setup(lro);
-// 	} else {
-// 		if (!lro->msi_enabled){
-// 			pci_read_config_byte(pdev, PCI_INTERRUPT_PIN, &val);
-// 			dbg_init("Legacy Interrupt register value = %d\n", val);
-// 			if (val > 1) {
-// 				val--;
-// 				w = (val<<24) | (val<<16) | (val<<8)| val;
-// 				// Program IRQ Block Channel vactor and IRQ Block User vector with Legacy interrupt value
-// 				reg = lro->bar[lro->config_bar_idx] + 0x2080;   // IRQ user
-// 				write_register(w, reg);
-// 				write_register(w, reg+0x4);
-// 				write_register(w, reg+0x8);
-// 				write_register(w, reg+0xC);
-// 				reg = lro->bar[lro->config_bar_idx] + 0x20A0;   // IRQ Block
-// 				write_register(w, reg);
-// 				write_register(w, reg+0x4);
-// 			}
-// 		}
-// 		irq_flag = lro->msi_enabled ? 0 : IRQF_SHARED;
-// 		lro->irq_line = (int)pdev->irq;
-// 		rc = request_irq(pdev->irq, xdma_isr, irq_flag, DRV_NAME, lro);
-// 		if (rc)
-// 			dbg_init("Couldn't use IRQ#%d, rc=%d\n", pdev->irq, rc);
-// 		else
-// 			dbg_init("Using IRQ#%d with 0x%p\n", pdev->irq, lro);
-// 	}
-//
-// 	return rc;
-// }
-//
-// int engine_msix_setup(struct xdma_engine *engine)
-// {
-// 	int rc = 0;
-// 	u32 vector;
-// 	struct xdma_dev *lro;
-//
-// 	BUG_ON(!engine);
-// 	lro = engine->lro;
-// 	BUG_ON(!lro);
-//
-// 	vector = lro->entry[lro->engines_num + MAX_USER_IRQ].vector;
-//
-// 	dbg_init("Requesting IRQ#%d for engine %p\n", vector, engine);
-// 	rc = request_irq(vector, xdma_channel_irq, 0, DRV_NAME, engine);
-// 	if (rc) {
-// 		dbg_init("Unable to request_irq for engine %d\n",
-// 			lro->engines_num);
-// 	} else {
-// 		dbg_init("Requested IRQ#%d for engine %d\n", vector,
-// 			lro->engines_num);
-// 		engine->msix_irq_line = vector;
-// 	}
-//
-// 	return rc;
-// }

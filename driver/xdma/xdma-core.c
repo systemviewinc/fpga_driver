@@ -3200,7 +3200,7 @@ ssize_t char_sgdma_read_write(struct file *file, char __user *buf,
 {
 	int rc;
 	ssize_t res = 0;
-	int counter;
+	static int counter;
 	int seq = counter++;
 	struct xdma_char *lro_char;
 	struct xdma_dev *lro;

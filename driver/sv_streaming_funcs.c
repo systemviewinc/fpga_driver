@@ -51,8 +51,6 @@
 int read_data(struct file_desc * file_desc, int read_size, void * buffer_addr)
 {
 	int read_count;
-	int drop_count = 0;
-	int drop_count_inc;
 	int max_can_read = 0;
 	int rfu, rfh, full;
 
@@ -139,7 +137,6 @@ int write_data(struct file_desc * file_desc, void * buffer_addr)
 	u64 axi_dest;
 	u32 buf, read_reg;
 	u32 data_in_fifo;
-	int attempts = 100;
 
 	wth = atomic_read(file_desc->wth);
 	wtk = atomic_read(file_desc->wtk);
@@ -211,22 +208,17 @@ int write_data(struct file_desc * file_desc, void * buffer_addr)
 	if(write_header_size > room_till_end) {			//needs to be 2 copy
 		remaining = write_header_size-room_till_end;
 
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_%d_data]: dma_transfer 1 ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
-							file_desc->minor, buffer_addr, wth, axi_dest, room_till_end);
+		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: dma_transfer 1 ring_buff address: 0x%p + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
+							buffer_addr, wth, axi_dest, room_till_end);
 
 		if(dma_transfer(file_desc, axi_dest, buffer_addr, room_till_end, KEYHOLE_WRITE, wth) ) { //unsuccessful CDMA transmission
 			verbose_printk(KERN_INFO"[write_data]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 		}
 		//extra verbose debug message
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: first 4 bytes 0x%08x\n", *((u32*)(buffer_addr+wth)));
-
-
-
-		//extra verbose debug message
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: first 4 bytes 0x%08x\n", *((u32*)(buffer_addr+wth)));
 		wth = 0;
 
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: dma_transfer 2 ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
+		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: dma_transfer 2 ring_buff address: 0x%p + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
 							buffer_addr, wth, axi_dest, remaining);
 		if(dma_transfer(file_desc, axi_dest, buffer_addr, remaining, KEYHOLE_WRITE, wth) ) { //unsuccessful CDMA transmission
 			verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: !!!!!!!!ERROR on CDMA READ!!!.\n");
@@ -234,7 +226,7 @@ int write_data(struct file_desc * file_desc, void * buffer_addr)
 		wth = get_new_ring_pointer(remaining, wth, (int)(file_desc->dma_size), dma_byte_width);
 
 	} else {														//only 1 copy
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: dma_transfer ring_buff address: 0x%llx + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
+		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: dma_transfer ring_buff address: 0x%p + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
 							buffer_addr, wth, axi_dest, write_header_size);
 		if(dma_transfer(file_desc, axi_dest, buffer_addr, write_header_size, KEYHOLE_WRITE, wth) ) { //unsuccessful CDMA transmission
 			verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: !!!!!!!!ERROR on CDMA READ!!!.\n");
@@ -244,33 +236,6 @@ int write_data(struct file_desc * file_desc, void * buffer_addr)
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: first 4 bytes 0x%08x\n", *((u32*)(buffer_addr+wth)));
 		wth = get_new_ring_pointer(write_header_size, wth, (int)(file_desc->dma_size), dma_byte_width);
 	}
-
-/*
-	// Make sure there is enough data in the fifo to transmit
-	do {
-
-		//check the tx vacancy
-		axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_TDFV; // the transmit FIFO vacancy
-		buf = 0x0;
-		if( direct_read(axi_dest, (void*)(&buf), 4, NORMAL_READ) ) {
-			verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: !!!!!!!!ERROR reading from AXI Streaming FIFO control interface\n");
-			return ERROR;
-		}
-
-		read_reg = (buf+4)*dma_byte_width;
-		data_in_fifo = 32768 - read_reg;
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: vacancy: (0x%x)(bytes)\n", (u32)read_reg);
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: data_in_fifo: (0x%x)(bytes)\n", (u32)data_in_fifo);
-
-		attempts--;
-
-	} while(data_in_fifo < d2w && attempts > 0);
-
-	if(data_in_fifo < d2w) {
-		printk(KERN_INFO"[write_data]: ERROR not enough data in the fifo to write!\n");
-		return 1;
-	}
-*/
 
 	/*write to ctl interface*/
 	axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_TLR;
@@ -519,7 +484,7 @@ size_t axi_stream_fifo_read_direct(struct file_desc * file_desc, size_t count, c
 	//only 1 cdma transfer
 	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: dma_transfer AXI Address: 0x%llx, ring_buff address: 0x%llx, len: 0x%zx\n", axi_dest, hw_base_addr , count);
 
-	if(dma_transfer(file_desc, axi_dest, hw_base_addr, count, KEYHOLE_READ, 0) ) { //unsuccessful CDMA transmission
+	if(dma_transfer(file_desc, axi_dest, (void *)hw_base_addr, count, KEYHOLE_READ, 0) ) { //unsuccessful CDMA transmission
 		printk(KERN_INFO"[axi_stream_fifo_read_direct]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 	}
 
@@ -693,8 +658,8 @@ int copy_from_ring_buffer(struct file_desc * file_desc, void* buf, size_t count,
 
 	d2r = data_in_buffer(rfh, rfu, full, file_desc->dma_size);
 
-	verbose_pci_read_printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: the amount of bytes being copied from the ring buffer: %zu\n", file_desc->minor, count);
-	verbose_pci_read_printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: the amount of data in the ring buffer: %zu\n", file_desc->minor, d2r);
+	verbose_pci_read_printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: the amount of bytes being copied from the ring buffer: 0x%zx\n", file_desc->minor, count);
+	verbose_pci_read_printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: the amount of data in the ring buffer: 0x%x\n", file_desc->minor, d2r);
 
 
 	//if there is data in the ring buffer
@@ -717,7 +682,7 @@ int copy_from_ring_buffer(struct file_desc * file_desc, void* buf, size_t count,
 		verbose_pci_read_printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: header: (0x%zx)\n" , file_desc->minor, read_header_size);
 
 		if(read_header_size > d2r) {
-			printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: !!!!!!!!ERROR read_header_size: 0x%zx is larger than data to read: 0x%llx\n" , file_desc->minor, read_header_size, d2r);
+			printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: !!!!!!!!ERROR read_header_size: 0x%zx is larger than data to read: 0x%x\n" , file_desc->minor, read_header_size, d2r);
 			count = 0;
 			bytes = 0;
 		} else if(read_header_size < count){
