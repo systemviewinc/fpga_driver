@@ -705,12 +705,6 @@ static int sv_plat_probe(struct platform_device *pdev)
 		}
 	}
 
-    printk(KERN_INFO"[test]: axi_intc_init 0x%08x\n", int_ctlr_address);
-	if(int_ctlr_address != 0xFFFFFFFF) {
-        axi_intc_init(svd_global, int_ctlr_address);
-		int_ctrl_set = 1;
-	}
-
 	/*ARM works a little differently for DMA than PCIe in that that translation
 	* is not handled by the core by writing to a register. For Zynq, the axi to DDR address
 	* mapping is 1-1 and should be written directly to the returned DMA handle */
@@ -722,6 +716,11 @@ static int sv_plat_probe(struct platform_device *pdev)
     }
     printk(KERN_INFO"[test]: post request IRQ \n");
 
+    printk(KERN_INFO"[test]: axi_intc_init 0x%08x\n", int_ctlr_address);
+	if(int_ctlr_address != 0xFFFFFFFF) {
+        axi_intc_init(svd_global, int_ctlr_address);
+		int_ctrl_set = 1;
+	}
 
     printk(KERN_INFO"[probe:%s]: Using IRQ#%d with 0x%p\n", plat_name, svd_global->irq_num, &platform_dev_struct);
 
