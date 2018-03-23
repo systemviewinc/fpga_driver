@@ -126,6 +126,7 @@ struct pci_dev * pci_dev_struct = NULL; /**<pci device struct */
 struct platform_device * platform_dev_struct = NULL; /**< Platform device struct (for zynq) */
 struct device *	dev_struct = NULL;
 
+char pci_driver_name[20]; //name of the device
 
 
 /*This is an array of interrupt structures to hold up to 8 peripherals*/
@@ -269,7 +270,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
 	int int_ctrl_set;
 	int rc = 0, i;
-    const char * pci_name = sv_pci_driver.name;
+    const char * pci_name = dev->driver->name;
 
 
 	verbose_printk(KERN_INFO"[probe:%s]: ******************************** PROBE PARAMETERS *****************************************\n", pci_name);
@@ -304,23 +305,21 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 
     if(NULL == pci_dev_struct){
 		printk(KERN_INFO"[probe:%s]: struct pci_dev_struct is NULL\n", pci_name);
-		goto disable_device;
+		goto error;
 	}
-
-
+    
     svd_global = alloc_sv_dev_instance(dma_system_size);
     if (!svd_global) {
         verbose_printk("%s: OOM.\n", __func__);
-        goto disable_device;
+        goto error;
     }
-
     printk(KERN_INFO"[probe:%s]: svd_global: %p\n", pci_name, svd_global);
 
     //bar struct to hold bar data
     svd_global->bars = kzalloc(sizeof(struct bar_info), GFP_KERNEL);
 	if (!svd_global->bars) {
 		pr_info("%s: OOM.\n", __func__);
-		goto disable_device;
+		goto error;
 	}
     svd_global->bars->num_bars = 0;
 
@@ -329,7 +328,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
         lro_global = alloc_dev_instance(pci_dev_struct);
         if (!lro_global) {
             verbose_printk("%s: OOM.\n", __func__);
-            goto disable_device;
+            goto error;
         }
         printk(KERN_INFO"[probe:%s]: lro_global: %p\n", pci_name, lro_global);
     }
@@ -338,8 +337,6 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
     svd_global->thread_struct_read = create_thread_read(svd_global);
     /*Create Write Thread*/
     svd_global->thread_struct_write = create_thread_write(svd_global);
-
-
 	for( i = 0; i < pcie_bar_num; i++) {
 		svd_global->bars->pci_bar_addr[i] = pcie_bar_address[i];
 	}
@@ -351,7 +348,6 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	}
 
 	//map bars
-	//TODO GET BAR INFO TO OUR DRIVER
     if(pcie_use_xdma) {
     	rc = sv_xdma_map_bars(lro_global, svd_global->bars, pci_dev_struct);
     	if (rc)
@@ -391,13 +387,16 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 			verbose_printk(KERN_INFO"[probe:%s]: MSI capable XDMA\n", pci_name);
 			//fix bar mapping?
 
-			verbose_printk("pci_enable_msi()\n");
+			verbose_printk("[probe:%s]: pci_enable_msi()\n", pci_name);
 			rc = pci_enable_msi(pci_dev_struct);
-			if (rc < 0)
-				verbose_printk("Couldn't enable MSI mode: rc = %d\n", rc);
+			if (rc < 0) {
+                verbose_printk("[probe:%s]: ERROR Couldn't enable MSI mode: rc = %d\n", pci_name, rc);
+                goto disable_device;
+
+            }
 			lro_global->msi_enabled = 1;
 
-			verbose_printk("probe_engines()\n");
+			verbose_printk("[probe:%s]: probe_engines()\n", pci_name);
 
 			rc = probe_engines(lro_global);
 			if (rc) {
@@ -405,13 +404,12 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 				goto disable_device;
 			}
 
-			verbose_printk("create_interfaces()\n");
+			verbose_printk("[probe:%s]: create_interfaces()\n", pci_name);
 			rc = create_interfaces(lro_global);
 			if (rc) {
 				verbose_printk(KERN_INFO"[probe:%s]: ERROR create_interfaces\n", pci_name);
 				goto disable_device;
 			}
-
             if(0 > request_irq(pci_dev_struct->irq, &pci_isr, IRQF_TRIGGER_HIGH | IRQF_SHARED, pci_name, pci_dev_struct)){
     			printk(KERN_INFO"%s:[probe]request IRQ error\n", pci_name);
     			goto disable_device;
@@ -441,7 +439,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		// take over the user interrupts, the rest will be
 		// handles by xdma engine if enabled
 
-		if(0 > request_irq(pci_dev_struct->irq, &pci_isr, IRQF_TRIGGER_HIGH | IRQF_SHARED, pci_name, pci_dev_struct)){
+        if(0 > request_irq(pci_dev_struct->irq, &pci_isr, IRQF_TRIGGER_HIGH | IRQF_SHARED, pci_name, pci_dev_struct)){
 			printk(KERN_INFO"%s:[probe]request IRQ error\n", pci_name);
 			goto disable_device;
 		}
@@ -456,9 +454,10 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	verbose_printk(KERN_INFO"[probe:%s]: pci enabled msi interrupt\n", pci_name);
 
 	//register the char device
-	if(0 > register_chrdev(major, pci_name, &pci_fops)){
+    rc = register_chrdev(major, pci_name, &pci_fops);
+	if(0 > rc){
 		//	dynamic_major = register_chrdev(0, pci_name, &pci_fops);
-		printk(KERN_INFO"[probe:%s]: char driver not registered\n", pci_name);
+		printk(KERN_INFO"[probe:%s]: char driver not registered rc: 0x%x\n", pci_name, rc);
 		printk(KERN_INFO"[probe:%s]: char driver major number: 0x%x\n", pci_name, major);
 		goto rmv_cdev;
 	}
@@ -532,23 +531,29 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	return 0;
 
 	free_alloc:
+        printk(KERN_INFO"[probe:%s]: Cleanup: free dma\n", pci_name);
         dma_free_coherent(dev_struct, (size_t)svd_global->dma_buffer_size, svd_global->dma_buffer_base, svd_global->dma_addr_base);
 
     rmv_cdev:
+        printk(KERN_INFO"[probe:%s]: Cleanup: unregister char driver\n", pci_name);
         unregister_chrdev(major, pci_name);
 
     disable_device:
+        printk(KERN_INFO"[probe:%s]: Cleanup: disable device \n", pci_name);
         pci_disable_device(dev);
 
 	unmap_bar:
+        printk(KERN_INFO"[probe:%s]: Cleanup: unmap bars \n", pci_name);
         if(pcie_use_xdma)
             sv_xdma_unmap_bars(lro_global, svd_global->bars, dev);
         else
             sv_unmap_bars(svd_global->bars, dev);
 
 	rel_region:
+        printk(KERN_INFO"[probe:%s]: Cleanup: release region \n", pci_name);
 		pci_release_regions(dev);
 
+    error:
 		printk("[probe:%s]: probe returning %d\n", pci_name, rc);
 		return -1;
 
@@ -664,8 +669,10 @@ static int sv_plat_probe(struct platform_device *pdev)
 	printk(KERN_INFO"[probe:%s]: IRQ number is:%d\n", plat_name, svd_global->irq_num);
 
 	//register the char device
-	if(0 > register_chrdev(major, "sv_driver", &pci_fops)){
-		printk(KERN_INFO"[probe:%s]: char driver not registered\n", plat_name);
+    rc = register_chrdev(major, "sv_driver", &pci_fops);
+
+	if(0 > rc){
+		printk(KERN_INFO"[probe:%s]: char driver not registered, 0x%x\n", plat_name, rc);
         goto error;
 	}
 
@@ -752,7 +759,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 static void sv_pci_remove(struct pci_dev *dev)
 {
-    const char * pci_name = sv_pci_driver.name;
+    const char * pci_name = dev->driver->name;
 	int i;
 	// clean up any allocated resources and stuff here.
 	printk(KERN_INFO"%s[sv_pci_remove]: PCIE remove\n", pci_name);
@@ -888,9 +895,8 @@ static int sv_plat_remove(struct platform_device *pdev)
 static int __init sv_driver_init(void)
 {
 
-    char name[20]; //name of the device
 
-    sprintf(name, "vsi_driver_%03d", major);
+    sprintf(pci_driver_name, "vsi_driver_%03d", major);
 
 
 	memset(file_desc_arr, 0, sizeof(file_desc_arr));
@@ -901,11 +907,11 @@ static int __init sv_driver_init(void)
 		case AWS:
 			printk(KERN_INFO"[pci_init]: Device ID: ('0x%x')\n", device_id);
 			printk(KERN_INFO"[pci_init]: Major Number: ('%d')\n", major);
-            printk(KERN_INFO"[pci_init]: Name: ('%s')\n", name);
+            printk(KERN_INFO"[pci_init]: Name: ('%s')\n", pci_driver_name);
 
             ids[0].vendor = (u32)vendor_id;              //PCI_VENDOR_ID_XILINX;
 			ids[0].device = (u32)device_id;
-            sv_pci_driver.name = name;
+            sv_pci_driver.name = pci_driver_name;
 
 
 			return pci_register_driver(&sv_pci_driver);
@@ -967,13 +973,23 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
         if(svd_global->axi_intc_addr == 0) {
             printk(KERN_INFO"[pci_isr]: ERROR: returning early ISR (%x)\n", svd_global->axi_intc_addr);
             // controller not intialized yet
+            return IRQ_NONE;
         }
         else{
             verbose_isr_printk(KERN_INFO"[pci_isr]: Software Interrupt!\n");
             atomic_set(&svd_global->sw_interrupt_rx, 1);
             //recieved the sw interrupt test
+
+            /*Here we need to clear the service interrupt in the interrupt acknowledge register*/
+        	status = 0xFFFFFFFF;
+        	axi_dest = svd_global->axi_intc_addr + INT_CTRL_IAR;
+        	if( direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
+        		printk(KERN_INFO"[axi_intc_init]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
+        		return IRQ_NONE;
+        	}
+            return IRQ_HANDLED;
+
         }
-		return IRQ_NONE;
 	}
 	vec_serviced = 0;
 	/*Here we need to find out who triggered the interrupt*
@@ -1030,7 +1046,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
     			verbose_isr_printk(KERN_INFO"[pci_isr]: Stream FIFO ISR status: 0x%08x\n", status);
 
     			/*clear the axi fifo ISR*/
-    			status = status & 0x04000000;																																					//clear the status observed masked wtih RX complete
+    			status = status;																																					//clear the status observed masked wtih RX complete
     			if(direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
     				printk(KERN_INFO"[pci_isr]: !!!!!!!!ERROR direct_write\n");
     				return ERROR;

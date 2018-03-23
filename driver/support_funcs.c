@@ -89,7 +89,6 @@ int read_thread(void *in_param) {
 				verbose_read_thread_printk(KERN_INFO"[read_thread]: kfifo_out returned non-zero\n");
 				atomic_dec(file_desc->in_read_fifo_count);
 
-
 				//Check if there is any data to be read
 				if(file_desc->axi_fifo_rdfo > 0) {
 					d2r = file_desc->axi_fifo_rlr;
@@ -112,6 +111,8 @@ int read_thread(void *in_param) {
 					//if read_data needs back_pressure
 					if(read_incomplete == 1 || read_incomplete == ERROR) {
 						//write the file_desc back in if the fifo is not full and it isn't already in the fifo
+                        verbose_read_thread_printk(KERN_INFO"[read_thread]: read incomplete: %d\n", read_incomplete);
+
 						if(!kfifo_is_full(read_fifo)) {
 							atomic_inc(file_desc->in_read_fifo_count);
 							kfifo_in_spinlocked(read_fifo, &file_desc, 1, &file_desc->svd->fifo_lock_read);
@@ -121,17 +122,15 @@ int read_thread(void *in_param) {
 
 						//if we needed backpressure wait here for a read to take data out of the buffer so we have room -MM
 						verbose_read_thread_printk(KERN_INFO"[read_thread]: ring buffer is full waiting in wait_event_interruptible!!\n");
-										if( wait_event_interruptible(svd->thread_q_head_read, ( atomic_read(&file_desc->svd->thread_q_read) == 1 || kthread_should_stop() )) ){
+						wait_event_interruptible(svd->thread_q_head_read, ( atomic_read(&file_desc->svd->thread_q_read) == 1 || kthread_should_stop() ));
 
-										}
+
 						//waits until thread_q_read is true or we should stop the thread (previous methods of exitings weren't working -MM)
 						atomic_set(&svd->thread_q_read, 0);	// the threaded way
 
 						schedule();
-						//set d2r to zero to get out of while loop
-										//if(file_desc->mode == AXI_STREAM_PACKET){
-										d2r = 0;
-										//}
+						d2r = 0;
+
 					} else if(file_desc->file_open){
 						//read more data if the file is open
 						d2r = axi_stream_fifo_d2r(file_desc);
@@ -622,6 +621,15 @@ int dma_file_deinit(struct file_desc *file_desc, size_t dma_size) {
 	printk(KERN_INFO"[axi_intc_init]: Setting Interrupt Controller Axi Address to 0x%08x\n", axi_address);
 	svd->axi_intc_addr = axi_address;
 
+    /*Here we need to clear the service interrupt in the interrupt acknowledge register*/
+	status = 0xFFFFFFFF;
+	axi_dest = svd->axi_intc_addr + INT_CTRL_IAR;
+	if( direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
+		printk(KERN_INFO"[axi_intc_init]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
+		return;
+	}
+
+
 	/*Write to Interrupt Enable Register (IER)*/
 	/* Write to enable all possible interrupt inputs */
 	status = 0xFFFFFFFF;
@@ -668,14 +676,6 @@ int dma_file_deinit(struct file_desc *file_desc, size_t dma_size) {
 		return;
 	}
 	printk(KERN_INFO"[axi_intc_init]: wrote: ('0x%08x') from MER register\n", status);
-
-	/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
-	status = 0xFFFFFFFF;
-	axi_dest = svd->axi_intc_addr + INT_CTRL_IAR;
-	if( direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
-		printk(KERN_INFO"[axi_intc_init]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
-		return;
-	}
 
 	svd->interrupt_set = true;
 

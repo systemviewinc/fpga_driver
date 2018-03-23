@@ -202,25 +202,48 @@ extern uint pcie_use_xdma;
 extern struct xdma_dev *xdma_dev_s;
 
 #define XDMA_TIMEOUT_IN_MSEC				(3 * 1000)
-/******************************** Xilinx Register Offsets **********************************/
-#define AXI_STREAM_ISR	 	0x00	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
-#define AXI_STREAM_IER	 	0x04	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
-#define AXI_STREAM_TDFR		0x08	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
-#define AXI_STREAM_TDFV		0x0c	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
-#define AXI_STREAM_TDFD		0x00	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
-#define AXI_STREAM_TLR	 	0x14	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
-#define AXI_STREAM_RDFR		0x18	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
-#define AXI_STREAM_RDFO		0x1C	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
-#define AXI_STREAM_RDFD		0x1000 	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
-#define AXI_STREAM_RLR	 	0x24	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
-#define AXI_STREAM_SRR	 	0x28	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
-#define AXI_STREAM_TDR	 	0x2C	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
-#define AXI_STREAM_RDR	 	0x30	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
-#define AXI_STREAM_TXID		0x34	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
-#define AXI_STREAM_TXUSER 	0x38	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
-#define AXI_STREAM_RXID		0x3C	 /**< AXI Streaming FIFO Register Offset (See Xilinx Doc) */
+/******************************** Xilinx interrupt controller Register Offsets **********************************/
+#define AXI_STREAM_ISR  	0x00000000  /**< Interrupt Status */
+#define AXI_STREAM_IER  	0x00000004  /**< Interrupt Enable */
+#define AXI_STREAM_TDFR 	0x00000008  /**< Transmit Reset */
+#define AXI_STREAM_TDFV 	0x0000000c  /**< Transmit Vacancy */
+#define AXI_STREAM_TLR  	0x00000014  /**< Transmit Length */
+#define AXI_STREAM_RDFR 	0x00000018  /**< Receive Reset */
+#define AXI_STREAM_RDFO 	0x0000001c  /**< Receive Occupancy */
+#define AXI_STREAM_RLR  	0x00000024  /**< Receive Length */
+#define AXI_STREAM_SRR  	0x00000028  /**< Local Link Reset */
+#define AXI_STREAM_TDR  	0x0000002C  /**< Transmit Destination  */
+#define AXI_STREAM_RDR  	0x00000030  /**< Receive Destination  */
+#define AXI_STREAM_TXID  	0x00000034  /**< Transmit ID  */
+#define AXI_STREAM_TXUSER  	0x00000038  /**< Transmit User  */
+#define AXI_STREAM_RXID  	0x0000003C  /**< Receive ID  */
+#define AXI_STREAM_RXUSER  	0x00000040  /**< Receive User  */
 
-/******************************** Xilinx Register Offsets **********************************/
+#define AXI_STREAM_TDFD		0x00000000	 /**< Transmit Data */
+#define AXI_STREAM_RDFD		0x00001000 	 /**< Receive Data */
+
+
+ /******************************** Xilinx interrupt controller bits **********************************/
+#define AXI_INTR_RPURE_MASK       0x80000000 /**< Receive under-read */
+#define AXI_INTR_RPORE_MASK       0x40000000 /**< Receive over-read */
+#define AXI_INTR_RPUE_MASK        0x20000000 /**< Receive underrun (empty) */
+#define AXI_INTR_TPOE_MASK        0x10000000 /**< Transmit overrun */
+#define AXI_INTR_TC_MASK          0x08000000 /**< Transmit complete */
+#define AXI_INTR_RC_MASK          0x04000000 /**< Receive complete */
+#define AXI_INTR_TSE_MASK         0x02000000 /**< Transmit length mismatch */
+#define AXI_INTR_TRC_MASK         0x01000000 /**< Transmit reset complete */
+#define AXI_INTR_RRC_MASK         0x00800000 /**< Receive reset complete */
+#define AXI_INTR_TFPF_MASK        0x00400000 /**< Tx FIFO Programmable Full AXI FIFO MM2S Only */
+#define AXI_INTR_TFPE_MASK        0x00200000 /**< Tx FIFO Programmable Empty AXI FIFO MM2S Only */
+#define AXI_INTR_RFPF_MASK        0x00100000 /**< Rx FIFO Programmable Full AXI FIFO MM2S Only */
+#define AXI_INTR_RFPE_MASK        0x00080000 /**< Rx FIFO Programmable Empty AXI FIFO MM2S Only */
+
+/******************************** Xilinx interrupt reset bits **********************************/
+#define XLLF_RDFR_RESET_MASK        0x000000a5 /**< receive reset value */
+#define XLLF_TDFR_RESET_MASK        0x000000a5 /**< Transmit reset value */
+#define XLLF_LLR_RESET_MASK         0x000000a5 /**< Local Link reset value */
+
+/******************************** Xilinx CDMA Register Offsets **********************************/
 #define CDMA_CR			  	0x00	 /**< CDMA Register Offset (See Xilinx Doc) */
 #define CDMA_SR			 	0x04	 /**< CDMA Register Offset (See Xilinx Doc) */
 #define CDMA_CU_PTR		 	0x08	 /**< CDMA Register Offset (See Xilinx Doc) */

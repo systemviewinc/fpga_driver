@@ -252,7 +252,7 @@ int write_data(struct file_desc * file_desc, void * buffer_addr)
 		printk(KERN_INFO"[write_data]: !!!!!!!!ERROR reading AXI_STREAM_ISR register.\n");
 		return ERROR;
 	}
-	verbose_printk(KERN_INFO"[write_data]: AXI_STREAM_ISR register: ('0x%08x')\n", buf);
+	verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: AXI_STREAM_ISR register: ('0x%08x')\n", buf);
 
 	//update wth pointer
 	atomic_set(file_desc->wth, wth);
@@ -508,7 +508,7 @@ int axi_stream_fifo_init(struct file_desc * file_desc)
 
 	//reset The transmit side
 	axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_TDFR;
-	buf = 0x000000A5;
+	buf = XLLF_TDFR_RESET_MASK;
 	if( direct_write(axi_dest, (void*)(&buf), 4, NORMAL_WRITE) ) {
 		printk(KERN_INFO"[axi_stream_fifo_%x_init]: !!!!!!!!ERROR resetting TX fifo\n", file_desc->minor);
 		return ERROR;
@@ -517,7 +517,7 @@ int axi_stream_fifo_init(struct file_desc * file_desc)
 
 	//reset The receive side
 	axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_RDFR;
-	buf = 0x000000A5;
+	buf = XLLF_RDFR_RESET_MASK;
 	if( direct_write(axi_dest, (void*)(&buf), 4, NORMAL_WRITE) ) {
 		printk(KERN_INFO"[axi_stream_fifo_%x_init]: !!!!!!!!ERROR resetting RX fifo\n", file_desc->minor);
 		return ERROR;
@@ -532,11 +532,9 @@ int axi_stream_fifo_init(struct file_desc * file_desc)
 	}
 	verbose_printk(KERN_INFO"[axi_stream_fifo_%x_init]: AXI_STREAM_ISR register: ('0x%08x')\n", file_desc->minor, buf);
 
-	printk(KERN_INFO"[axi_stream_fifo_%x_init]: Checkpoint 2\n", file_desc->minor);
-
 	//reset interrupts on CTL interface
 	axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_ISR;
-	buf = 0xFFFFFFFF;
+	//buf = 0xFFFFFFFF;
 	if( direct_write(axi_dest, (void*)(&buf), 4, NORMAL_WRITE) ) {
 		printk(KERN_INFO"[axi_stream_fifo_%x_init]: !!!!!!!!ERROR resetting AXI_STREAM_ISR register.\n", file_desc->minor);
 		return ERROR;
@@ -557,12 +555,23 @@ int axi_stream_fifo_init(struct file_desc * file_desc)
 		verbose_printk(KERN_INFO"[axi_stream_fifo_%x_init]: Setting AXI_STREAM_IER register for AXI_STREAM_PACKET.\n", file_desc->minor);
 		//Set IER Register for interrupt on read -MM
 		axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_IER;
-		buf = 0x04000000;							//bit 26 RX Complete
+		buf = AXI_INTR_RC_MASK;
 		if( direct_write(axi_dest, (void*)(&buf), 4, NORMAL_WRITE) ) {
 			printk(KERN_INFO"[axi_stream_fifo_%x_init]: !!!!!!!!ERROR setting AXI_STREAM_IER register.\n", file_desc->minor);
 			return ERROR;
 		}
 	}
+    //enable interupt from axi_stream_fifo if we are using the axi_stream_packet
+    else {
+        verbose_printk(KERN_INFO"[axi_stream_fifo_%x_init]: Setting AXI_STREAM_IER register for AXI_STREAM.\n", file_desc->minor);
+        //Set IER Register for interrupt on read -MM
+        axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_IER;
+        buf = AXI_INTR_RFPF_MASK;
+        if( direct_write(axi_dest, (void*)(&buf), 4, NORMAL_WRITE) ) {
+            printk(KERN_INFO"[axi_stream_fifo_%x_init]: !!!!!!!!ERROR setting AXI_STREAM_IER register.\n", file_desc->minor);
+            return ERROR;
+        }
+    }
 
 	buf = 0x0;
 
@@ -608,32 +617,29 @@ int axi_stream_fifo_deinit(struct file_desc * file_desc)
 	u64 axi_dest;
 	u32 buf;
 
-	//reset The transmit side
-	axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_TDFR;
-	buf = 0x000000A5;
-	if( direct_write(axi_dest, (void*)(&buf), 4, NORMAL_WRITE) ) {
-		printk(KERN_INFO"[axi_stream_fifo_%x_deinit]: !!!!!!!!ERROR resetting TX fifo\n", file_desc->minor);
+    //debugging
+
+    //READ ISR
+	axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_ISR;
+	if( direct_read(axi_dest, (void*)(&buf), 4, NORMAL_WRITE) ) {
+		printk(KERN_INFO"[axi_stream_fifo_%x_deinit]: !!!!!!!!ERROR setting AXI_STREAM_ISR register.\n", file_desc->minor);
 		return ERROR;
 	}
-	verbose_printk(KERN_INFO"[axi_stream_fifo_%x_deinit]: Reset the the axi fifo\n", file_desc->minor);
+	printk(KERN_INFO"[axi_stream_fifo_%x_deinit]: ISR 0x%08x\n", file_desc->minor, buf);
 
-	//reset The receive side
-	axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_RDFR;
-	buf = 0x000000A5;
-	if( direct_write(axi_dest, (void*)(&buf), 4, NORMAL_WRITE) ) {
-		printk(KERN_INFO"[axi_stream_fifo_%x_deinit]: !!!!!!!!ERROR resetting RX fifo\n", file_desc->minor);
-		return ERROR;
-	}
-	verbose_printk(KERN_INFO"[axi_stream_fifo_%x_deinit]: Reset the the axi fifo\n", file_desc->minor);
 
-	//Set IER Register for no interupts on read -MM
+    //end debugging
+
+
+
+
+	//Set IER Register for no interrupts
 	axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_IER;
 	buf = 0x00000000;
 	if( direct_write(axi_dest, (void*)(&buf), 4, NORMAL_WRITE) ) {
 		printk(KERN_INFO"[axi_stream_fifo_%x_deinit]: !!!!!!!!ERROR setting AXI_STREAM_IER register.\n", file_desc->minor);
 		return ERROR;
 	}
-
 	printk(KERN_INFO"[axi_stream_fifo_%x_deinit]: Fifo interupt disabled\n", file_desc->minor);
 
 	return 0;
