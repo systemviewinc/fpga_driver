@@ -307,7 +307,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		printk(KERN_INFO"[probe:%s]: struct pci_dev_struct is NULL\n", pci_name);
 		goto error;
 	}
-    
+
     svd_global = alloc_sv_dev_instance(dma_system_size);
     if (!svd_global) {
         verbose_printk("%s: OOM.\n", __func__);
@@ -1668,13 +1668,6 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 							return ERROR;
 						}
 
-                        //testing setting first to be no incr address mode
-                        // if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[0][0]->engine, 1) ) {
-                        //     return ERROR;
-                        // }
-                        // if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[0][1]->engine, 1) ) {
-                        //     return ERROR;
-                        // }
 					}
 					break;
 

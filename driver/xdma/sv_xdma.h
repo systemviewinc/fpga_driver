@@ -34,7 +34,7 @@ int sv_xdma_map_single_bar(struct xdma_dev *lro, struct bar_info *bars, struct p
 int sv_xdma_map_bars(struct xdma_dev *lro, struct bar_info *bars, struct pci_dev *dev);
 void sv_xdma_unmap_bars(struct xdma_dev *lro, struct bar_info *bars, struct pci_dev *dev);
 ssize_t sv_char_sgdma_read_write(struct file_desc * file_desc, struct xdma_char * lro_char, char __user *buf, size_t count, loff_t *pos, int dir_to_dev);
-int sv_do_addrmode_set(struct xdma_engine *engine, unsigned long dst);
+int sv_do_addrmode_set(struct xdma_engine *engine, unsigned long non_incr_mode);
 
 // ******************************************************************
 

@@ -44,26 +44,26 @@
 //#define BACK_PRESSURE 1
 #define RING_BUFF_SIZE_MULTIPLIER 2
 /********* printk statements *********/
-#define verbose_printk printk
-#define verbose_data_xfer_printk printk
-#define verbose_cdma_printk printk
-#define verbose_dma_printk printk
-#define verbose_cdmaq_printk printk
-#define verbose_dmaq_printk printk
-#define verbose_axi_fifo_read_printk printk
-#define verbose_axi_fifo_write_printk printk
-#define verbose_isr_printk printk
+//#define verbose_printk printk
+//#define verbose_data_xfer_printk printk
+//#define verbose_cdma_printk printk
+//#define verbose_dma_printk printk
+//#define verbose_cdmaq_printk printk
+//#define verbose_dmaq_printk printk
+//#define verbose_axi_fifo_read_printk printk
+//#define verbose_axi_fifo_write_printk printk
+//#define verbose_isr_printk printk
 //#define verbose_poll_printk printk
 //#define very_verbose_poll_printk printk
-#define verbose_axi_fifo_d2r_printk printk
+//#define verbose_axi_fifo_d2r_printk printk
 //#define verbose_direct_write_printk printk
 //#define verbose_direct_read_printk printk
 //#define verbose_llseek_printk printk
-#define verbose_pci_read_printk printk
-#define verbose_pci_write_printk printk
-#define verbose_mmap_printk printk
-#define verbose_read_thread_printk printk
-#define verbose_write_thread_printk printk
+//#define verbose_pci_read_printk printk
+//#define verbose_pci_write_printk printk
+//#define verbose_mmap_printk printk
+//#define verbose_read_thread_printk printk
+//#define verbose_write_thread_printk printk
 #define pr_bar 1
 
 #ifndef verbose_llseek_printk
@@ -237,6 +237,16 @@ extern struct xdma_dev *xdma_dev_s;
 #define AXI_INTR_TFPE_MASK        0x00200000 /**< Tx FIFO Programmable Empty AXI FIFO MM2S Only */
 #define AXI_INTR_RFPF_MASK        0x00100000 /**< Rx FIFO Programmable Full AXI FIFO MM2S Only */
 #define AXI_INTR_RFPE_MASK        0x00080000 /**< Rx FIFO Programmable Empty AXI FIFO MM2S Only */
+
+/******************************** Xilinx CDMA status bits **********************************/
+#define XAXICDMA_SR_IDLE_MASK         0x00000002  /**< DMA channel idle */
+#define XAXICDMA_SR_SGINCLD_MASK      0x00000008  /**< Hybrid build */
+#define XAXICDMA_SR_ERR_INTERNAL_MASK 0x00000010  /**< Datamover internal err */
+#define XAXICDMA_SR_ERR_SLAVE_MASK    0x00000020  /**< Datamover slave err */
+#define XAXICDMA_SR_ERR_DECODE_MASK   0x00000040  /**< Datamover decode err */
+#define XAXICDMA_SR_ERR_SG_INT_MASK   0x00000100  /**< SG internal err */
+#define XAXICDMA_SR_ERR_SG_SLV_MASK   0x00000200  /**< SG slave err */
+#define XAXICDMA_SR_ERR_SG_DEC_MASK   0x00000400  /**< SG decode err */
 
 /******************************** Xilinx interrupt reset bits **********************************/
 #define XLLF_RDFR_RESET_MASK        0x000000a5 /**< receive reset value */
@@ -428,6 +438,9 @@ struct file_desc {
 
 	spinlock_t * ring_pointer_write; /**< Spinlock variable to lock code section for updating ring pointer variables */
 	spinlock_t * ring_pointer_read;	/**< Spinlock variable to lock code section for updating ring pointer variables */
+
+	atomic_t file_wait_q_write; /**< The Wait variable for the WRITE Thread */
+	atomic_t file_wait_q_read; /**< The Wait variable for the READ Thread */
 
 	atomic_t * pci_write_q;	 /**< Used as a wait variable to wake up a sleeping pci_write function */
 	spinlock_t * in_fifo_read;		/**< Spinlock variable to proect code for writing in_fifo flag*/

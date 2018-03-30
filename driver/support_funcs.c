@@ -113,22 +113,16 @@ int read_thread(void *in_param) {
 						//write the file_desc back in if the fifo is not full and it isn't already in the fifo
                         verbose_read_thread_printk(KERN_INFO"[read_thread]: read incomplete: %d\n", read_incomplete);
 
-						if(!kfifo_is_full(read_fifo)) {
+						if(!kfifo_is_full(read_fifo) && file_desc->file_open) {
 							atomic_inc(file_desc->in_read_fifo_count);
 							kfifo_in_spinlocked(read_fifo, &file_desc, 1, &file_desc->svd->fifo_lock_read);
 						} else {
 							printk(KERN_INFO"[read_thread]: kfifo is full, not writing mod desc\n");
 						}
 
-						//if we needed backpressure wait here for a read to take data out of the buffer so we have room -MM
-						verbose_read_thread_printk(KERN_INFO"[read_thread]: ring buffer is full waiting in wait_event_interruptible!!\n");
-						wait_event_interruptible(svd->thread_q_head_read, ( atomic_read(&file_desc->svd->thread_q_read) == 1 || kthread_should_stop() ));
+                        wait_event_interruptible_timeout(svd->thread_q_head_read, atomic_read(&svd->thread_q_read) == 1 || kthread_should_stop(), msecs_to_jiffies(1000) );
 
 
-						//waits until thread_q_read is true or we should stop the thread (previous methods of exitings weren't working -MM)
-						atomic_set(&svd->thread_q_read, 0);	// the threaded way
-
-						schedule();
 						d2r = 0;
 
 					} else if(file_desc->file_open){
@@ -174,9 +168,7 @@ int write_thread(void *in_param) {
 	while(!kthread_should_stop()){
 		verbose_write_thread_printk(KERN_INFO"[write_thread]: waiting in wait_event_interruptible, write buffer empty!!\n");
 
-		if( wait_event_interruptible(svd->thread_q_head_write, ( atomic_read(&svd->thread_q_write) == 1 || kthread_should_stop() )) ) {
-
-		}
+		wait_event_interruptible(svd->thread_q_head_write, ( atomic_read(&svd->thread_q_write) == 1 || kthread_should_stop() ));
 		atomic_set(&svd->thread_q_write, 0); // the threaded way
 		verbose_write_thread_printk(KERN_INFO"[write_thread]: woke up the write thread!!\n");
 
@@ -201,37 +193,30 @@ int write_thread(void *in_param) {
 				verbose_write_thread_printk(KERN_INFO"[write_thread]: file_desc minor: %d d2w: %d\n", file_desc->minor, d2w);
 				while(d2w != 0 && !kthread_should_stop()) {
 
-					if(pcie_use_xdma == 1){
+					if(pcie_use_xdma == 1) {
 						buffer = file_desc->write_buffer;
 					}
-					else{
+					else {
 						buffer = file_desc->dma_write_addr;
 					}
 
 					write_incomplete = write_data(file_desc, buffer);
 					//if read_data needs back_pressure
-					if((write_incomplete == 1 || write_incomplete == ERROR) && file_desc->file_open) {
+					if((write_incomplete == 1 || write_incomplete == ERROR)) {
+                        verbose_write_thread_printk(KERN_INFO"[write_thread]: write incomplete: %d\n", write_incomplete);
+
 						//write the file_desc back in if the fifo is not full and it isn't already in the fifo
-						if(!kfifo_is_full(write_fifo)) {
+						if(!kfifo_is_full(write_fifo) && file_desc->file_open) {
 							atomic_inc(file_desc->in_write_fifo_count);
 							kfifo_in_spinlocked(write_fifo, &file_desc, 1, &svd->fifo_lock_write);
 						}
 						else {
 							printk(KERN_INFO"[write_thread]: kfifo is full, not writing mod desc\n");
 						}
+                        d2w = 0;
+                        wait_event_interruptible_timeout(svd->thread_q_head_write, atomic_read(&svd->thread_q_write) == 1 || kthread_should_stop(), msecs_to_jiffies(1000) );
 
-						//if we needed backpressure wait here for a write to take data out of the buffer so we have room -MM
-						verbose_write_thread_printk(KERN_INFO"[write_thread]: waiting in wait_event_interruptible write buffer full!!\n");
-						wait_event_interruptible_timeout(svd->thread_q_head_write,
-										 ( atomic_read(&svd->thread_q_write) == 1 || kthread_should_stop() ),
-										 msecs_to_jiffies(1));
 
-						//waits until thread_q_write is true or we should stop the thread (previous methods of exitings weren't working -MM)
-						atomic_set(&file_desc->svd->thread_q_write, 0);	// the threaded way
-
-						schedule();
-						//set d2w to zero to get out of while loop
-						d2w = 0;
 					} else if(file_desc->file_open) {
 						//if write was complete and file is open write more data!
 						//Check if there is any data to be written
@@ -360,14 +345,35 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 				xdma_channel = xdma_query(DMA_TO_DEVICE);
 				if(xdma_channel == -1) schedule();
 			}
-            verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: xdma xfer write address 0x%p offset 0x%x\n",  buf+dma_offset, (u32)pos);
+            //
+            // //if keyhole read/write set address mode to non_incr_mode
+            // if(transfer_type == KEYHOLE_WRITE) || (transfer_type == KEYHOLE_READ) {
+            //     if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0]->engine, 1) ) {
+            //         printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma failed to set address mode\n");
+            //         return ERROR;
+            //     }
+            //
+            //     if(l_btt < (int)file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0]->engine->len_granularity){
+            //         verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: setting BTT to len_granularity\n");
+            //         l_btt = (int)file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0]->engine->len_granularity;
+            //
+            //     }
+            //
+            // }
+            // //else set it to normal (incrementing) mode
+            // else {
+            //     if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0]->engine, 0) ) {
+            //         printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma failed to se address mode\n");
+            //         return ERROR;
+            //     }
+            // }
 
-			rc = sv_char_sgdma_read_write(file_desc, file_desc->xdma_dev->sgdma_char_dev[0][0], buf+dma_offset, l_btt, &pos, 1);
+            verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: xdma xfer write address 0x%p offset 0x%x\n",  buf+dma_offset, (u32)pos);
+			rc = sv_char_sgdma_read_write(file_desc, file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0], buf+dma_offset, l_btt, &pos, 1);
 
 			if(rc == l_btt) {	//successfully transfered all bytes
 				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: unlock h2c %i\n", xdma_channel);
 				mutex_unlock(&xdma_h2c_sem[xdma_channel]);
-
 				return 0;
 			}
 			//else we did not transfer the l_btt amount of data
@@ -383,8 +389,18 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 				if(xdma_channel == -1) schedule();
 			}
 
+            // if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[xdma_channel][1]->engine, 1) ) {
+            //     printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma failed to se address mode\n");
+            //     return ERROR;
+            // }
+            //
             verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: xdma xfer read address 0x%p offset 0x%x\n",  buf+dma_offset, (u32)pos);
-			rc = sv_char_sgdma_read_write(file_desc, file_desc->xdma_dev->sgdma_char_dev[0][1], buf+dma_offset, l_btt, &pos, 0);
+			rc = sv_char_sgdma_read_write(file_desc, file_desc->xdma_dev->sgdma_char_dev[xdma_channel][1], buf+dma_offset, l_btt, &pos, 0);
+            //
+            // if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[xdma_channel][1]->engine, 0) ) {
+            //     printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma failed to se address mode\n");
+            //     return ERROR;
+            // }
 
 			if(rc == l_btt) {	//successfully transfered all bytes
 				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: unlock c2h %i\n", xdma_channel);

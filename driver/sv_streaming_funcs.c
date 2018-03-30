@@ -160,7 +160,7 @@ int write_data(struct file_desc * file_desc, void * buffer_addr)
 		d2w -= sizeof(write_header_size);
 
 	} else {
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: no data to read\n");
+		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: no data to write\n");
 		return 1;
 	}
 
@@ -179,7 +179,7 @@ int write_data(struct file_desc * file_desc, void * buffer_addr)
 
 
 	if(write_header_size > d2w) {
-		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: header is bigger(%zd) than data to read(%d)! \n", write_header_size, d2w);
+		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: header is bigger(%zd) than data to write(%d)! \n", write_header_size, d2w);
 		return 1;
 	} else if(write_header_size > read_reg) {
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: header is bigger(%zd) than vacancy(%u)! \n", write_header_size, (u32)read_reg);

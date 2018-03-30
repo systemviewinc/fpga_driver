@@ -181,18 +181,17 @@ ssize_t sv_char_sgdma_read_write(struct file_desc * file_desc, struct xdma_char 
 }
 
 
-int sv_do_addrmode_set(struct xdma_engine *engine, unsigned long dst)
+int sv_do_addrmode_set(struct xdma_engine *engine, unsigned long non_incr_mode)
 {
 	u32 w = XDMA_CTRL_NON_INCR_ADDR;
 
 	dbg_perf("IOCTL_XDMA_ADDRMODE_SET\n");
 
-	engine->non_incr_addr = !!dst;
+	engine->non_incr_addr = non_incr_mode;
 	if (engine->non_incr_addr)
 		write_register(w, &engine->regs->control_w1s);
 	else
 		write_register(w, &engine->regs->control_w1c);
-
 
 	engine_alignments(engine);
 
