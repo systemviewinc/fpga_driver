@@ -1370,9 +1370,12 @@ int pci_release(struct inode *inode, struct file *filep)
 	kfree((const void*)file_desc->in_write_fifo_count);
 	kfree((const void*)file_desc->mmap_count);
 
-	//	kfree((const void*)filep->private_data);
+    verbose_printk(KERN_INFO"[pci_%x_release]: ************************************************************************\n", minor);
+    verbose_printk(KERN_INFO"[pci_%x_release]: *************************** File Close *********************************\n", minor);
+    verbose_printk(KERN_INFO"[pci_%x_release]: \t\tTotal Bytes read : %d\n", minor, file_desc->rx_bytes);
+    verbose_printk(KERN_INFO"[pci_%x_release]: \t\tTotal Bytes wrote : %d\n", minor, file_desc->tx_bytes);
+    verbose_printk(KERN_INFO"[pci_%x_release]: ************************************************************************\n", minor);
 
-	verbose_printk(KERN_INFO"[pci_%x_release]: Successfully closed file.\n", file_desc->minor);
 	kfree((const void*)file_desc);
 
 	return SUCCESS;
