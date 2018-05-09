@@ -22,6 +22,12 @@
 #include <linux/uaccess.h>
 #include <linux/interrupt.h>
 #include <linux/sched.h>
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
+#include <linux/sched/task.h>
+#endif
+
+
 #include <linux/slab.h>
 #include <linux/msi.h>
 #include <linux/poll.h>
@@ -625,7 +631,11 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 			for (i = 0 ; i < req_nvec ; i++)
 				sv_msix_entry[i].entry = i;
 			// request all vectors
-			if(0 > pci_enable_msix(pci_dev_struct, sv_msix_entry, req_nvec)) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,0,0)
+			if(0 > pci_enable_msix_range(pci_dev_struct, sv_msix_entry, req_nvec, req_nvec)) {
+#else
+            if(0 > pci_enable_msix(pci_dev_struct, sv_msix_entry, req_nvec)) {
+#endif
 				printk(KERN_INFO"[probe:%s]: Enable MSI-X failed\n", pci_devName);
 				sv_pci_remove(dev);
 				return ERROR;
