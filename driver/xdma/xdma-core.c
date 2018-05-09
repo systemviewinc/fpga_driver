@@ -58,49 +58,49 @@ MODULE_PARM_DESC(load_firmware, "For UltraScale boards load xclbin firmware file
 
 struct class *g_xdma_class;	/* sys filesystem */
 
-const struct pci_device_id pci_ids[] = {
-	{ PCI_DEVICE(0x10ee, 0x9011), },
-	{ PCI_DEVICE(0x10ee, 0x9012), },
-	{ PCI_DEVICE(0x10ee, 0x9014), },
-	{ PCI_DEVICE(0x10ee, 0x9018), },
-	{ PCI_DEVICE(0x10ee, 0x901F), },
-	{ PCI_DEVICE(0x10ee, 0x9021), },
-	{ PCI_DEVICE(0x10ee, 0x9022), },
-	{ PCI_DEVICE(0x10ee, 0x9024), },
-	{ PCI_DEVICE(0x10ee, 0x9028), },
-	{ PCI_DEVICE(0x10ee, 0x902F), },
-	{ PCI_DEVICE(0x10ee, 0x9031), },
-	{ PCI_DEVICE(0x10ee, 0x9032), },
-	{ PCI_DEVICE(0x10ee, 0x9034), },
-	{ PCI_DEVICE(0x10ee, 0x9038), },
-	{ PCI_DEVICE(0x10ee, 0x903F), },
-	{ PCI_DEVICE(0x10ee, 0x8011), },
-	{ PCI_DEVICE(0x10ee, 0x8012), },
-	{ PCI_DEVICE(0x10ee, 0x8014), },
-	{ PCI_DEVICE(0x10ee, 0x8018), },
-	{ PCI_DEVICE(0x10ee, 0x8021), },
-	{ PCI_DEVICE(0x10ee, 0x8022), },
-	{ PCI_DEVICE(0x10ee, 0x8024), },
-	{ PCI_DEVICE(0x10ee, 0x8028), },
-	{ PCI_DEVICE(0x10ee, 0x8031), },
-	{ PCI_DEVICE(0x10ee, 0x8032), },
-	{ PCI_DEVICE(0x10ee, 0x8034), },
-	{ PCI_DEVICE(0x10ee, 0x8038), },
-	{ PCI_DEVICE(0x10ee, 0x7011), },
-	{ PCI_DEVICE(0x10ee, 0x7012), },
-	{ PCI_DEVICE(0x10ee, 0x7014), },
-	{ PCI_DEVICE(0x10ee, 0x7018), },
-	{ PCI_DEVICE(0x10ee, 0x7021), },
-	{ PCI_DEVICE(0x10ee, 0x7022), },
-	{ PCI_DEVICE(0x10ee, 0x7024), },
-	{ PCI_DEVICE(0x10ee, 0x7028), },
-	{ PCI_DEVICE(0x10ee, 0x7031), },
-	{ PCI_DEVICE(0x10ee, 0x7032), },
-	{ PCI_DEVICE(0x10ee, 0x7034), },
-	{ PCI_DEVICE(0x10ee, 0x7038), },
-	{0,}
-};
-MODULE_DEVICE_TABLE(pci, pci_ids);
+// const struct pci_device_id pci_ids[] = {
+// 	{ PCI_DEVICE(0x10ee, 0x9011), },
+// 	{ PCI_DEVICE(0x10ee, 0x9012), },
+// 	{ PCI_DEVICE(0x10ee, 0x9014), },
+// 	{ PCI_DEVICE(0x10ee, 0x9018), },
+// 	{ PCI_DEVICE(0x10ee, 0x901F), },
+// 	{ PCI_DEVICE(0x10ee, 0x9021), },
+// 	{ PCI_DEVICE(0x10ee, 0x9022), },
+// 	{ PCI_DEVICE(0x10ee, 0x9024), },
+// 	{ PCI_DEVICE(0x10ee, 0x9028), },
+// 	{ PCI_DEVICE(0x10ee, 0x902F), },
+// 	{ PCI_DEVICE(0x10ee, 0x9031), },
+// 	{ PCI_DEVICE(0x10ee, 0x9032), },
+// 	{ PCI_DEVICE(0x10ee, 0x9034), },
+// 	{ PCI_DEVICE(0x10ee, 0x9038), },
+// 	{ PCI_DEVICE(0x10ee, 0x903F), },
+// 	{ PCI_DEVICE(0x10ee, 0x8011), },
+// 	{ PCI_DEVICE(0x10ee, 0x8012), },
+// 	{ PCI_DEVICE(0x10ee, 0x8014), },
+// 	{ PCI_DEVICE(0x10ee, 0x8018), },
+// 	{ PCI_DEVICE(0x10ee, 0x8021), },
+// 	{ PCI_DEVICE(0x10ee, 0x8022), },
+// 	{ PCI_DEVICE(0x10ee, 0x8024), },
+// 	{ PCI_DEVICE(0x10ee, 0x8028), },
+// 	{ PCI_DEVICE(0x10ee, 0x8031), },
+// 	{ PCI_DEVICE(0x10ee, 0x8032), },
+// 	{ PCI_DEVICE(0x10ee, 0x8034), },
+// 	{ PCI_DEVICE(0x10ee, 0x8038), },
+// 	{ PCI_DEVICE(0x10ee, 0x7011), },
+// 	{ PCI_DEVICE(0x10ee, 0x7012), },
+// 	{ PCI_DEVICE(0x10ee, 0x7014), },
+// 	{ PCI_DEVICE(0x10ee, 0x7018), },
+// 	{ PCI_DEVICE(0x10ee, 0x7021), },
+// 	{ PCI_DEVICE(0x10ee, 0x7022), },
+// 	{ PCI_DEVICE(0x10ee, 0x7024), },
+// 	{ PCI_DEVICE(0x10ee, 0x7028), },
+// 	{ PCI_DEVICE(0x10ee, 0x7031), },
+// 	{ PCI_DEVICE(0x10ee, 0x7032), },
+// 	{ PCI_DEVICE(0x10ee, 0x7034), },
+// 	{ PCI_DEVICE(0x10ee, 0x7038), },
+// 	{0,}
+// };
+// MODULE_DEVICE_TABLE(pci, pci_ids);
 
 const char * const devnode_names[] = {
 	NODE_PREFIX "%d_user",
@@ -199,12 +199,12 @@ const struct file_operations events_fops = {
 	.poll = char_events_poll,
 };
 
-struct pci_driver pci_driver = {
-	.name = DRV_NAME,
-	.id_table = pci_ids,
-	.probe = probe,
-	.remove = remove,
-};
+// struct pci_driver pci_driver = {
+// 	.name = DRV_NAME,
+// 	.id_table = pci_ids,
+// 	.probe = probe,
+// 	.remove = remove,
+// };
 
 /* SECTION: Function definitions */
 

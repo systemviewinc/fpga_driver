@@ -84,7 +84,8 @@ int read_data(struct file_desc * file_desc, int read_size, void * buffer_addr)
 					}
 				}
 				else {
-					printk(KERN_INFO"[read_data]: No room in ring buffer to read data.\n");
+					printk(KERN_INFO"[read_data]: No room in ring buffer to read data, setting read ring buffer locked.\n");
+                    atomic_set(file_desc->read_ring_buf_locked, 1);
 					//break;
 					return ERROR;
 				}

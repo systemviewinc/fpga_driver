@@ -20,50 +20,29 @@
 #include "xdma/xdma-core.h"
 #include "xdma/sv_xdma.h"
 
-/*These are the CDMA R/W types */
-#ifndef KEYHOLE_WRITE
-#define KEYHOLE_WRITE 2
-#endif
-
-#ifndef NORMAL_WRITE
-#define NORMAL_WRITE 0
-#endif
-
-#ifndef KEYHOLE_READ
-#define KEYHOLE_READ 3
-#endif
-
-#ifndef NORMAL_READ
-#define NORMAL_READ 1
-#endif
-
-#ifndef CDMA
-#define CDMA 3
-#endif
-
 //#define BACK_PRESSURE 1
 #define RING_BUFF_SIZE_MULTIPLIER 2
 /********* printk statements *********/
-//#define verbose_printk printk
-//#define verbose_data_xfer_printk printk
-//#define verbose_cdma_printk printk
-//#define verbose_dma_printk printk
-//#define verbose_cdmaq_printk printk
-//#define verbose_dmaq_printk printk
-//#define verbose_axi_fifo_read_printk printk
-//#define verbose_axi_fifo_write_printk printk
-//#define verbose_isr_printk printk
-//#define verbose_poll_printk printk
-//#define very_verbose_poll_printk printk
-//#define verbose_axi_fifo_d2r_printk printk
-//#define verbose_direct_write_printk printk
-//#define verbose_direct_read_printk printk
-//#define verbose_llseek_printk printk
-//#define verbose_pci_read_printk printk
-//#define verbose_pci_write_printk printk
-//#define verbose_mmap_printk printk
-//#define verbose_read_thread_printk printk
-//#define verbose_write_thread_printk printk
+#define verbose_printk printk
+#define verbose_data_xfer_printk printk
+#define verbose_cdma_printk printk
+#define verbose_dma_printk printk
+// #define verbose_cdmaq_printk printk
+// #define verbose_dmaq_printk printk
+#define verbose_axi_fifo_read_printk printk
+#define verbose_axi_fifo_write_printk printk
+#define verbose_isr_printk printk
+// #define verbose_poll_printk printk
+// #define very_verbose_poll_printk printk
+#define verbose_axi_fifo_d2r_printk printk
+#define verbose_direct_write_printk printk
+#define verbose_direct_read_printk printk
+// #define verbose_llseek_printk printk
+#define verbose_pci_read_printk printk
+#define verbose_pci_write_printk printk
+#define verbose_mmap_printk printk
+#define verbose_read_thread_printk printk
+#define verbose_write_thread_printk printk
 #define pr_bar 1
 
 #ifndef verbose_llseek_printk
@@ -170,12 +149,11 @@
 #define AXI_STREAM_FIFO 1				/**< Mode Type : This is for axi streaming peripherals with no last singal */
 #define MASTER 2								/**< Mode Type : This is for AXI Master devices (currently not supported) */
 #define AXI_STREAM_PACKET 4 		/**< Mode Type : This is for axi streaming peripherals with a last signal */
-//#define CDMA 3
 
 //max number of CDMAs
-#define CDMA_MAX_NUM			5
-#define BAR_MAX_NUM			5
-#define PCIE_RESOURCES_MAX_NUM			6
+#define CDMA_MAX_NUM 5
+#define BAR_MAX_NUM 5
+#define PCIE_RESOURCES_MAX_NUM 6
 
 #define MAX_FILE_DESC 12
 
@@ -188,6 +166,12 @@
 #define PCI 1	 /**< Driver Type */
 #define PLATFORM 2 /**< Driver Type */
 #define AWS 5		/**< Driver Type */
+
+/*These are the CDMA R/W types */
+#define NORMAL_WRITE 0
+#define NORMAL_READ 1
+#define KEYHOLE_WRITE 2
+#define KEYHOLE_READ 3
 
 enum xfer_type {
 	HOST_READ = 1,
@@ -276,10 +260,11 @@ extern struct xdma_dev *xdma_dev_s;
 #define AXIBAR2PCIEBAR_1L = 0x214	 /**< AXI PCIe Subsystem Offset (See Xilinx Doc) */
 
 /******************************** Xilinx Register Offsets **********************************/
-#define INT_CTRL_IER		0x08 	/**< Interrupt Controller Register Offset, see Xilinx doc. */
-#define INT_CTRL_MER		0x1c	 /**< Interrupt Controller Register Offset, see Xilinx doc. */
 #define INT_CTRL_ISR		0x00	 /**< Interrupt Controller Register Offset, see Xilinx doc. */
+#define INT_CTRL_IPR		0x04	 /**< Interrupt Controller Register Offset, see Xilinx doc. */
+#define INT_CTRL_IER		0x08 	/**< Interrupt Controller Register Offset, see Xilinx doc. */
 #define INT_CTRL_IAR		0x0C	 /**< Interrupt Controller Register Offset, see Xilinx doc. */
+#define INT_CTRL_MER		0x1c	 /**< Interrupt Controller Register Offset, see Xilinx doc. */
 #define INT_CTRL_ILR		0x24	 /**< Interrupt Controller Register Offset, see Xilinx doc. */
 
 /********************************************************************************************/
@@ -419,6 +404,7 @@ struct file_desc {
 
 	int tx_bytes;				/**< This is the TX byte count for statistics generation */
 	int rx_bytes;				/**< This is the RX byte count for statistics generation */
+
 	struct timespec * start_time;	/**< This holds the start time for statistics generation */
 	struct timespec * stop_time;	 /**< This holds the stop time for statistics generation */
 	int start_flag;				 /**< This is used internally by the driver for starting the timer */
@@ -431,10 +417,14 @@ struct file_desc {
 	atomic_t * wth;				/**< Write to Hardware pointer for WRITE Ring Buffer */
 	atomic_t * wtk;				/**< Write to Kernel pointer for WRITE Ring Buffer */
 	atomic_t * write_ring_buf_full;	 /**< WRITE Ring Buffer is full and wth == wtk */
+	atomic_t * write_ring_buf_locked;	 /**< WRITE Ring Buffer is full and wth == wtk */
+
 
 	atomic_t * rfh;				/**< Read from Hardware pointer for READ Ring Buffer - HW DMAs data in read_data_thread*/
 	atomic_t * rfu;				/**< Read from User pointer for READ Ring Buffer - user copies data into pci_read */
 	atomic_t * read_ring_buf_full;	 /**< READ Ring Buffer is full, and rfu == rfh */
+	atomic_t * read_ring_buf_locked;	 /**< READ Ring Buffer is full, and rfu == rfh */
+
 
 	spinlock_t * ring_pointer_write; /**< Spinlock variable to lock code section for updating ring pointer variables */
 	spinlock_t * ring_pointer_read;	/**< Spinlock variable to lock code section for updating ring pointer variables */

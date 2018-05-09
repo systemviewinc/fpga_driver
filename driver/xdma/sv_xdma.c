@@ -58,7 +58,7 @@ int sv_xdma_map_bars(struct xdma_dev *lro, struct bar_info *bars, struct pci_dev
 		goto fail;
 	}
 
-	identify_bars(lro, bar_id_list, bar_id_idx, config_bar_pos);
+	sv_identify_bars(lro, bar_id_list, bar_id_idx, config_bar_pos);
 
 	/* successfully mapped all required BAR regions */
 	rc = 0;
@@ -196,4 +196,73 @@ int sv_do_addrmode_set(struct xdma_engine *engine, unsigned long non_incr_mode)
 	engine_alignments(engine);
 
 	return 0;
+}
+
+
+void sv_identify_bars(struct xdma_dev *lro, int *bar_id_list, int num_bars,
+	int config_bar_pos)
+{
+	/*
+	 * The following logic identifies which BARs contain what functionality
+	 * based on the position of the XDMA config BAR and the number of BARs
+	 * detected. The rules are that the user logic and bypass logic BARs
+	 * are optional.  When both are present, the XDMA config BAR will be the
+	 * 2nd BAR detected (config_bar_pos = 1), with the user logic being
+	 * detected first and the bypass being detected last. When one is
+	 * omitted, the type of BAR present can be identified by whether the
+	 * XDMA config BAR is detected first or last.  When both are omitted,
+	 * only the XDMA config BAR is present.  This somewhat convoluted
+	 * approach is used instead of relying on BAR numbers in order to work
+	 * correctly with both 32-bit and 64-bit BARs.
+	 */
+
+	BUG_ON(!lro);
+	BUG_ON(!bar_id_list);
+
+	switch (num_bars) {
+	case 1:
+		/* Only one BAR present - no extra work necessary */
+		break;
+
+	case 2:
+		if (config_bar_pos == 0) {
+			lro->bypass_bar_idx = bar_id_list[1];
+		} else if (config_bar_pos == 1) {
+			lro->user_bar_idx = bar_id_list[0];
+		} else {
+			dbg_init("case 2\n");
+			dbg_init("XDMA config BAR in unexpected position (%d)",
+				config_bar_pos);
+		}
+		break;
+
+	case 3:
+		if (config_bar_pos == 1) {
+			lro->user_bar_idx = bar_id_list[0];
+			lro->bypass_bar_idx = bar_id_list[2];
+		} else {
+			dbg_init("case 3\n");
+			dbg_init("XDMA config BAR in unexpected position (%d)",
+				config_bar_pos);
+		}
+		break;
+
+	case 4:
+		if (config_bar_pos == 2) {
+			lro->user_bar_idx = bar_id_list[0];
+			lro->bypass_bar_idx = bar_id_list[1];
+		} else {
+			dbg_init("case 4\n");
+			dbg_init("XDMA config BAR in unexpected position (%d)",
+				config_bar_pos);
+		}
+		break;
+
+	default:
+		/* Should not occur - warn user but safe to continue */
+		dbg_init("Unexpected number of BARs (%d)\n", num_bars);
+		dbg_init("Only XDMA config BAR accessible\n");
+		break;
+
+	}
 }

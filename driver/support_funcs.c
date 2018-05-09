@@ -121,7 +121,7 @@ int read_thread(void *in_param) {
 						}
 
                         wait_event_interruptible_timeout(svd->thread_q_head_read, atomic_read(&svd->thread_q_read) == 1 || kthread_should_stop(), msecs_to_jiffies(1000) );
-
+						schedule();
 
 						d2r = 0;
 
