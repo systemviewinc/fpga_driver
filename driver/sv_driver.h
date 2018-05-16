@@ -148,6 +148,7 @@
 #define SLAVE 0									/**< Mode Type : This is standard memory interface */
 #define AXI_STREAM_FIFO 1				/**< Mode Type : This is for axi streaming peripherals with no last singal */
 #define MASTER 2								/**< Mode Type : This is for AXI Master devices (currently not supported) */
+#define CONTROL 3 		/**< Mode Type : This is for axi streaming peripherals with a last signal */
 #define AXI_STREAM_PACKET 4 		/**< Mode Type : This is for axi streaming peripherals with a last signal */
 
 //max number of CDMAs
@@ -510,9 +511,6 @@ int cdma_transfer(struct file_desc * file_desc, u64 l_sa, u64 l_da, u32 l_btt, i
  * @param transfer_type determines R/W or R/W with keyhole.
  * @param dma_offset The DMA offset of memory region if DMA transfer is selected.
 */
-int data_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_t count, int transfer_type);
-
-
 int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_t count, int transfer_type, u64 dma_offset);
 
 /**

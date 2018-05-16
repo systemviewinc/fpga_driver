@@ -990,81 +990,6 @@ u32 num2vec(int num)
 	return vec;
 }
 
-/**
- * This function determines whether the axi peripheral can be read from/written to
- * directly or if it needs to use the DMAs. Once it decides it calls the apporpiate functions
- * to transfer data.
- * axi_address 64b AXI address to act on (HW ADDRESS)
- * buf the system memory address to act on if direct R/W is selected.
- * count The amount of data to R/W
- * transfer_type determines R/W or R/W with keyhole.
- * dma_offset The DMA offset of memory region if DMA transfer is selected.
- */
-int data_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_t count, int transfer_type)
-{
-	//	u32 test;
-	int in_range = 0;
-	int status = 0;
-	//u64 dma_axi_address = 0;
-	int i = 0;
-
-	switch (transfer_type) {
-		case KEYHOLE_WRITE:
-			verbose_data_xfer_printk(KERN_INFO"[data_transfer]: keyhole write to base address 0x%llx %zd\n", axi_address, count);
-			break;
-		case KEYHOLE_READ:
-			verbose_data_xfer_printk(KERN_INFO"[data_transfer]: keyhole read to base address 0x%llx %zd\n", axi_address, count);
-			break;
-		case NORMAL_WRITE:
-			verbose_data_xfer_printk(KERN_INFO"[data_transfer]: writing to base address 0x%llx %zd\n", axi_address, count);
-			break;
-		case NORMAL_READ:
-			verbose_data_xfer_printk(KERN_INFO"[data_transfer]: reading to base address 0x%llx %zd\n", axi_address, count);
-			break;
-		default:
-			verbose_data_xfer_printk(KERN_INFO"[data_transfer]: Unknown transfer type\n");
-	}
-
-	/* Also does a final check to make sure you are writing in range */
-	while (in_range == 0 && i < file_desc->svd->bars->num_bars){
-		if((axi_address + count) < file_desc->svd->bars->pci_bar_end[i] && (axi_address >= file_desc->svd->bars->pci_bar_addr[i])) {
-			verbose_data_xfer_printk(KERN_INFO"[data_transfer]: address 0x%llx in range of bar %d going direct\n", axi_address, i);
-			in_range = 1;
-		}
-		else{
-			verbose_data_xfer_printk(KERN_INFO"[data_transfer]: address 0x%llx is not in range of bar %d, rage: 0x%lx to 0x%lx \n", axi_address, i, file_desc->svd->bars->pci_bar_addr[i], file_desc->svd->bars->pci_bar_end[i]);
-		}
-		i++;
-	}
-
-	//if data is small or the cdma is not initialized and in range
-	if(in_range == 1) {
-		if((transfer_type == NORMAL_READ) | (transfer_type == KEYHOLE_READ)) {
-			if( direct_read(axi_address, buf, count, transfer_type) ) { //unsuccessful CDMA transmission
-					printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR on direct_read!!!.\n");
-				}
-		} else if((transfer_type == NORMAL_WRITE) | (transfer_type == KEYHOLE_WRITE)) {
-			if( direct_write(axi_address, buf, count, transfer_type) ) { //unsuccessful CDMA transmission
-					printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR on direct_write!!!.\n");
-				}
-		} else {
-			verbose_printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR no transfer type specified\n");
-		}
-
-
-	} else if(file_desc->svd->cdma_capable > 0 || pcie_use_xdma) {
-		verbose_data_xfer_printk(KERN_INFO"[data_transfer]: address 0x%llx using DMA \n", axi_address);
-		status = dma_transfer(file_desc, axi_address, buf, count, transfer_type, 0);
-		if(status != 0) { //unsuccessful CDMA transmission
-			printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR on CDMA READ!!!.\n");
-		}
-	} else {
-		verbose_printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR: Address 0x%llx out of range and CDMA is not initialized\n", axi_address);
-	}
-	return status;
-}
-
-
 /*
  *
  *
@@ -1087,7 +1012,7 @@ int direct_write(u64 axi_address, void *buf, size_t count, int transfer_type)
 	/*determine which BAR to write to*/
 	/* Also does a final check to make sure you are writing in range */
 	while (in_range == 0 && i < svd_global->bars->num_bars){
-		verbose_direct_write_printk(KERN_INFO"\t\t[direct_write]: pci bar %d addr is:0x%lx \n", i, svd_global->bars->pci_bar_vir_addr[i]);
+		verbose_direct_write_printk(KERN_INFO"\t\t[direct_write]: pci bar %d addr is:0x%p \n", i, svd_global->bars->pci_bar_vir_addr[i]);
 		verbose_direct_write_printk(KERN_INFO"\t\t[direct_write]: pci bar %d start is:0x%lx end is:%lx\n", i, svd_global->bars->pci_bar_addr[i], svd_global->bars->pci_bar_end[i]);
 
 		if((axi_address + count) < svd_global->bars->pci_bar_end[i] && (axi_address >= svd_global->bars->pci_bar_addr[i])) {
@@ -1144,6 +1069,10 @@ int direct_read(u64 axi_address, void *buf, size_t count, int transfer_type)
 	/*determine which BAR to read from*/
 	/* Also does a final check to make sure you are writing in range */
 	while (in_range == 0 && i < svd_global->bars->num_bars){
+        verbose_direct_read_printk(KERN_INFO"\t\t[direct_read]: pci bar %d addr is:0x%p \n", i, svd_global->bars->pci_bar_vir_addr[i]);
+		verbose_direct_read_printk(KERN_INFO"\t\t[direct_read]: pci bar %d start is:0x%lx end is:%lx\n", i, svd_global->bars->pci_bar_addr[i], svd_global->bars->pci_bar_end[i]);
+
+
 		if((axi_address + count) < svd_global->bars->pci_bar_end[i] && (axi_address >= svd_global->bars->pci_bar_addr[i])) {
 			verbose_direct_read_printk(KERN_INFO"\t\t[direct_read]: Entering Direct Read: address: 0x%llx count: ('0x%08x') \n", axi_address, (u32)count);
 			verbose_direct_read_printk(KERN_INFO"\t\t[direct_read]: Direct reading from BAR %d\n", i);

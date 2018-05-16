@@ -1287,19 +1287,13 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->xdma_dev = lro_global;
 
 
-
 	init_waitqueue_head(&s->poll_wq);
 	verbose_printk(KERN_INFO"[pci_%x_open]: minor number %x detected\n", s->minor, s->minor);
 
 	/*set the private data field of the file pointer for file op use*/
 	filep->private_data = s;
-
-
-
-
 	verbose_printk(KERN_INFO"[pci_%x_open]: file open complete.\n", s->minor);
 	return SUCCESS;
-
 }
 
 int pci_release(struct inode *inode, struct file *filep)
@@ -1316,11 +1310,7 @@ int pci_release(struct inode *inode, struct file *filep)
 
 	file_desc = filep->private_data;
 
-	/*Query private data to see if it allocated DMA as a Master*/
-	if(file_desc->mode == MASTER)	{
-		//unallocate DMA
-		// pci_free_consistent(pci_dev_struct, 131702, dma_master_buf[file_desc->master_num], dma_m_addr[file_desc->master_num]);
-	} else if(file_desc->mode == AXI_STREAM_FIFO || file_desc->mode == AXI_STREAM_PACKET)	{
+    if(file_desc->mode == AXI_STREAM_FIFO || file_desc->mode == AXI_STREAM_PACKET)	{
 		//turn off interupts from fifo
 		axi_stream_fifo_deinit(file_desc);
 	}
@@ -1670,6 +1660,11 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 					/*write master_count as master_num to file descriptor to use in referencing its memory address*/
 					file_desc->master_num = master_count;
 					break;
+                case CONTROL:
+					printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to CONTROL\n", minor);
+					/*write master_count as master_num to file descriptor to use in referencing its memory address*/
+					break;
+
 				case AXI_STREAM_PACKET :
 				case AXI_STREAM_FIFO :
 					printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to AXI_STREAM_FIFO\n", minor);
@@ -1824,6 +1819,10 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: \tAttempting to transfer %zu bytes : mode DIRECT \n", minor, count);
 			break;
 
+        case CONTROL :
+            verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: \tAttempting to transfer %zu bytes : mode CONTROL \n", minor, count);
+            break;
+
 		default :
 			verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: \tAttempting to transfer %zu bytes : mode UNKNOWN \n", minor, count);
 
@@ -1899,7 +1898,6 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 					}
 				}
 
-
 				//wake up write thread
 				atomic_set(&svd_global->thread_q_write, 1);
 				wake_up_interruptible(&file_desc->svd->thread_q_head_write);
@@ -1912,13 +1910,12 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			}
 			break;
 
+        case CONTROL:
 		case SLAVE:
 		case MASTER:						//should master be supported?
 
 			mmap_count = atomic_read(file_desc->mmap_count);
-
 			axi_dest = file_desc->axi_addr + *f_pos;
-
 			mmap_addr_offset = ((size_t)buf - file_desc->mmap_start_addr);		//(difference between vitrual write address and given buffer)
 
 			if(file_desc->keyhole_config & 0x1)
@@ -1942,14 +1939,22 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: dma buffer offset write value: %llx\n", minor, (u64)file_desc->dma_offset_write);
 				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: writing peripheral using a transfer_type: 0x%x, offset: %llx\n", minor, transfer_type, *f_pos);
 
-				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: data_transfer AXI Address(mmap): 0x%llx, buf: 0x%p, len: 0x%zx\n",
-							minor, axi_dest, buf, count);
-
-				//for mmap the data is really in the read buffer only, so use read_addr and offset_read for now
-				if(data_transfer(file_desc, axi_dest, buffer + mmap_addr_offset, count, transfer_type) ) {
-					printk(KERN_INFO"[pci_%x_write]: !!!!!!!!ERROR writing to User Peripheral\n", minor);
-					return ERROR;
-				}
+                if(file_desc->mode == CONTROL){
+                    verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: direct_write AXI Address(mmap): 0x%llx, buf: 0x%p + 0x%zx, len: 0x%zx\n", minor, axi_dest, buffer, mmap_addr_offset, count);
+    				//for mmap the data is really in the read buffer only, so use read_addr and offset_read for now
+                    if( direct_write(axi_dest, buffer + mmap_addr_offset, count, transfer_type) ) { //unsuccessful CDMA transmission
+    					printk(KERN_INFO"[pci_%x_write]: !!!!!!!!ERROR writing to User Peripheral\n", minor);
+    					return ERROR;
+    				}
+                }
+                else {
+    				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: dma_transfer AXI Address(mmap): 0x%llx, buf: 0x%p + 0x%zx, len: 0x%zx\n", minor, axi_dest, buffer, mmap_addr_offset, count);
+    				//for mmap the data is really in the read buffer only, so use read_addr and offset_read for now
+                    if( dma_transfer(file_desc, axi_dest, buffer + mmap_addr_offset, count, transfer_type, 0) ) {
+    					printk(KERN_INFO"[pci_%x_write]: !!!!!!!!ERROR writing to User Peripheral\n", minor);
+    					return ERROR;
+    				}
+                }
 
 				if(transfer_type == NORMAL_WRITE) {
 					//*f_pos = *f_pos + count;
@@ -1974,7 +1979,6 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				}
 
 				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: the amount of bytes being copied to kernel: %zu\n", minor, count);
-
 				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: copy_from_user (0x%p, 0x%p + 0x%zx, 0x%zx)\n" , minor, buffer, &buf, bytes_written, count);
 
 				if( copy_from_user(buffer, (buf + bytes_written), count) ) {
@@ -1986,13 +1990,20 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: dma buffer offset write value: %llx\n", minor, (u64)file_desc->dma_offset_write);
 				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: writing peripheral using a transfer_type: 0x%x, offset: %llx\n", minor, transfer_type, *f_pos);
 
-				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: data_transfer AXI Address: 0x%llx, buf: 0x%p, len: 0x%zx\n",
-							minor, axi_dest, buffer, count);
-
-				if(data_transfer(file_desc, axi_dest, buffer, count, transfer_type) ) {
-					printk(KERN_INFO"[pci_%x_write]: !!!!!!!!ERROR writing to User Peripheral\n", minor);
-					return ERROR;
-				}
+                if(file_desc->mode == CONTROL){
+                    verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: direct_write AXI Address: 0x%llx, buf: 0x%p, len: 0x%zx\n",	minor, axi_dest, buffer, count);
+                    if(direct_write(axi_dest, buffer, count, transfer_type)) {
+    					printk(KERN_INFO"[pci_%x_write]: !!!!!!!!ERROR writing to User Peripheral\n", minor);
+    					return ERROR;
+    				}
+                }
+                else {
+                    verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: dma_transfer AXI Address: 0x%llx, buf: 0x%p, len: 0x%zx\n",	minor, axi_dest, buffer, count);
+                    if(dma_transfer(file_desc, axi_dest, buffer, count, transfer_type, 0)) {
+    					printk(KERN_INFO"[pci_%x_write]: !!!!!!!!ERROR writing to User Peripheral\n", minor);
+    					return ERROR;
+    				}
+                }
 
 				if(transfer_type == NORMAL_WRITE) {
 					//*f_pos = *f_pos + count;
@@ -2083,6 +2094,10 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: \tAttempting to transfer %zu bytes : mode DIRECT \n", minor, count);
 			break;
 
+        case CONTROL :
+            verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: \tAttempting to transfer %zu bytes : mode CONTROL \n", minor, count);
+            break;
+
 		default :
 			verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: \tAttempting to transfer %zu bytes : mode UNKNOWN \n", minor, count);
 
@@ -2172,6 +2187,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
             bytes = count;
 			break;
 
+        case CONTROL:
 		case SLAVE:
 			// Here we will decide whether to do a zero copy DMA, or to read directly from the peripheral
 			axi_dest = file_desc->axi_addr + *f_pos;
@@ -2203,15 +2219,23 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
                 buffer = file_desc->dma_read_addr;         //use this buffer for MMAP
 
-
 				verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: reading peripheral using a transfer_type(mmap): 0x%x \n", minor, transfer_type);
 				verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: current file offset is: %llu \n", minor, *f_pos);
 
-				verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: data_transfer AXI Address(mmap): 0x%llx, buf: 0x%p, len: 0x%zx\n",	minor, axi_dest, buf, count);
-				if(data_transfer(file_desc, axi_dest, buffer + mmap_addr_offset, count, transfer_type) ) {
-					printk(KERN_INFO"[pci_%x_read]: !!!!!!!!ERROR reading data from User Peripheral\n", minor);
-					return ERROR;
-				}
+                if(file_desc->mode == CONTROL) {
+    				verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: direct_read AXI Address(mmap): 0x%llx, buf: 0x%p + 0x%zx, len: 0x%zx\n", minor, axi_dest, buffer, mmap_addr_offset, count);
+                    if( direct_read(axi_dest, buffer + mmap_addr_offset, count, transfer_type) ) {
+    					printk(KERN_INFO"[pci_%x_read]: !!!!!!!!ERROR reading data from User Peripheral\n", minor);
+    					return ERROR;
+    				}
+                }
+                else {
+    				verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: dma_transfer AXI Address(mmap): 0x%llx, buf: 0x%p + 0x%zx, len: 0x%zx\n", minor, axi_dest, buffer, mmap_addr_offset, count);
+                    if(dma_transfer(file_desc, axi_dest, buffer + mmap_addr_offset, count, transfer_type, 0)) {
+    					printk(KERN_INFO"[pci_%x_read]: !!!!!!!!ERROR reading data from User Peripheral\n", minor);
+    					return ERROR;
+    				}
+                }
 
 				verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: first 4 bytes 0x%08x\n", minor,*(unsigned int *)(buffer + mmap_addr_offset));
 			}
@@ -2221,12 +2245,22 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 				verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: reading peripheral using a transfer_type: 0x%x \n", minor, transfer_type);
 				verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: current file offset is: %llu\n", minor, *f_pos);
 
-				verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: data_transfer AXI Address: 0x%llx, buf: 0x%p + 0x%llx, len: 0x%zx\n",
-							minor, axi_dest, buffer, (u64)file_desc->dma_offset_read, count);
-				if(data_transfer(file_desc, axi_dest, buffer, count, transfer_type) ) {
-					printk(KERN_INFO"[pci_%x_read]: !!!!!!!!ERROR reading data from User Peripheral\n", minor);
-					return ERROR;
-				}
+                if(file_desc->mode == CONTROL) {
+                    verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: direct_read AXI Address: 0x%llx, buf: 0x%p + 0x%llx, len: 0x%zx\n", minor, axi_dest, buffer, (u64)file_desc->dma_offset_read, count);
+                    if( direct_read(axi_dest, buffer, count, transfer_type) ) {
+    					printk(KERN_INFO"[pci_%x_read]: !!!!!!!!ERROR reading data from User Peripheral\n", minor);
+    					return ERROR;
+    				}
+
+                }
+                else {
+                    verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: dma_transfer AXI Address: 0x%llx, buf: 0x%p + 0x%llx, len: 0x%zx\n", minor, axi_dest, buffer, (u64)file_desc->dma_offset_read, count);
+                    if(dma_transfer(file_desc, axi_dest, buffer, count, transfer_type, 0)) {
+    					printk(KERN_INFO"[pci_%x_read]: !!!!!!!!ERROR reading data from User Peripheral\n", minor);
+    					return ERROR;
+    				}
+                }
+
 
 				verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: first 4 bytes 0x%08x\n", minor,*(unsigned int *)buffer);
 				verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: copy_to_user (0x%p, 0x%p, 0x%zx)\n" , minor, &buf, buffer, count);
@@ -2324,6 +2358,10 @@ int pci_mmap(struct file *filep, struct vm_area_struct *vma) {
 		case SLAVE :
 			verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \tAttempting to mmap %zu bytes : mode DIRECT \n", minor, length);
 			break;
+
+        case CONTROL :
+            verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \tAttempting to mmap %zu bytes : mode CONTROL \n", minor, length);
+            break;
 
 		default :
 			verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \tAttempting to mmap %zu bytes : mode UNKNOWN \n", minor, length);
