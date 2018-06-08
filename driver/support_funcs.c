@@ -95,6 +95,10 @@ int read_thread(void *in_param) {
 				} else {
 					//else read it from the register
 					d2r = axi_stream_fifo_d2r(file_desc);
+                    //if we have read all the data from the fifo (only true if d2r is zero from d2r function)
+                    if(d2r == 0){
+                        clear_fifo_isr(file_desc);
+                    }
 				}
 
 				verbose_read_thread_printk(KERN_INFO"[read_thread]: file_desc minor: %d d2r: %d\n", file_desc->minor, d2r);
@@ -128,14 +132,17 @@ int read_thread(void *in_param) {
 					} else if(file_desc->file_open){
 						//read more data if the file is open
 						d2r = axi_stream_fifo_d2r(file_desc);
+                        //if we have read all the data from the fifo (only true if d2r is zero from d2r function)
+                        if(d2r == 0){
+                            clear_fifo_isr(file_desc);
+                        }
 						verbose_read_thread_printk(KERN_INFO"[read_thread]: read more! file_desc minor: %d d2r: %d\n", file_desc->minor, d2r);
 					} else {
 						d2r = 0;
 						verbose_read_thread_printk(KERN_INFO"[read_thread]: file is closed: %d d2r: %d\n", file_desc->minor, d2r);
 					}
 				}
-                clear_fifo_isr(file_desc);
-                
+
 				verbose_read_thread_printk(KERN_INFO"[read_thread]: No more data to read.....\n");
 			} else if(sz == 1 && !file_desc->file_open) {
 				verbose_read_thread_printk(KERN_INFO"[read_thread]: file is not open\n");
