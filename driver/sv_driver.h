@@ -203,7 +203,6 @@ extern struct xdma_dev *xdma_dev_s;
 #define AXI_STREAM_TXUSER  	0x00000038  /**< Transmit User  */
 #define AXI_STREAM_RXID  	0x0000003C  /**< Receive ID  */
 #define AXI_STREAM_RXUSER  	0x00000040  /**< Receive User  */
-
 #define AXI_STREAM_TDFD		0x00000000	 /**< Transmit Data */
 #define AXI_STREAM_RDFD		0x00001000 	 /**< Receive Data */
 
@@ -358,8 +357,6 @@ struct sv_mod_dev {
 
 
 };
-
-
 
 /** Module Description Struct
  *	@brief This is the data structure that is stored inside the private section of each file
@@ -682,7 +679,7 @@ int read_data(struct file_desc * file_desc, int read_size, void * buffer_addr);
 
 int clear_fifo_isr(struct file_desc * file_desc);
 
-
+bool is_packet_full_interrupt(struct file_desc * file_desc);
 
 
 

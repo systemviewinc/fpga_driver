@@ -1069,23 +1069,6 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
     		if(device_mode == AXI_STREAM_FIFO || device_mode == AXI_STREAM_PACKET) {
     			verbose_isr_printk(KERN_INFO"[pci_isr]: this interrupt is from a streaming peripheral\n");
 
-    			// /*Read the axi fifo ISR*/
-    			// axi_dest = irq_file->axi_addr_ctl + AXI_STREAM_ISR;
-    			// if(direct_read(axi_dest, (void *)&status, 4, NORMAL_READ) ) {
-    			// 	printk(KERN_INFO"[pci_isr]: !!!!!!!!ERROR direct_read\n");
-    			// 	return IRQ_NONE;
-    			// }
-                //
-                // status = status | !
-                //
-    			// verbose_isr_printk(KERN_INFO"[pci_isr]: Stream FIFO ISR status: 0x%08x\n", status);
-    			// /*clear the axi fifo ISR*/
-    			// if(direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
-    			// 	printk(KERN_INFO"[pci_isr]: !!!!!!!!ERROR direct_write\n");
-    			// 	return IRQ_NONE;
-    			// }
-
-
                 //Put streaming types into the kfifo for read thread
     			if(atomic_read(irq_file->in_read_fifo_count) == 0 && irq_file->file_open) {
     				//debug message
