@@ -44,6 +44,32 @@
 
  //debug
  #include <linux/time.h>
+
+ int clear_fifo_isr(struct file_desc * file_desc)
+ {
+    u32 status;
+ 	u64 axi_dest;
+
+     /*Read the axi fifo ISR*/
+     axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_ISR;
+     if(direct_read(axi_dest, (void *)&status, 4, NORMAL_READ) ) {
+     	printk(KERN_INFO"[clear_fifo_isr]: !!!!!!!!ERROR direct_read\n");
+     	return ERROR;
+     }
+
+     verbose_printk(KERN_INFO"[clear_fifo_isr]: Stream FIFO ISR status: 0x%08x\n", status);
+     /*clear the axi fifo ISR*/
+     if(direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
+     	printk(KERN_INFO"[clear_fifo_isr]: !!!!!!!!ERROR direct_write\n");
+     	return ERROR;
+     }
+
+     verbose_printk(KERN_INFO"[clear_fifo_isr]: Clear fifo ISR sucessful!\n");
+     return 0;
+
+ }
+
+
 /**
  * This function is called by the read thread to read data from the FPGA.
  * read_size: the number of bytes to read from the fifo

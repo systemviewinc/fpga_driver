@@ -680,6 +680,10 @@ size_t axi_stream_fifo_d2r(struct file_desc * file_desc);
 int read_data(struct file_desc * file_desc, int read_size, void * buffer_addr);
 
 
+int clear_fifo_isr(struct file_desc * file_desc);
+
+
+
 
 
 struct sv_mod_dev *alloc_sv_dev_instance(u64 dma_size);
