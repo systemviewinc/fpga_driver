@@ -145,7 +145,7 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 		loff_t pos = axi_address;
 		int rc = 0;
 
-        verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: Using XDMA \n");
+		verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: Using XDMA \n");
 
 		if(xfer_type & HOST_READ) { // host to card AKA WRITE
 
@@ -153,30 +153,30 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 				xdma_channel = xdma_query(DMA_TO_DEVICE);
 				if(xdma_channel == -1) schedule();
 			}
-            //
-            // //if keyhole read/write set address mode to non_incr_mode
-            // if(transfer_type == KEYHOLE_WRITE) || (transfer_type == KEYHOLE_READ) {
-            //     if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0]->engine, 1) ) {
-            //         printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma failed to set address mode\n");
-            //         return ERROR;
-            //     }
-            //
-            //     if(l_btt < (int)file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0]->engine->len_granularity){
-            //         verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: setting BTT to len_granularity\n");
-            //         l_btt = (int)file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0]->engine->len_granularity;
-            //
-            //     }
-            //
-            // }
-            // //else set it to normal (incrementing) mode
-            // else {
-            //     if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0]->engine, 0) ) {
-            //         printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma failed to se address mode\n");
-            //         return ERROR;
-            //     }
-            // }
+			//
+			// //if keyhole read/write set address mode to non_incr_mode
+			// if(transfer_type == KEYHOLE_WRITE) || (transfer_type == KEYHOLE_READ) {
+			//	 if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0]->engine, 1) ) {
+			//		 printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma failed to set address mode\n");
+			//		 return ERROR;
+			//	 }
+			//
+			//	 if(l_btt < (int)file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0]->engine->len_granularity){
+			//		 verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: setting BTT to len_granularity\n");
+			//		 l_btt = (int)file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0]->engine->len_granularity;
+			//
+			//	 }
+			//
+			// }
+			// //else set it to normal (incrementing) mode
+			// else {
+			//	 if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0]->engine, 0) ) {
+			//		 printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma failed to se address mode\n");
+			//		 return ERROR;
+			//	 }
+			// }
 
-            verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: xdma xfer write address 0x%p offset 0x%x\n",  buf+dma_offset, (u32)pos);
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: xdma xfer write address 0x%p offset 0x%x\n",  buf+dma_offset, (u32)pos);
 			rc = sv_char_sgdma_read_write(file_desc, file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0], buf+dma_offset, l_btt, &pos, 1);
 
 			if(rc == l_btt) {	//successfully transfered all bytes
@@ -197,18 +197,18 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 				if(xdma_channel == -1) schedule();
 			}
 
-            // if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[xdma_channel][1]->engine, 1) ) {
-            //     printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma failed to se address mode\n");
-            //     return ERROR;
-            // }
-            //
-            verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: xdma xfer read address 0x%p offset 0x%x\n",  buf+dma_offset, (u32)pos);
+			// if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[xdma_channel][1]->engine, 1) ) {
+			//	 printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma failed to se address mode\n");
+			//	 return ERROR;
+			// }
+			//
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: xdma xfer read address 0x%p offset 0x%x\n",  buf+dma_offset, (u32)pos);
 			rc = sv_char_sgdma_read_write(file_desc, file_desc->xdma_dev->sgdma_char_dev[xdma_channel][1], buf+dma_offset, l_btt, &pos, 0);
-            //
-            // if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[xdma_channel][1]->engine, 0) ) {
-            //     printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma failed to se address mode\n");
-            //     return ERROR;
-            // }
+			//
+			// if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[xdma_channel][1]->engine, 0) ) {
+			//	 printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma failed to se address mode\n");
+			//	 return ERROR;
+			// }
 
 			if(rc == l_btt) {	//successfully transfered all bytes
 				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: unlock c2h %i\n", xdma_channel);
@@ -445,7 +445,7 @@ int dma_file_deinit(struct file_desc *file_desc, size_t dma_size) {
 	printk(KERN_INFO"[axi_intc_init]: Setting Interrupt Controller Axi Address to 0x%08x\n", axi_address);
 	svd->axi_intc_addr = axi_address;
 
-    /*Here we need to clear the service interrupt in the interrupt acknowledge register*/
+	/*Here we need to clear the service interrupt in the interrupt acknowledge register*/
 	status = 0xFFFFFFFF;
 	axi_dest = svd->axi_intc_addr + INT_CTRL_IAR;
 	if( direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
@@ -757,7 +757,7 @@ int cdma_init(struct sv_mod_dev *svd, int cdma_num, uint cdma_addr)
 		printk(KERN_INFO"\t\t[cdma_idle_%x_init]: \t!!!!!!!!ERROR: in direct_read!!!!!!!\n", cdma_num);
 		return ERROR;
 	}
-    svd->cdma_set[cdma_num] = 1;
+	svd->cdma_set[cdma_num] = 1;
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: CDMA config after configuring: ('0x%08x')\n", cdma_num, cdma_status);
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_0x%x_init]: ****************Setting CDMA AXI Address:%x Complete*************************************\n", cdma_num, cdma_addr);
 
@@ -877,7 +877,7 @@ int direct_read(u64 axi_address, void *buf, size_t count, int transfer_type)
 	/*determine which BAR to read from*/
 	/* Also does a final check to make sure you are writing in range */
 	while (in_range == 0 && i < svd_global->bars->num_bars){
-        verbose_direct_read_printk(KERN_INFO"\t\t[direct_read]: pci bar %d addr is:0x%p \n", i, svd_global->bars->pci_bar_vir_addr[i]);
+		verbose_direct_read_printk(KERN_INFO"\t\t[direct_read]: pci bar %d addr is:0x%p \n", i, svd_global->bars->pci_bar_vir_addr[i]);
 		verbose_direct_read_printk(KERN_INFO"\t\t[direct_read]: pci bar %d start is:0x%lx end is:%lx\n", i, svd_global->bars->pci_bar_addr[i], svd_global->bars->pci_bar_end[i]);
 
 
@@ -1330,7 +1330,7 @@ int sv_map_single_bar(struct bar_info *bars, struct xdma_dev *lro, struct pci_de
 	bar_len = pci_resource_len(dev, idx);
 	map_len = bar_len;
 
-    bars->pci_bar_vir_addr[idx] = NULL;
+	bars->pci_bar_vir_addr[idx] = NULL;
 
 	/* do not map BARs with length 0. Note that start MAY be 0! */
 	if (!bar_len) {
@@ -1350,9 +1350,9 @@ int sv_map_single_bar(struct bar_info *bars, struct xdma_dev *lro, struct pci_de
 	dbg_bar("BAR%d: %llu bytes to be mapped.\n", idx, (u64)map_len);
 	bars->pci_bar_vir_addr[idx] = pci_iomap(dev, idx, map_len);
 
-    if(lro != NULL){
-        lro->bar[idx] = bars->pci_bar_vir_addr[idx];
-    }
+	if(lro != NULL){
+		lro->bar[idx] = bars->pci_bar_vir_addr[idx];
+	}
 
 	if (!bars->pci_bar_vir_addr[idx]) {
 		dbg_bar("Could not map BAR %d", idx);
@@ -1365,7 +1365,7 @@ int sv_map_single_bar(struct bar_info *bars, struct xdma_dev *lro, struct pci_de
 	bars->pci_bar_end[idx] = bars->pci_bar_addr[idx]+map_len;
 	bars->num_bars++;
 
-    dbg_bar("[sv_map_single_bar]: pci bar %d addr is:0x%p \n", idx, bars->pci_bar_vir_addr[idx]);
+	dbg_bar("[sv_map_single_bar]: pci bar %d addr is:0x%p \n", idx, bars->pci_bar_vir_addr[idx]);
 	dbg_bar("[sv_map_single_bar]: pci bar %d start is:0x%lx end is:0x%lx\n", idx, bars->pci_bar_addr[idx], bars->pci_bar_end[idx]);
 	dbg_bar("[sv_map_single_bar]: pci bar %d size is:0x%lx\n", idx, (unsigned long)map_len);
 

@@ -208,34 +208,34 @@ extern struct xdma_dev *xdma_dev_s;
 
 
  /******************************** Xilinx interrupt controller bits **********************************/
-#define AXI_INTR_RPURE_MASK       0x80000000 /**< Receive under-read */
-#define AXI_INTR_RPORE_MASK       0x40000000 /**< Receive over-read */
-#define AXI_INTR_RPUE_MASK        0x20000000 /**< Receive underrun (empty) */
-#define AXI_INTR_TPOE_MASK        0x10000000 /**< Transmit overrun */
-#define AXI_INTR_TC_MASK          0x08000000 /**< Transmit complete */
-#define AXI_INTR_RC_MASK          0x04000000 /**< Receive complete */
-#define AXI_INTR_TSE_MASK         0x02000000 /**< Transmit length mismatch */
-#define AXI_INTR_TRC_MASK         0x01000000 /**< Transmit reset complete */
-#define AXI_INTR_RRC_MASK         0x00800000 /**< Receive reset complete */
-#define AXI_INTR_TFPF_MASK        0x00400000 /**< Tx FIFO Programmable Full AXI FIFO MM2S Only */
-#define AXI_INTR_TFPE_MASK        0x00200000 /**< Tx FIFO Programmable Empty AXI FIFO MM2S Only */
-#define AXI_INTR_RFPF_MASK        0x00100000 /**< Rx FIFO Programmable Full AXI FIFO MM2S Only */
-#define AXI_INTR_RFPE_MASK        0x00080000 /**< Rx FIFO Programmable Empty AXI FIFO MM2S Only */
+#define AXI_INTR_RPURE_MASK	   0x80000000 /**< Receive under-read */
+#define AXI_INTR_RPORE_MASK	   0x40000000 /**< Receive over-read */
+#define AXI_INTR_RPUE_MASK		0x20000000 /**< Receive underrun (empty) */
+#define AXI_INTR_TPOE_MASK		0x10000000 /**< Transmit overrun */
+#define AXI_INTR_TC_MASK		  0x08000000 /**< Transmit complete */
+#define AXI_INTR_RC_MASK		  0x04000000 /**< Receive complete */
+#define AXI_INTR_TSE_MASK		 0x02000000 /**< Transmit length mismatch */
+#define AXI_INTR_TRC_MASK		 0x01000000 /**< Transmit reset complete */
+#define AXI_INTR_RRC_MASK		 0x00800000 /**< Receive reset complete */
+#define AXI_INTR_TFPF_MASK		0x00400000 /**< Tx FIFO Programmable Full AXI FIFO MM2S Only */
+#define AXI_INTR_TFPE_MASK		0x00200000 /**< Tx FIFO Programmable Empty AXI FIFO MM2S Only */
+#define AXI_INTR_RFPF_MASK		0x00100000 /**< Rx FIFO Programmable Full AXI FIFO MM2S Only */
+#define AXI_INTR_RFPE_MASK		0x00080000 /**< Rx FIFO Programmable Empty AXI FIFO MM2S Only */
 
 /******************************** Xilinx CDMA status bits **********************************/
-#define XAXICDMA_SR_IDLE_MASK         0x00000002  /**< DMA channel idle */
-#define XAXICDMA_SR_SGINCLD_MASK      0x00000008  /**< Hybrid build */
+#define XAXICDMA_SR_IDLE_MASK		 0x00000002  /**< DMA channel idle */
+#define XAXICDMA_SR_SGINCLD_MASK	  0x00000008  /**< Hybrid build */
 #define XAXICDMA_SR_ERR_INTERNAL_MASK 0x00000010  /**< Datamover internal err */
-#define XAXICDMA_SR_ERR_SLAVE_MASK    0x00000020  /**< Datamover slave err */
+#define XAXICDMA_SR_ERR_SLAVE_MASK	0x00000020  /**< Datamover slave err */
 #define XAXICDMA_SR_ERR_DECODE_MASK   0x00000040  /**< Datamover decode err */
 #define XAXICDMA_SR_ERR_SG_INT_MASK   0x00000100  /**< SG internal err */
 #define XAXICDMA_SR_ERR_SG_SLV_MASK   0x00000200  /**< SG slave err */
 #define XAXICDMA_SR_ERR_SG_DEC_MASK   0x00000400  /**< SG decode err */
 
 /******************************** Xilinx interrupt reset bits **********************************/
-#define XLLF_RDFR_RESET_MASK        0x000000a5 /**< receive reset value */
-#define XLLF_TDFR_RESET_MASK        0x000000a5 /**< Transmit reset value */
-#define XLLF_LLR_RESET_MASK         0x000000a5 /**< Local Link reset value */
+#define XLLF_RDFR_RESET_MASK		0x000000a5 /**< receive reset value */
+#define XLLF_TDFR_RESET_MASK		0x000000a5 /**< Transmit reset value */
+#define XLLF_LLR_RESET_MASK		 0x000000a5 /**< Local Link reset value */
 
 /******************************** Xilinx CDMA Register Offsets **********************************/
 #define CDMA_CR			  	0x00	 /**< CDMA Register Offset (See Xilinx Doc) */
@@ -318,7 +318,7 @@ struct sv_mod_dev {
 	struct mutex cdma_sem[CDMA_MAX_NUM];
 
 	int xdma_c2h_num_channels;
-    int xdma_h2c_num_channels;
+	int xdma_h2c_num_channels;
 
 	struct bar_info * bars;
 

@@ -3004,9 +3004,9 @@ ssize_t sg_aio_read_write(struct kiocb *iocb, const struct iovec *iov,
 
 /**
 * sg_aio_read_write - generic asynchronous read routine
-* @iocb:       kernel I/O control block
+* @iocb:	   kernel I/O control block
 * @iov:	io vector request
-* @nr_segs:    number of segments in the iovec
+* @nr_segs:	number of segments in the iovec
 * @pos:	current file position
 *
 */
@@ -3451,7 +3451,7 @@ ssize_t char_sgdma_read_cyclic(struct file *file, char __user *buf)
 	BUG_ON(!transfer);
 
 	dbg_tfr("char_sgdma_read_cyclic()");
-        engine->user_buffer_index = 0;
+		engine->user_buffer_index = 0;
 
 	do {
 		rc = transfer_monitor_cyclic(engine, transfer);
@@ -4488,7 +4488,7 @@ void destroy_interfaces(struct xdma_dev *lro)
 	}
 
 	if (lro->bypass_char_dev_base)
-                destroy_sg_char(lro->bypass_char_dev_base);
+				destroy_sg_char(lro->bypass_char_dev_base);
 
 	for (idx = 0; idx < MAX_USER_IRQ; idx++) {
 		if (lro->events_char_dev[idx])
@@ -4757,9 +4757,9 @@ int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	#if SD_ACCEL
 	/* SD_Accel Specific */
 	clear_contr = dev_get_drvdata(&pdev->dev);
-        if (clear_contr)
-                printk(KERN_INFO "%s: Found stashed clearing bitstream from previously loaded driver %p\n",
-                       DRV_NAME, clear_contr);
+		if (clear_contr)
+				printk(KERN_INFO "%s: Found stashed clearing bitstream from previously loaded driver %p\n",
+					   DRV_NAME, clear_contr);
 	#endif
 
 	/* allocate zeroed device book keeping structure */
@@ -4774,7 +4774,7 @@ int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		lro->mcap_base = ULTRASCALE_MCAP_CONFIG_BASE;
 
 	if (load_firmware && (lro->pci_dev->device == 0x8138)) {
-                if (clear_contr && (clear_contr->magic == 0xBBBBBBBBUL)) {
+				if (clear_contr && (clear_contr->magic == 0xBBBBBBBBUL)) {
 			/* Copy the stashed clear bitstream from previously loaded driver to this initialization of driver */
 			memcpy(&lro->stash, clear_contr, sizeof(struct xdma_bitstream_container));
 			kfree(clear_contr);
@@ -4783,8 +4783,8 @@ int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		else {
 			lro->stash.magic = 0xBBBBBBBBUL;
 		}
-                load_boot_firmware(lro);
-        }
+				load_boot_firmware(lro);
+		}
 	#endif
 
 	rc = pci_enable_device(pdev);
@@ -4841,7 +4841,7 @@ int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	/* enable credit system only in AXI-Stream mode*/
 	reg = lro->bar[lro->config_bar_idx];
-        w = read_register(reg);
+		w = read_register(reg);
 	stream = (w & 0x8000U) ? 1 : 0;
 	if (enable_credit_mp & stream ) {
 		printk(KERN_DEBUG "Design in Steaming mode enable Credit feature \n");
@@ -4895,7 +4895,7 @@ int probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		return 0;
 
 rmv_cdev:
-        dev_present[lro->instance] = 0;
+		dev_present[lro->instance] = 0;
 	device_remove_file(&pdev->dev, &dev_attr_xdma_dev_instance);
 rmv_interface:
 	destroy_interfaces(lro);
@@ -5402,7 +5402,7 @@ int gen_dev_minor(struct xdma_engine *engine, enum chardev_type type,
 		tmp = engine->number_in_channel * 4;
 		minor = 64 + tmp + engine->channel;
 	} else if (type == CHAR_BYPASS) {
-                minor = 100;
+				minor = 100;
 	} else if (type == CHAR_EVENTS) {
 		minor = 10 + event_id;
 	} else {

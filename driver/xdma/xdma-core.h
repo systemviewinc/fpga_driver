@@ -623,7 +623,7 @@ int engine_service_cyclic_polled(struct xdma_engine *engine);
 int engine_service_cyclic_interrupt(struct xdma_engine *engine);
 int engine_service_cyclic(struct xdma_engine *engine);
 struct xdma_transfer *engine_transfer_completion(struct xdma_engine *engine,
-            struct xdma_transfer *transfer);
+			struct xdma_transfer *transfer);
 struct xdma_transfer *engine_service_transfer_list(struct xdma_engine *engine,
 			struct xdma_transfer *transfer, u32 *pdesc_completed);
 void engine_err_handle(struct xdma_engine *engine,

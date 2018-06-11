@@ -88,7 +88,7 @@
  				} else {
  					//else read it from the register
  					d2r = axi_stream_fifo_d2r(file_desc);
-                     //if we have read all the data from the fifo (only true if d2r is zero from d2r function)
+					 //if we have read all the data from the fifo (only true if d2r is zero from d2r function)
  				}
 
  				verbose_read_thread_printk(KERN_INFO"[read_thread]: file_desc minor: %d d2r: %d\n", file_desc->minor, d2r);
@@ -105,7 +105,7 @@
  					//if read_data needs back_pressure
  					if(read_incomplete == 1 || read_incomplete == ERROR) {
  						//write the file_desc back in if the fifo is not full and it isn't already in the fifo
-                         verbose_read_thread_printk(KERN_INFO"[read_thread]: read incomplete: %d\n", read_incomplete);
+						 verbose_read_thread_printk(KERN_INFO"[read_thread]: read incomplete: %d\n", read_incomplete);
 
  						if(!kfifo_is_full(read_fifo) && file_desc->file_open) {
  							atomic_inc(file_desc->in_read_fifo_count);
@@ -114,22 +114,22 @@
  							printk(KERN_INFO"[read_thread]: kfifo is full, not writing mod desc\n");
  						}
 
-                         wait_event_interruptible_timeout(svd->thread_q_head_read, atomic_read(&svd->thread_q_read) == 1 || kthread_should_stop(), msecs_to_jiffies(1000) );
+						 wait_event_interruptible_timeout(svd->thread_q_head_read, atomic_read(&svd->thread_q_read) == 1 || kthread_should_stop(), msecs_to_jiffies(1000) );
  						schedule();
 
  						d2r = 0;
 
  					} else if(file_desc->file_open && is_packet_full_interrupt(file_desc)){
-                        clear_fifo_isr(file_desc);
-                        d2r = 0;
+						clear_fifo_isr(file_desc);
+						d2r = 0;
  						verbose_read_thread_printk(KERN_INFO"[read_thread]: file is closed: %d d2r: %d\n", file_desc->minor, d2r);
-                    }
-                    else if(file_desc->file_open){
+					}
+					else if(file_desc->file_open){
  						//read more data if the file is open
  						d2r = axi_stream_fifo_d2r(file_desc);
-                         //if we have read all the data from the fifo (only true if d2r is zero from d2r function)
-                         if(d2r == 0){
-                         }
+						 //if we have read all the data from the fifo (only true if d2r is zero from d2r function)
+						 if(d2r == 0){
+						 }
  						verbose_read_thread_printk(KERN_INFO"[read_thread]: read more! file_desc minor: %d d2r: %d\n", file_desc->minor, d2r);
  					} else {
  						d2r = 0;
@@ -206,7 +206,7 @@
  					write_incomplete = write_data(file_desc, buffer);
  					//if read_data needs back_pressure
  					if((write_incomplete == 1 || write_incomplete == ERROR)) {
-                         verbose_write_thread_printk(KERN_INFO"[write_thread]: write incomplete: %d\n", write_incomplete);
+						 verbose_write_thread_printk(KERN_INFO"[write_thread]: write incomplete: %d\n", write_incomplete);
 
  						//write the file_desc back in if the fifo is not full and it isn't already in the fifo
  						if(!kfifo_is_full(write_fifo) && file_desc->file_open) {
@@ -216,8 +216,8 @@
  						else {
  							printk(KERN_INFO"[write_thread]: kfifo is full, not writing mod desc\n");
  						}
-                         d2w = 0;
-                         wait_event_interruptible_timeout(svd->thread_q_head_write, atomic_read(&svd->thread_q_write) == 1 || kthread_should_stop(), msecs_to_jiffies(1000) );
+						 d2w = 0;
+						 wait_event_interruptible_timeout(svd->thread_q_head_write, atomic_read(&svd->thread_q_write) == 1 || kthread_should_stop(), msecs_to_jiffies(1000) );
 
 
  					} else if(file_desc->file_open) {
@@ -250,44 +250,44 @@
 
  bool is_packet_full_interrupt(struct file_desc * file_desc)
  {
-    u32 status;
+	u32 status;
  	u64 axi_dest;
 
-     /*Read the axi fifo ISR*/
-     axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_ISR;
-     if(direct_read(axi_dest, (void *)&status, 4, NORMAL_READ) ) {
-     	printk(KERN_INFO"[is_packet_full_interrupt]: !!!!!!!!ERROR direct_read\n");
-     	return ERROR;
-     }
-     verbose_printk(KERN_INFO"[is_packet_full_interrupt]: Stream FIFO ISR status: 0x%08x\n", status);
+	 /*Read the axi fifo ISR*/
+	 axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_ISR;
+	 if(direct_read(axi_dest, (void *)&status, 4, NORMAL_READ) ) {
+	 	printk(KERN_INFO"[is_packet_full_interrupt]: !!!!!!!!ERROR direct_read\n");
+	 	return ERROR;
+	 }
+	 verbose_printk(KERN_INFO"[is_packet_full_interrupt]: Stream FIFO ISR status: 0x%08x\n", status);
 
-     if((status&AXI_INTR_RFPF_MASK) == AXI_INTR_RFPF_MASK){
-         return true;
-     }
-     return false;
+	 if((status&AXI_INTR_RFPF_MASK) == AXI_INTR_RFPF_MASK){
+		 return true;
+	 }
+	 return false;
  }
 
  int clear_fifo_isr(struct file_desc * file_desc)
  {
-    u32 status;
+	u32 status;
  	u64 axi_dest;
 
-     /*Read the axi fifo ISR*/
-     axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_ISR;
-     if(direct_read(axi_dest, (void *)&status, 4, NORMAL_READ) ) {
-     	printk(KERN_INFO"[clear_fifo_isr]: !!!!!!!!ERROR direct_read\n");
-     	return ERROR;
-     }
+	 /*Read the axi fifo ISR*/
+	 axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_ISR;
+	 if(direct_read(axi_dest, (void *)&status, 4, NORMAL_READ) ) {
+	 	printk(KERN_INFO"[clear_fifo_isr]: !!!!!!!!ERROR direct_read\n");
+	 	return ERROR;
+	 }
 
-     verbose_printk(KERN_INFO"[clear_fifo_isr]: Stream FIFO ISR status: 0x%08x\n", status);
-     /*clear the axi fifo ISR*/
-     if(direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
-     	printk(KERN_INFO"[clear_fifo_isr]: !!!!!!!!ERROR direct_write\n");
-     	return ERROR;
-     }
+	 verbose_printk(KERN_INFO"[clear_fifo_isr]: Stream FIFO ISR status: 0x%08x\n", status);
+	 /*clear the axi fifo ISR*/
+	 if(direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
+	 	printk(KERN_INFO"[clear_fifo_isr]: !!!!!!!!ERROR direct_write\n");
+	 	return ERROR;
+	 }
 
-     verbose_printk(KERN_INFO"[clear_fifo_isr]: Clear fifo ISR sucessful!\n");
-     return 0;
+	 verbose_printk(KERN_INFO"[clear_fifo_isr]: Clear fifo ISR sucessful!\n");
+	 return 0;
 
  }
 
@@ -333,7 +333,7 @@ int read_data(struct file_desc * file_desc, int read_size, void * buffer_addr)
 				}
 				else {
 					printk(KERN_INFO"[read_data]: No room in ring buffer to read data, setting read ring buffer locked.\n");
-                    atomic_set(file_desc->read_ring_buf_locked, 1);
+					atomic_set(file_desc->read_ring_buf_locked, 1);
 					//break;
 					return ERROR;
 				}
@@ -810,17 +810,17 @@ int axi_stream_fifo_init(struct file_desc * file_desc)
 			return ERROR;
 		}
 	}
-    //enable interupt from axi_stream_fifo if we are using the axi_stream_packet
-    else {
-        verbose_printk(KERN_INFO"[axi_stream_fifo_%x_init]: Setting AXI_STREAM_IER register for AXI_STREAM.\n", file_desc->minor);
-        //Set IER Register for interrupt on read -MM
-        axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_IER;
-        buf = AXI_INTR_RFPF_MASK;
-        if( direct_write(axi_dest, (void*)(&buf), 4, NORMAL_WRITE) ) {
-            printk(KERN_INFO"[axi_stream_fifo_%x_init]: !!!!!!!!ERROR setting AXI_STREAM_IER register.\n", file_desc->minor);
-            return ERROR;
-        }
-    }
+	//enable interupt from axi_stream_fifo if we are using the axi_stream_packet
+	else {
+		verbose_printk(KERN_INFO"[axi_stream_fifo_%x_init]: Setting AXI_STREAM_IER register for AXI_STREAM.\n", file_desc->minor);
+		//Set IER Register for interrupt on read -MM
+		axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_IER;
+		buf = AXI_INTR_RFPF_MASK;
+		if( direct_write(axi_dest, (void*)(&buf), 4, NORMAL_WRITE) ) {
+			printk(KERN_INFO"[axi_stream_fifo_%x_init]: !!!!!!!!ERROR setting AXI_STREAM_IER register.\n", file_desc->minor);
+			return ERROR;
+		}
+	}
 
 	buf = 0x0;
 
@@ -866,9 +866,9 @@ int axi_stream_fifo_deinit(struct file_desc * file_desc)
 	u64 axi_dest;
 	u32 buf;
 
-    //debugging
+	//debugging
 
-    //READ ISR
+	//READ ISR
 	axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_ISR;
 	if( direct_read(axi_dest, (void*)(&buf), 4, NORMAL_WRITE) ) {
 		printk(KERN_INFO"[axi_stream_fifo_%x_deinit]: !!!!!!!!ERROR setting AXI_STREAM_ISR register.\n", file_desc->minor);
@@ -877,7 +877,7 @@ int axi_stream_fifo_deinit(struct file_desc * file_desc)
 	printk(KERN_INFO"[axi_stream_fifo_%x_deinit]: ISR 0x%08x\n", file_desc->minor, buf);
 
 
-    //end debugging
+	//end debugging
 
 
 
