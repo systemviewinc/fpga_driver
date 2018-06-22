@@ -4141,7 +4141,8 @@ int probe_scan_for_msi(struct xdma_dev *lro, struct pci_dev *pdev)
 	} else if (msi_msix_capable(pdev, PCI_CAP_ID_MSI)) {
 		/* enable message signalled interrupts */
 		dbg_init("pci_enable_msi()\n");
-		rc = pci_enable_msi(pdev);
+		// we don't call this function in VSI, comment out for compatiblity
+		//rc = pci_enable_msi(pdev);
 		if (rc < 0)
 			dbg_init("Couldn't enable MSI mode: rc = %d\n", rc);
 		lro->msi_enabled = 1;

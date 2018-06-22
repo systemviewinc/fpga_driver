@@ -379,7 +379,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 			verbose_printk(KERN_INFO"[probe:%s]: MSIX capable XDMA\n", pci_name);
 
-			for (i = 0; i < req_nvec; i++)
+			for (i = 0; i < MAX_USER_IRQ; i++)
 				svd_global->sv_msix_entry[i].entry = i;
 
 			verbose_printk("[probe:%s]: pci_enable_msix()\n", pci_name);
@@ -398,7 +398,6 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 			// handles by xdma engine if enabled
 			for (i = 0 ; i < MAX_USER_IRQ ; i++) {
 				rc = request_irq(svd_global->sv_msix_entry[i].vector, pci_isr, 0 , pci_name, pci_dev_struct);
-
 
 				if (rc) {
 					printk(KERN_INFO"[probe:%s]: MSI-X Couldn't use IRQ#%d, rc=%d\n", pci_name, svd_global->sv_msix_entry[i].vector, rc);
@@ -2229,7 +2228,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 				verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: current file offset is: %llu\n", minor, *f_pos);
 
 				if(file_desc->mode == CONTROL) {
-					verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: direct_read AXI Address: 0x%llx, buf: 0x%p + 0x%llx, len: 0x%zx\n", minor, axi_dest, buffer, (u64)file_desc->dma_offset_read, count);
+					verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: direct_read AXI Address: 0x%llx, buf: 0x%p, len: 0x%zx\n", minor, axi_dest, buffer, count);
 					if( direct_read(axi_dest, buffer, count, transfer_type) ) {
 						printk(KERN_INFO"[pci_%x_read]: !!!!!!!!ERROR reading data from User Peripheral\n", minor);
 						return ERROR;
@@ -2237,7 +2236,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 				}
 				else {
-					verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: dma_transfer AXI Address: 0x%llx, buf: 0x%p + 0x%llx, len: 0x%zx\n", minor, axi_dest, buffer, (u64)file_desc->dma_offset_read, count);
+					verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: dma_transfer AXI Address: 0x%llx, buf: 0x%p, len: 0x%zx\n", minor, axi_dest, buffer, count);
 					if(dma_transfer(file_desc, axi_dest, buffer, count, transfer_type, 0)) {
 						printk(KERN_INFO"[pci_%x_read]: !!!!!!!!ERROR reading data from User Peripheral\n", minor);
 						return ERROR;
