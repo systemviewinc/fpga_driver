@@ -379,7 +379,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 			verbose_printk(KERN_INFO"[probe:%s]: MSIX capable XDMA\n", pci_name);
 
-			for (i = 0; i < MAX_USER_IRQ; i++)
+			for (i = 0; i < req_nvec; i++)
 				svd_global->sv_msix_entry[i].entry = i;
 
 			verbose_printk("[probe:%s]: pci_enable_msix()\n", pci_name);
