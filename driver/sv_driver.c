@@ -371,11 +371,10 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	pci_set_master(dev);
 	verbose_printk(KERN_INFO"[probe:%s]: pci set as master\n", pci_name);
 //-----------------------------------------------NEW-----------------------------------------------
-	if(driver_type == PCI && pcie_use_xdma) {
+	if((driver_type == PCI || driver_type == AWS) && pcie_use_xdma) {
 		//MSIX
 		if(msi_msix_capable(pci_dev_struct, PCI_CAP_ID_MSIX)) {
 			int req_nvec = MAX_NUM_ENGINES + MAX_USER_IRQ;
-
 
 			verbose_printk(KERN_INFO"[probe:%s]: MSIX capable XDMA\n", pci_name);
 
