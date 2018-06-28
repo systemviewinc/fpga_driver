@@ -32,7 +32,7 @@
 #define verbose_axi_fifo_read_printk printk
 #define verbose_axi_fifo_write_printk printk
 #define verbose_isr_printk printk
-// #define verbose_poll_printk printk
+#define verbose_poll_printk printk
 // #define very_verbose_poll_printk printk
 #define verbose_axi_fifo_d2r_printk printk
 #define verbose_direct_write_printk printk
