@@ -48,7 +48,7 @@
 /***********Set default values for insmod parameters***************************/
 int vendor_id = PCI_VENDOR_ID_XILINX;	 /**< Insmod Patameter - PCIe vendor	*/
 int device_id = 100;	/**< Insmod Parameter - PCIe specific */
-int major = 241;/**< Insmod Parameter - Major number of Driver*/
+int major = 0;/**< Insmod Parameter - Major number of Driver*/
 uint cdma_address[CDMA_MAX_NUM] = {-1}; /**< Insmod Parameter - the AXI Address of CDMA 1*/
 int cdma_count;	/**< The number of elements in cdma_address (or max value)*/
 int pcie_bar_num; /**< The number of elements in pcie_ctl_address (or max value)*/
@@ -397,7 +397,6 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 			// handles by xdma engine if enabled
 			for (i = 0 ; i < MAX_USER_IRQ ; i++) {
 				rc = request_irq(svd_global->sv_msix_entry[i].vector, pci_isr, 0 , pci_name, pci_dev_struct);
-
 				if (rc) {
 					printk(KERN_INFO"[probe:%s]: MSI-X Couldn't use IRQ#%d, rc=%d\n", pci_name, svd_global->sv_msix_entry[i].vector, rc);
 					break;
@@ -421,7 +420,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 			verbose_printk("[probe:%s]: pci_enable_msi()\n", pci_name);
 			rc = pci_enable_msi(pci_dev_struct);
-			if (rc < 0) {
+			if (rc) {
 				verbose_printk("[probe:%s]: ERROR Couldn't enable MSI mode: rc = %d\n", pci_name, rc);
 				goto disable_device;
 
@@ -433,10 +432,11 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 				printk(KERN_INFO"%s:[probe]request IRQ error\n", pci_name);
 				goto disable_device;
 			}
+            verbose_printk(KERN_INFO"[probe:%s]: Using IRQ#%d\n", pci_name, pci_dev_struct->irq);
 
 		} else {
 			//LEGACY
-			verbose_printk(KERN_INFO"[probe:%s]: Legacy interupts XDMA\n", pci_name);
+			verbose_printk(KERN_INFO"[probe:%s]: Legacy interrupts XDMA\n", pci_name);
 		}
 
 		verbose_printk("[probe:%s]: probe_engines()\n", pci_name);
@@ -492,9 +492,13 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	if(0 > rc){
 		//	dynamic_major = register_chrdev(0, pci_name, &pci_fops);
 		printk(KERN_INFO"[probe:%s]: char driver not registered rc: 0x%x\n", pci_name, rc);
-		printk(KERN_INFO"[probe:%s]: char driver major number: 0x%x\n", pci_name, major);
+		printk(KERN_INFO"[probe:%s]: char driver major number: %d\n", pci_name, major);
 		goto rmv_cdev;
 	}
+    else if(major == 0){
+        major = rc;
+        printk(KERN_INFO"[probe:%s]: char driver major number: %d\n", pci_name, major);
+    }
 
 	if(skel_get_revision(dev) == 0x42)
 		goto rmv_cdev;
@@ -606,7 +610,12 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 	verbose_printk(KERN_INFO"[probe:%s]: ******************************** PROBE PARAMETERS *****************************************\n", plat_name);
 	verbose_printk(KERN_INFO"[probe:%s]: device_id: 0x%x \n", plat_name, device_id);
-	verbose_printk(KERN_INFO"[probe:%s]: major: %d \n", plat_name, major);
+    if(major == 0) {
+        verbose_printk(KERN_INFO"[probe:%s]: major: dynamic \n", plat_name);
+    }
+    else {
+    	verbose_printk(KERN_INFO"[probe:%s]: major: %d \n", plat_name, major);
+    }
 	if(cdma_count > CDMA_MAX_NUM) {
 		verbose_printk(KERN_INFO"[probe:%s]: given more CDMA address than max allowed, setting cdma_count to %d\n", plat_name, CDMA_MAX_NUM);
 		cdma_count = CDMA_MAX_NUM;
@@ -931,11 +940,7 @@ static int sv_plat_remove(struct platform_device *pdev)
 
 static int __init sv_driver_init(void)
 {
-
-
-	sprintf(pci_driver_name, "vsi_driver_%03d", major);
-
-
+	sprintf(pci_driver_name, "vsi_driver_0x%x", device_id);
 	memset(file_desc_arr, 0, sizeof(file_desc_arr));
 
 	printk(KERN_INFO"[sv_driver_init]: Initializing driver type %d\n", driver_type);
