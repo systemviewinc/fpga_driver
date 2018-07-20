@@ -136,7 +136,7 @@
  						verbose_read_thread_printk(KERN_INFO"[read_thread]: file is closed: %d d2r: %d\n", file_desc->minor, d2r);
  					}
  				}
-
+            	clear_fifo_isr(file_desc);
  				verbose_read_thread_printk(KERN_INFO"[read_thread]: No more data to read.....\n");
  			} else if(sz == 1 && !file_desc->file_open) {
  				verbose_read_thread_printk(KERN_INFO"[read_thread]: file is not open\n");
@@ -149,7 +149,7 @@
  	}
  	verbose_printk(KERN_INFO"[read_thread]: Leaving thread\n");
  	return 0;
- }
+    }
 
  /**
   * This function operates on it's own thread after insmod. It is used to handle all AXI-Streaming
