@@ -1,4 +1,4 @@
-Instructions to build for petalinux 2016.4/yotco:
+Instructions to build for petalinux 2016.4/yocto:
 
 Navigate to the petalinux project and source the petalinux settings.
 
