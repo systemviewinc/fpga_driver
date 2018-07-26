@@ -1,46 +1,52 @@
-Instructions to build for petalinux 2016.4/yocto:
+## Instructions to build the driver for petalinux /yocto:
+
+### Petalinux Flow
+*These instructions assume you have already built a petalinux project for your system*
 
 Navigate to the petalinux project and source the petalinux settings.
 
-Create a template module.
+##### Create a template module for your petalinux project.
 
-petalinux-create --type modules --name vsidriver --enable
-	**The name must be lowercase and must not contain special characters**
+		$ petalinux-create --type modules --name <recipe_name>
+**The name must be lowercase and must not contain special characters**
 
-Clone the vsi_driver_build repository into the following directory.
+Within the created module template make a symbolic link to driver files
 
-<petalinux-project>/project-spec/meta-user/recipes-modules/vsidriver/vsidriver/
+		$ rm <name>.c
+		$ mkdir xdma
+		$ ln -s ~/<<VSI_FPGA_DIR>>/driver/*.c .
+		$ ln -s ~/<<VSI_FPGA_DIR>>/driver/*.h .
+		$ ln -s ~/<<VSI_FPGA_DIR>>/xdma/*.c xdma/.
+		$ ln -s ~/<<VSI_FPGA_DIR>>r/xdma/*.h xdma/.
 
 
-Modify <petalinux-project>/project-spec/meta-user/recipe-modules/vsidriver/vsidriver.bb as shown below:
-SRC_URI should look like:
-SRC_URI = "file://Makefile \
-           	file://sv_driver.c \
-	file://sv_driver.h \
- 	file://support_funcs.c \
- 	file://COPYING \
-	“
+Modify the *recipe_name.bb* as shown below (or use [vsidriver.bb](vsi_driver.bb) as and example):
+
+		SRC_URI = "file://Makefile \
+					file://*.c \
+					file://*.h \
+					file://xdma/*.c \
+					file://xdma/*.h \
+					file://COPYING \
+				“
 
 And append the following to the end:
-inherit module
-EXTRA_OEMAKE = 'KERNEL_SRC="${STAGING_KERNEL_DIR}" \
-            	O=${STAGING_KERNEL_BUILDDIR} \
-            	'
+
+		inherit module
+		EXTRA_OEMAKE = 'KERNEL_SRC="${STAGING_KERNEL_DIR}" \
+						O=${STAGING_KERNEL_BUILDDIR} \
+						'
 
 
 Clean, build, install the module and build petalinux:
-petalinux-build -c vsidriver -x do_clean
 
-petalinux-build -c vsidriver -x do_build
+		$ petalinux-build -c <recipe_name> -x do_clean
+		$ petalinux-build -c <recipe_name> -x do_build
+		$ petalinux-build -c <recipe_name> -x do_install
 
-petalinux-build -c vsidriver -x do_install
-
-petalinux-build
 The driver will now be in the filesystem at:
 
-/lib/modules/<version>-xilinx/extra/vsi_driver.ko
-
-
+		/lib/modules/<version>-xilinx/extra/vsi_driver.ko
 
 
 Petalinux 2016.4 module build reference - https://www.xilinx.com/support/answers/68441.html
