@@ -427,7 +427,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 			}
 			lro_global->msi_enabled = 1;
 
-			rc = request_irq(pci_dev_struct->irq, &pci_isr, IRQF_TRIGGER_HIGH | IRQF_SHARED, pci_name, pci_dev_struct);
+			rc = request_irq(pci_dev_struct->irq, &pci_isr, IRQF_TRIGGER_RISING | IRQF_SHARED, pci_name, pci_dev_struct);
 			if(rc){
 				printk(KERN_INFO"%s:[probe]request IRQ error\n", pci_name);
 				goto disable_device;
@@ -473,7 +473,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		// take over the user interrupts, the rest will be
 		// handles by xdma engine if enabled
 
-		if(0 > request_irq(pci_dev_struct->irq, &pci_isr, IRQF_TRIGGER_HIGH | IRQF_SHARED, pci_name, pci_dev_struct)){
+		if(0 > request_irq(pci_dev_struct->irq, &pci_isr, IRQF_TRIGGER_RISING | IRQF_SHARED, pci_name, pci_dev_struct)){
 			printk(KERN_INFO"%s:[probe]request IRQ error\n", pci_name);
 			goto disable_device;
 		}
@@ -758,7 +758,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 	* mapping is 1-1 and should be written directly to the returned DMA handle */
 
 	//request IRQ last
-	if(0 > request_irq(svd_global->irq_num, &pci_isr, IRQF_TRIGGER_HIGH | IRQF_SHARED, plat_name, pdev)){
+	if(0 > request_irq(svd_global->irq_num, &pci_isr, IRQF_TRIGGER_RISING | IRQF_SHARED, plat_name, pdev)){
 		printk(KERN_INFO"[probe:%s]: request IRQ error\n", plat_name);
 		goto free_alloc;
 	}
@@ -1071,7 +1071,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 			if(device_mode == AXI_STREAM_FIFO || device_mode == AXI_STREAM_PACKET) {
 				verbose_isr_printk(KERN_INFO"[pci_isr]: this interrupt is from a streaming peripheral\n");
-
+                //clear_fifo_isr(irq_file);
 				//Put streaming types into the kfifo for read thread
 				if(atomic_read(irq_file->in_read_fifo_count) == 0 && irq_file->file_open) {
 					//debug message
