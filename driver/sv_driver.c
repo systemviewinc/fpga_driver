@@ -1071,7 +1071,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 			if(device_mode == AXI_STREAM_FIFO || device_mode == AXI_STREAM_PACKET) {
 				verbose_isr_printk(KERN_INFO"[pci_isr]: this interrupt is from a streaming peripheral\n");
-                //clear_fifo_isr(irq_file);
+				clear_fifo_isr(irq_file);
 				//Put streaming types into the kfifo for read thread
 				if(atomic_read(irq_file->in_read_fifo_count) == 0 && irq_file->file_open) {
 					//debug message
