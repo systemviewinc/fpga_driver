@@ -386,7 +386,7 @@ struct file_desc {
 	unsigned long mmap_start_addr;
 	unsigned long mmap_end_addr;
 
-	bool file_open;							/**< True if file is open, used to process the file_desc (or throw it away) in read/write threads */
+	bool file_activate;							/**< True if file is open, used to process the file_desc (or throw it away) in read/write threads */
 
 	size_t dma_size;				/**< The size of allocated DMA buffer */
 	loff_t file_size;	/**< This is the size of the axi_streaming FIFO for streaming peripherals or size of ram for memory peripherals */
@@ -604,6 +604,13 @@ size_t axi_stream_fifo_read_direct(struct file_desc * file_desc, size_t count, c
  * @brief This function initializes the AXI Streaming FIFO.
  * @param file_desc The struct containing all the file variables.
 */
+
+/**
+ * This function sets the initial values for the ring buffer
+ *
+ */
+void ring_buffer_init(struct file_desc * file_desc);
+
 int axi_stream_fifo_init(struct file_desc * file_desc);
 /**
  * @brief This function deinitializes the AXI Streaming FIFO.

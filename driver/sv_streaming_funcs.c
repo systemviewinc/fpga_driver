@@ -78,7 +78,7 @@
  			//read a file_desc out of the fifo
  			sz = kfifo_out(read_fifo, &file_desc, 1);
 
- 			if(sz == 1 && file_desc->file_open) {
+ 			if(sz == 1 && file_desc->file_activate) {
  				verbose_read_thread_printk(KERN_INFO"[read_thread]: kfifo_out returned non-zero\n");
  				atomic_dec(file_desc->in_read_fifo_count);
 
@@ -107,7 +107,7 @@
  						//write the file_desc back in if the fifo is not full and it isn't already in the fifo
 						 verbose_read_thread_printk(KERN_INFO"[read_thread]: read incomplete: %d\n", read_incomplete);
 
- 						if(!kfifo_is_full(read_fifo) && file_desc->file_open) {
+ 						if(!kfifo_is_full(read_fifo) && file_desc->file_activate) {
  							atomic_inc(file_desc->in_read_fifo_count);
  							kfifo_in_spinlocked(read_fifo, &file_desc, 1, &file_desc->svd->fifo_lock_read);
  						} else {
@@ -119,12 +119,12 @@
 
  						d2r = 0;
 
- 					} else if(file_desc->file_open && is_packet_full_interrupt(file_desc)){
+ 					} else if(file_desc->file_activate && is_packet_full_interrupt(file_desc)){
 						clear_fifo_isr(file_desc);
 						d2r = 0;
  						verbose_read_thread_printk(KERN_INFO"[read_thread]: file is closed: %d d2r: %d\n", file_desc->minor, d2r);
 					}
-					else if(file_desc->file_open){
+					else if(file_desc->file_activate){
  						//read more data if the file is open
  						d2r = axi_stream_fifo_d2r(file_desc);
 						 //if we have read all the data from the fifo (only true if d2r is zero from d2r function)
@@ -138,7 +138,7 @@
  				}
             	clear_fifo_isr(file_desc);
  				verbose_read_thread_printk(KERN_INFO"[read_thread]: No more data to read.....\n");
- 			} else if(sz == 1 && !file_desc->file_open) {
+ 			} else if(sz == 1 && !file_desc->file_activate) {
  				verbose_read_thread_printk(KERN_INFO"[read_thread]: file is not open\n");
  				atomic_dec(file_desc->in_read_fifo_count);
  			} else {
@@ -181,7 +181,7 @@
  			//read a file_desc out of the fifo
  			sz = kfifo_out(write_fifo, &file_desc, 1);
 
- 			if(sz == 1 && file_desc->file_open) {
+ 			if(sz == 1 && file_desc->file_activate) {
  				atomic_dec(file_desc->in_write_fifo_count);
  				verbose_write_thread_printk(KERN_INFO"[write_thread]: kfifo_out returned non-zero\n");
 
@@ -209,7 +209,7 @@
 						 verbose_write_thread_printk(KERN_INFO"[write_thread]: write incomplete: %d\n", write_incomplete);
 
  						//write the file_desc back in if the fifo is not full and it isn't already in the fifo
- 						if(!kfifo_is_full(write_fifo) && file_desc->file_open) {
+ 						if(!kfifo_is_full(write_fifo) && file_desc->file_activate) {
  							atomic_inc(file_desc->in_write_fifo_count);
  							kfifo_in_spinlocked(write_fifo, &file_desc, 1, &svd->fifo_lock_write);
  						}
@@ -220,7 +220,7 @@
 						 wait_event_interruptible_timeout(svd->thread_q_head_write, atomic_read(&svd->thread_q_write) == 1 || kthread_should_stop(), msecs_to_jiffies(1000) );
 
 
- 					} else if(file_desc->file_open) {
+ 					} else if(file_desc->file_activate) {
  						//if write was complete and file is open write more data!
  						//Check if there is any data to be written
  						wth = atomic_read(file_desc->wth);
@@ -235,7 +235,7 @@
  					}
  				}
  				verbose_write_thread_printk(KERN_INFO"[write_thread]: No more data to write.....\n");
- 			} else if(sz == 1 && !file_desc->file_open) {
+ 			} else if(sz == 1 && !file_desc->file_activate) {
  				verbose_write_thread_printk(KERN_INFO"[write_thread]: file is not open!\n");
  				atomic_dec(file_desc->in_write_fifo_count);
  			} else {
@@ -741,6 +741,26 @@ size_t axi_stream_fifo_read_direct(struct file_desc * file_desc, size_t count, c
 	return count;
 }
 
+/**
+ * This function sets the initial values for the ring buffer
+ *
+ */
+void ring_buffer_init(struct file_desc * file_desc)
+{
+    verbose_printk(KERN_INFO"[pci_%x_ioctl]: Initializing the FIFO and setting registers\n", file_desc->minor);
+    /*set the ring buff full*/
+    atomic_set(file_desc->write_ring_buf_full, 0);
+    atomic_set(file_desc->read_ring_buf_full, 0);
+    atomic_set(file_desc->write_ring_buf_locked, 0);
+    atomic_set(file_desc->read_ring_buf_locked, 0);
+    /*set the pointer defaults*/
+    verbose_printk(KERN_INFO"[pci_%x_ioctl]: read ring_buffer: RFU : %d RFH %d\n", file_desc->minor, 0, 0);
+    atomic_set(file_desc->wtk, 0);
+    atomic_set(file_desc->wtk, 0);
+    verbose_printk(KERN_INFO"[pci_%x_ioctl]: write ring_buffer: WTH: %d WTK: %d\n", file_desc->minor, 0, 0);
+    atomic_set(file_desc->rfh, 0);
+    atomic_set(file_desc->rfu, 0);
+}
 
 /**
  * This function performs calls appropriate functions for writing to the AXI Streaming FIFO.
@@ -754,6 +774,12 @@ int axi_stream_fifo_init(struct file_desc * file_desc)
 	u64 axi_dest;
 	u32 buf, read_reg;
 	u32 fifo_empty_level;
+
+    if((file_desc->axi_addr == -1) | (file_desc->axi_addr_ctl == -1)) {
+        printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR: axi addresses of AXI STREAM FIFO not set\n", file_desc->minor);
+        printk(KERN_INFO"[pci_%x_ioctl]: \tset the AXI addresses then set mode again\n", file_desc->minor);
+        return ERROR;
+    }
 
 	//reset The transmit side
 	axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_TDFR;
@@ -865,9 +891,6 @@ int axi_stream_fifo_deinit(struct file_desc * file_desc)
 {
 	u64 axi_dest;
 	u32 buf;
-
-	//debugging
-
 	//READ ISR
 	axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_ISR;
 	if( direct_read(axi_dest, (void*)(&buf), 4, NORMAL_WRITE) ) {
@@ -1043,7 +1066,7 @@ int copy_to_ring_buffer(struct file_desc * file_desc, void* buf, size_t count, v
 	full = atomic_read(file_desc->write_ring_buf_full);
 
 	//we are going to write the whole count + header
-	if( (count + dma_byte_width + 2*sizeof(count)) > room_in_buffer(wtk, wth, full, file_desc->dma_size) && file_desc->file_open ) {
+	if( (count + dma_byte_width + 2*sizeof(count)) > room_in_buffer(wtk, wth, full, file_desc->dma_size) && file_desc->file_activate ) {
 		 return 0;
 	}
 

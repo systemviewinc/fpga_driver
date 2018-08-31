@@ -1073,7 +1073,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 				verbose_isr_printk(KERN_INFO"[pci_isr]: this interrupt is from a streaming peripheral\n");
 				clear_fifo_isr(irq_file);
 				//Put streaming types into the kfifo for read thread
-				if(atomic_read(irq_file->in_read_fifo_count) == 0 && irq_file->file_open) {
+				if(atomic_read(irq_file->in_read_fifo_count) == 0 && irq_file->file_activate) {
 					//debug message
 					if(kfifo_len(&irq_file->svd->read_fifo) > 4) {
 						verbose_isr_printk(KERN_INFO"[pci_isr]: kfifo stored elements: %d\n", kfifo_len(&irq_file->svd->read_fifo));
@@ -1088,7 +1088,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 						verbose_isr_printk(KERN_INFO"[pci_isr]: kfifo is full, not writing mod desc\n");
 					}
 				}
-				else if(!irq_file->file_open) {
+				else if(!irq_file->file_activate) {
 					verbose_isr_printk(KERN_INFO"[pci_isr]: file is closed, not writing file_desc\n");
 				}
 				else {
@@ -1268,7 +1268,7 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->tx_dest = 0x2;
 	s->rx_dest = 0x0;
 
-	s->file_open = true;
+	s->file_activate = false;
 
 	s->xdma_dev = lro_global;
 
@@ -1302,7 +1302,7 @@ int pci_release(struct inode *inode, struct file *filep)
 	}
 
 
-	file_desc->file_open = false;
+	file_desc->file_activate = false;
 
 
 	//reset ring_buffers incase anything was help up on them being too full
@@ -1390,7 +1390,6 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 {
 	void __user *argp = (void __user *)arg;
 	struct file_desc *file_desc;
-	static int master_count = 0;
 	u32 bit_vec;
 	u64 arg_loc;
 	//	u32 kern_reg;
@@ -1429,8 +1428,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 				printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR direct_read\n", minor);
 				return ERROR;
 			}
-
-		break;
+			break;
 
 		case READ_REG:
 			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Reading data at offset:%08llx\n", minor, arg_loc);
@@ -1438,8 +1436,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 				printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR direct_read\n", minor);
 				return ERROR;
 			}
-
-		break;
+			break;
 
 		case SET_AXI_DEVICE:
 			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting Peripheral AXI Address: 0x%llx\n", minor, arg_loc);
@@ -1455,7 +1452,6 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			//			cdma_init(arg_loc);
 			break;
 
-
 		case SET_AXI_PCIE_CTL:
 			//			pcie_ctl_init(arg_loc);
 			break;
@@ -1464,8 +1460,8 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			//			pcie_m_init(arg_loc);
 			break;
 
-			/*This is the Interrupt controller that will MUX in all interrupts from axi masters and produce
-			 *one interrupt output to the the PCIe controller. This is because we want to use one msi vector. */
+		//This is the Interrupt controller that will MUX in all interrupts from axi masters and produce
+		//one interrupt output to the the PCIe controller. This is because we want to use one msi vector.
 		case SET_AXI_INT_CTRL:
 			//			axi_intc_init(arg_loc);
 			break;
@@ -1475,7 +1471,6 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 				printk(KERN_INFO"[pci_%x_ioctl]: \t!!!!set dma FAILURE!!!!.\n", minor);
 				return ERROR;
 			}
-
 			break;
 
 		case RESET_DMA_ALLOC:
@@ -1492,7 +1487,6 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			interrupt_num = vec2num((u32)arg_loc);
 			file_desc->int_num = interrupt_num;
 			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Interrupt Number:%d\n", minor, interrupt_num);
-
 			file_desc_arr[interrupt_num] = file_desc;
 
 			break;
@@ -1516,7 +1510,6 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 				return ERROR;
 			}
 			break;
-
 
 		case SET_CDMA_KEYHOLE_WRITE:
 			bit_vec = 0x00000020;	//the bit for KEYHOLE WRITE
@@ -1634,65 +1627,52 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		case SET_MODE:
 			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral\n", minor);
 			file_desc->mode = (u32)arg_loc;
-
 			switch(file_desc->mode){
-
 				case SLAVE:
-					printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to SLAVE\n", minor);
+					verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to SLAVE\n", minor);
 					break;
-
 				case MASTER:
-					printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to MASTER\n", minor);
-					/*write master_count as master_num to file descriptor to use in referencing its memory address*/
-					file_desc->master_num = master_count;
+					verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to MASTER\n", minor);
 					break;
 				case CONTROL:
-					printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to CONTROL\n", minor);
-					/*write master_count as master_num to file descriptor to use in referencing its memory address*/
+					verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to CONTROL\n", minor);
 					break;
-
 				case AXI_STREAM_PACKET :
 				case AXI_STREAM_FIFO :
-					printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to AXI_STREAM_FIFO\n", minor);
-
-					/*Initialize the AXI_STREAM_FIFO*/
-					/*for now we will initialize all as interrupting for read*/
-					//					/*check to see if the AXI addresses have been set*/
-					if((file_desc->axi_addr == -1) | (file_desc->axi_addr_ctl == -1)) {
-						printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR: axi addresses of AXI STREAM FIFO not set\n", minor);
-						printk(KERN_INFO"[pci_%x_ioctl]: \tset the AXI addresses then set mode again\n", minor);
-						return ERROR;
-					} else {
-						verbose_printk(KERN_INFO"[pci_%x_ioctl]: Initializing the FIFO and setting registers\n", minor);
-						/*set the ring buff full*/
-						atomic_set(file_desc->write_ring_buf_full, 0);
-						atomic_set(file_desc->read_ring_buf_full, 0);
-						atomic_set(file_desc->write_ring_buf_locked, 0);
-						atomic_set(file_desc->read_ring_buf_locked, 0);
-						/*set the pointer defaults*/
-						verbose_printk(KERN_INFO"[pci_%x_ioctl]: read ring_buffer: RFU : %d RFH %d\n", minor, 0, 0);
-						atomic_set(file_desc->wtk, 0);
-						atomic_set(file_desc->wtk, 0);
-						verbose_printk(KERN_INFO"[pci_%x_ioctl]: write ring_buffer: WTH: %d WTK: %d\n", minor, 0, 0);
-						atomic_set(file_desc->rfh, 0);
-						atomic_set(file_desc->rfu, 0);
-
-						if( axi_stream_fifo_init(file_desc) ) {
-							return ERROR;
-						}
-
-					}
+					verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to AXI_STREAM_FIFO\n", minor);
 					break;
+				default:
+					verbose_printk(KERN_INFO"[pci_%x_ioctl]: ERROR unkown mode type %i\n", minor, file_desc->mode);
+				}
+			break;
 
+
+		//
 		case FILE_ACTIVATE:
 			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Activate file!\n", minor);
-		break;
+			file_desc->file_activate = true;
+			//run init step that can only be ran while the file is active
+			switch(file_desc->mode){
+				case AXI_STREAM_PACKET :
+				case AXI_STREAM_FIFO :
+					verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to AXI_STREAM_FIFO\n", minor);
+					//Initialize the ring buffer and AXI_STREAM_FIFO
+					ring_buffer_init(file_desc);
+					if( axi_stream_fifo_init(file_desc) ) {
+						printk(KERN_INFO"[pci_%x_ioctl]: axi_stream_fifo_init failed!\n", minor);
+						return ERROR;
+					}
+					break;
+				}
+			break;
 
 		case FILE_DEACTIVATE:
 			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Deactivate file!\n", minor);
+			file_desc->file_activate = false;
 		break;
 
-		default:printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR, no command found.\n", minor);
+		default:
+			printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR, no command found.\n", minor);
 	}
 	return 0;
 }
@@ -1850,7 +1830,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 		case AXI_STREAM_FIFO :
 		case AXI_STREAM_PACKET :
 			/*Stay until requested transmission is complete*/
-			while (bytes_written < count && file_desc->file_open) {
+			while (bytes_written < count && file_desc->file_activate) {
 
 				if(count > file_desc->dma_size) {
 					printk(KERN_INFO"[pci_%x_write]: count > dma_size \n", minor);
@@ -1879,7 +1859,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 						verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: kfifo write stored elements: %d\n", minor, kfifo_len(&file_desc->svd->write_fifo));
 					}
 
-					if(!kfifo_is_full(&file_desc->svd->write_fifo) && file_desc->file_open) {
+					if(!kfifo_is_full(&file_desc->svd->write_fifo) && file_desc->file_activate) {
 						atomic_inc(file_desc->in_write_fifo_count);
 						kfifo_in_spinlocked(&file_desc->svd->write_fifo, &file_desc, 1, &file_desc->svd->fifo_lock_write);
 					}
@@ -2420,7 +2400,6 @@ int pci_mmap(struct file *filep, struct vm_area_struct *vma) {
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \t\tmmap length : 0x%zx\n", minor, length);
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \t\tmmap address : 0x%lx\n", minor, vma->vm_start);
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \t\tmmap end address : 0x%lx\n", minor, vma->vm_end);
-
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: ************************************************************************\n", minor);
 
 	return ret;
