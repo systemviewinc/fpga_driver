@@ -122,24 +122,27 @@
 #define SET_AXI_INT_CTRL 54 /**< IOCTL Magic Number */
 #define SET_AXI_DEV_SI 55	/**< IOCTL Magic Number */
 #define SET_AXI_DEV_M 56	/**< IOCTL Magic Number */
-#define CLEAR_AXI_INTERRUPT_CTLR 60	/**< IOCTL Magic Number */
 #define SET_CDMA_KEYHOLE_WRITE 58	/**< IOCTL Magic Number */
 #define SET_CDMA_KEYHOLE_READ 59	/**< IOCTL Magic Number */
-#define SET_MODE 62			/**< IOCTL Magic Number */
+#define CLEAR_AXI_INTERRUPT_CTLR 60	/**< IOCTL Magic Number */
 #define SET_INTERRUPT 61	/**< IOCTL Magic Number */
+#define SET_MODE 62			/**< IOCTL Magic Number */
 #define SET_AXI_CTL_DEVICE 63		/**< IOCTL Magic Number */
 #define SET_DMA_SIZE 64		/**< IOCTL Magic Number */
 #define RESET_DMA_ALLOC 65	/**< IOCTL Magic Number */
 #define SET_FILE_SIZE 66	/**< IOCTL Magic Number */
 #define GET_FILE_STATISTICS 67		/**< IOCTL Magic Number */
-#define GET_DRIVER_STATISTICS 70	/**< IOCTL Magic Number */
 #define START_FILE_TIMER 68	/**< IOCTL Magic Number */
 #define STOP_FILE_TIMER 69	/**< IOCTL Magic Number */
+#define GET_DRIVER_STATISTICS 70	/**< IOCTL Magic Number */
 #define START_DRIVER_TIMER 71		/**< IOCTL Magic Number */
 #define STOP_DRIVER_TIMER 72		/**< IOCTL Magic Number */
 
 #define WRITE_REG 73		/**< IOCTL Magic Number */
 #define READ_REG 74		/**< IOCTL Magic Number */
+
+#define FILE_ACTIVATE 75		/**< IOCTL Magic Number */
+#define FILE_DEACTIVATE 76		/**< IOCTL Magic Number */
 
 #define ERROR	-1
 #define SUCCESS 0
