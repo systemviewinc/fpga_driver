@@ -55,6 +55,7 @@ int pcie_bar_num; /**< The number of elements in pcie_ctl_address (or max value)
 ulong pcie_ctl_address = -1; /**< The number of elements in pcie_ctl_address (or max value)*/
 ulong pcie_bar_address[BAR_MAX_NUM] = {-1};/**< Insmod Parameter - The AXI Address of the PCIe Control regs*/
 uint int_ctlr_address = -1;/**< Insmod Parameter - AXI Address of Interrupt Controller*/
+uint lod_ctlr_address = -1;/**< Insmod Parameter - AXI Address of lod of demand Controller*/
 int driver_type = PCI;/**< Insmod Parameter - Driver typem either PCIe or Platform*/
 int dma_system_size = 4194304;/**< Insmod Parameter - Size of DMA Allocation, max and default is 4MB*/
 int dma_file_size = 4096;/**< Insmod Parameter - Currently not used, the HW buffer size is now set on a file by file basis.*/
@@ -85,6 +86,9 @@ MODULE_PARM_DESC(pcie_ctl_address, "PCIeCTLAddress");/**< Insmod Parameter */
 
 module_param(int_ctlr_address, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
 MODULE_PARM_DESC(int_ctlr_address, "IntCtlrAddress");/**< Insmod Parameter */
+
+module_param(lod_ctlr_address, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
+MODULE_PARM_DESC(lod_ctlr_address, "LodCtlrAddress");/**< Insmod Parameter */
 
 module_param(driver_type, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
 MODULE_PARM_DESC(driver_type, "DriverType");/**< Insmod Parameter */
@@ -284,6 +288,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	}
 	verbose_printk(KERN_INFO"[probe:%s]: pcie_ctl_address: 0x%lx \n", pci_name, pcie_ctl_address);
 	verbose_printk(KERN_INFO"[probe:%s]: int_ctlr_address: 0x%x \n", pci_name, int_ctlr_address);
+	verbose_printk(KERN_INFO"[probe:%s]: lod_ctlr_address: 0x%x \n", pci_name, lod_ctlr_address);
 	verbose_printk(KERN_INFO"[probe:%s]: driver_type: 0x%x \n", pci_name, driver_type);
 	verbose_printk(KERN_INFO"[probe:%s]: dma_system_size: %d \n", pci_name, dma_system_size);
 	verbose_printk(KERN_INFO"[probe:%s]: dma_file_size: %d \n", pci_name, dma_file_size);
@@ -559,6 +564,14 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		int_ctrl_set = 1;
 	}
 
+	if(lod_ctlr_address != -1) {
+		axi_lodc_init(svd_global, lod_ctlr_address);
+		int_ctrl_set = 1;
+	}
+	else{
+
+	}
+
 	for(i = 0; i < cdma_count; i++){
 		verbose_printk(KERN_INFO"[probe:%s]: cdma_set[%d] = 0x%x\n", pci_name, i, svd_global->cdma_set[i]);
 		svd_global->cdma_capable += (svd_global->cdma_set[i] & int_ctrl_set);
@@ -628,6 +641,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 	}
 	verbose_printk(KERN_INFO"[probe:%s]: pcie_ctl_address: 0x%lx \n", plat_name, pcie_ctl_address);
 	verbose_printk(KERN_INFO"[probe:%s]: int_ctlr_address: 0x%x \n", plat_name, int_ctlr_address);
+	verbose_printk(KERN_INFO"[probe:%s]: lod_ctlr_address: 0x%x \n", plat_name, lod_ctlr_address);
 	verbose_printk(KERN_INFO"[probe:%s]: driver_type: 0x%x \n", plat_name, driver_type);
 	verbose_printk(KERN_INFO"[probe:%s]: dma_system_size: %d \n", plat_name, dma_system_size);
 	verbose_printk(KERN_INFO"[probe:%s]: dma_file_size: %d \n", plat_name, dma_file_size);
@@ -740,9 +754,6 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 	int_ctrl_set = 0;
 
-	// these addresses should alayws be in the 32 bit range
-	//int_ctlr_address &= 0xFFFFFFFF;
-
 	for( i = 0; i < cdma_count; i++){
 		cdma_address[i]	&= 0xFFFFFFFF;
 		if(cdma_address[i] != -1) {
@@ -764,9 +775,13 @@ static int sv_plat_probe(struct platform_device *pdev)
 	}
 	printk(KERN_INFO"[test]: post request IRQ \n");
 
-	printk(KERN_INFO"[test]: axi_intc_init 0x%08x\n", int_ctlr_address);
 	if(int_ctlr_address != -1) {
 		axi_intc_init(svd_global, int_ctlr_address);
+		int_ctrl_set = 1;
+	}
+
+	if(lod_ctlr_address != -1) {
+		axi_lodc_init(svd_global, lod_ctlr_address);
 		int_ctrl_set = 1;
 	}
 
@@ -1011,7 +1026,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 	verbose_isr_printk(KERN_INFO"[pci_isr]: Entered the ISR (0x%x)\n", svd_global->axi_intc_addr);
 	//	tasklet_schedule(&isr_tasklet);
-	if(svd_global-> interrupt_set == 0){
+	if(svd_global->interrupt_set == 0){
 		if(svd_global->axi_intc_addr == -1) {
 			printk(KERN_INFO"[pci_isr]: ERROR: returning early ISR (%x)\n", svd_global->axi_intc_addr);
 			// controller not intialized yet
@@ -1026,7 +1041,7 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 			status = 0xFFFFFFFF;
 			axi_dest = svd_global->axi_intc_addr + INT_CTRL_IAR;
 			if( direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
-				printk(KERN_INFO"[axi_intc_init]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
+				printk(KERN_INFO"[pci_isr]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
 				return IRQ_NONE;
 			}
 			return IRQ_HANDLED;
@@ -1268,7 +1283,10 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->tx_dest = 0x2;
 	s->rx_dest = 0x0;
 
-	s->file_activate = false;
+	if(svd_global->lod_set)
+		s->file_activate = false;
+	else
+		s->file_activate = true;
 
 	s->xdma_dev = lro_global;
 
@@ -1301,9 +1319,7 @@ int pci_release(struct inode *inode, struct file *filep)
 		axi_stream_fifo_deinit(file_desc);
 	}
 
-
 	file_desc->file_activate = false;
-
 
 	//reset ring_buffers incase anything was help up on them being too full
 	atomic_set(file_desc->rfh, 0);
@@ -1650,7 +1666,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		//
 		case FILE_ACTIVATE:
 			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Activate file!\n", minor);
-			file_desc->file_activate = true;
+			axi_lodc_activate(file_desc);
 			//run init step that can only be ran while the file is active
 			switch(file_desc->mode){
 				case AXI_STREAM_PACKET :
@@ -1668,7 +1684,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 		case FILE_DEACTIVATE:
 			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Deactivate file!\n", minor);
-			file_desc->file_activate = false;
+			axi_lodc_deactivate(file_desc);
 		break;
 
 		default:

@@ -306,6 +306,8 @@ struct sv_mod_dev {
 	u64 dma_buffer_size; /**< Default value for size of DMA Allocation, Max is 4MB, this is set through insmod */
 
 	uint axi_intc_addr; /**< Global Variable that stores the Interrupt Controller AXI Address */
+	uint axi_lodc_addr; /**< Global Variable that stores the LOD Controller AXI Address */
+
 	u64 axi_pcie_m; /**< Global Variable that stores the data transport IP Slave AXI Address as seen from the CDMA*/
 	u8 cdma_set[CDMA_MAX_NUM]; /**< Global variable that stores which CDMAs have been initialized. (currently only using 2 CDMAs) */
 
@@ -327,6 +329,7 @@ struct sv_mod_dev {
 
 	atomic_t sw_interrupt_rx; /**< Global Atomic Variable for Driver Statistics */
 	bool interrupt_set;
+	bool lod_set;
 
 	/*These are the interrupt and mutex wait variables */
 	wait_queue_head_t pci_write_head; /**< The Wait Queue for the blocking/sleeping pci_write function */
@@ -575,6 +578,29 @@ int pcie_ctl_init(u64 axi_address, u64 dma_addr_base);
 */
 void axi_intc_init(struct sv_mod_dev *svd, uint axi_address);
 
+/**
+ * @brief This function initialized the load on demand controller in the FPGA.
+ * @param axi_address The 64b AXI address of the LOD Controller (set through insmod).
+*/
+void axi_lodc_init(struct sv_mod_dev *svd, uint axi_address);
+
+/**
+ * @brief This function activates the load on demand controller for a secion in the FPGA.
+ * @param axi_address The 64b AXI address of the LOD Controller (set through insmod).
+*/
+void axi_lodc_activate(struct file_desc * file_desc);
+
+/**
+* @brief This function deactivates the load on demand controller for a secion in the FPGA.
+ * @param axi_address The 64b AXI address of the LOD Controller (set through insmod).
+*/
+void axi_lodc_deactivate(struct file_desc * file_desc);
+
+
+/**
+ * @brief This function deinitialized the interrupt controller in the FPGA.
+ * @param axi_address The 64b AXI address of the Interrupt Controller (set through insmod).
+*/
 void axi_intc_deinit(struct sv_mod_dev *svd);
 
 /**

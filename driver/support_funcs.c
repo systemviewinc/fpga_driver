@@ -505,6 +505,64 @@ int dma_file_deinit(struct file_desc *file_desc, size_t dma_size) {
 
 }
 
+/**
+ * @brief This function initialized the interrupt controller in the FPGA.
+ * @param axi_address The 64b AXI address of the Interrupt Controller (set through insmod).
+ */
+void axi_lodc_init(struct sv_mod_dev *svd, uint axi_address)
+{
+	u32 status;
+	u64 axi_dest;
+
+	printk(KERN_INFO"[axi_lodc_init]: Setting Load on demand Controller Axi Address to 0x%08x\n", axi_address);
+	svd->axi_lodc_addr = axi_address;
+
+	//write all 1s to the output to deactiave all regions
+	status = 0xFFFFFFFF;               ///to-do add multiple sections
+	axi_dest = svd->axi_lodc_addr + 0;
+	if( direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
+		printk(KERN_INFO"[axi_lodc_init]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
+		return;
+	}
+
+	svd->lod_set = true;
+}
+
+void axi_lodc_activate(struct file_desc * file_desc)
+{
+   u32 status;
+   u64 axi_dest;
+
+   printk(KERN_INFO"[axi_lodc_init]: Setting Load on demand Controller to activate\n");
+
+   //write all 1s to the output to deactiave all regions
+   status = 0x000000;               //to-do add multiple sections
+   axi_dest = svd_global->axi_lodc_addr + 0;
+   if( direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
+       printk(KERN_INFO"[axi_lodc_init]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
+       return;
+   }
+   file_desc->file_activate = true;
+}
+
+void axi_lodc_deactivate(struct file_desc * file_desc)
+{
+   u32 status;
+   u64 axi_dest;
+
+   printk(KERN_INFO"[axi_lodc_init]: Setting Load on demand Controller to deactivate\n");
+
+   //write all 1s to the output to deactiave all regions
+   status = 0xFFFFFFFF;
+   axi_dest = svd_global->axi_lodc_addr + 0;
+   if( direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
+       printk(KERN_INFO"[axi_lodc_init]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
+       return;
+   }
+   file_desc->file_activate = false;
+}
+
+
 void axi_intc_deinit(struct sv_mod_dev *svd)
 {
 	u32 status;
@@ -1423,6 +1481,7 @@ struct sv_mod_dev *alloc_sv_dev_instance(u64 dma_size)
 	sv_dev->bars = NULL;
 	atomic_set(&sv_dev->sw_interrupt_rx, 0);
 	sv_dev->interrupt_set = false;
+    sv_dev->lod_set = false;
 
 	init_waitqueue_head(&sv_dev->thread_q_head_write);
 	init_waitqueue_head(&sv_dev->thread_q_head_read);
