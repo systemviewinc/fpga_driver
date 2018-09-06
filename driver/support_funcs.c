@@ -533,13 +533,13 @@ void axi_lodc_activate(struct file_desc * file_desc)
    u32 status;
    u64 axi_dest;
 
-   printk(KERN_INFO"[axi_lodc_init]: Setting Load on demand Controller to activate\n");
+   printk(KERN_INFO"[axi_lodc_activate]: Setting Load on demand Controller to activate\n");
 
    //write all 1s to the output to deactiave all regions
    status = 0x000000;               //to-do add multiple sections
    axi_dest = svd_global->axi_lodc_addr + 0;
    if( direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
-       printk(KERN_INFO"[axi_lodc_init]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
+       printk(KERN_INFO"[axi_lodc_activate]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
        return;
    }
    file_desc->file_activate = true;
@@ -550,13 +550,13 @@ void axi_lodc_deactivate(struct file_desc * file_desc)
    u32 status;
    u64 axi_dest;
 
-   printk(KERN_INFO"[axi_lodc_init]: Setting Load on demand Controller to deactivate\n");
+   printk(KERN_INFO"[axi_lodc_deactivate]: Setting Load on demand Controller to deactivate\n");
 
    //write all 1s to the output to deactiave all regions
    status = 0xFFFFFFFF;
    axi_dest = svd_global->axi_lodc_addr + 0;
    if( direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
-       printk(KERN_INFO"[axi_lodc_init]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
+       printk(KERN_INFO"[axi_lodc_deactivate]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
        return;
    }
    file_desc->file_activate = false;

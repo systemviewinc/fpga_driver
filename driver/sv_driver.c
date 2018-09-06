@@ -1656,6 +1656,16 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 				case AXI_STREAM_PACKET :
 				case AXI_STREAM_FIFO :
 					verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to AXI_STREAM_FIFO\n", minor);
+					//setup init here if there is no LOD
+					if(!svd_global->lod_set){
+						verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to AXI_STREAM_FIFO\n", minor);
+						//Initialize the ring buffer and AXI_STREAM_FIFO
+						ring_buffer_init(file_desc);
+						if( axi_stream_fifo_init(file_desc) ) {
+							printk(KERN_INFO"[pci_%x_ioctl]: axi_stream_fifo_init failed!\n", minor);
+							return ERROR;
+						}
+					}
 					break;
 				default:
 					verbose_printk(KERN_INFO"[pci_%x_ioctl]: ERROR unkown mode type %i\n", minor, file_desc->mode);
@@ -1665,26 +1675,36 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 		//
 		case FILE_ACTIVATE:
-			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Activate file!\n", minor);
-			axi_lodc_activate(file_desc);
-			//run init step that can only be ran while the file is active
-			switch(file_desc->mode){
-				case AXI_STREAM_PACKET :
-				case AXI_STREAM_FIFO :
-					verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to AXI_STREAM_FIFO\n", minor);
-					//Initialize the ring buffer and AXI_STREAM_FIFO
-					ring_buffer_init(file_desc);
-					if( axi_stream_fifo_init(file_desc) ) {
-						printk(KERN_INFO"[pci_%x_ioctl]: axi_stream_fifo_init failed!\n", minor);
-						return ERROR;
+			if(svd_global->lod_set) {
+				verbose_printk(KERN_INFO"[pci_%x_ioctl]: Activate file!\n", minor);
+				axi_lodc_activate(file_desc);
+				//run init step that can only be ran while the file is active
+				switch(file_desc->mode){
+					case AXI_STREAM_PACKET :
+					case AXI_STREAM_FIFO :
+						verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to AXI_STREAM_FIFO\n", minor);
+						//Initialize the ring buffer and AXI_STREAM_FIFO
+						ring_buffer_init(file_desc);
+						if( axi_stream_fifo_init(file_desc) ) {
+							printk(KERN_INFO"[pci_%x_ioctl]: axi_stream_fifo_init failed!\n", minor);
+							return ERROR;
+						}
+						break;
 					}
-					break;
 				}
+			else{
+				verbose_printk(KERN_INFO"[pci_%x_ioctl]: LOD not set, IOCTL not valid!\n", minor);
+			}
 			break;
 
 		case FILE_DEACTIVATE:
-			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Deactivate file!\n", minor);
-			axi_lodc_deactivate(file_desc);
+			if(svd_global->lod_set) {
+				verbose_printk(KERN_INFO"[pci_%x_ioctl]: Deactivate file!\n", minor);
+				axi_lodc_deactivate(file_desc);
+			}
+			else{
+				verbose_printk(KERN_INFO"[pci_%x_ioctl]: LOD not set, IOCTL not valid!\n", minor);
+			}
 		break;
 
 		default:
