@@ -1801,6 +1801,11 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: WRITE file struct offset: %llx\n", minor, filep->f_pos);
 	verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: WRITE offset param: %llx\n", minor, *f_pos);
 
+	if(!file_desc->file_activate){
+		printk(KERN_INFO"[pci_%x_write]: File is not activate cannot write !\n", minor);
+		return 0;
+	}
+
 	if(count == 0) {
 		printk(KERN_INFO"[pci_%x_write]: !!!!!!!!ERROR count == 0 !\n", minor);
 		return ERROR;
@@ -2077,8 +2082,13 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: Read file struct offset: %llx\n", minor, filep->f_pos);
 	verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: Read offset param: %llx , count requested %zd\n", minor, *f_pos, count);
 
+	if(!file_desc->file_activate){
+		printk(KERN_INFO"[pci_%x_read]: File is not activate cannot x_read !\n", minor);
+		return 0;
+	}
+
 	if(count == 0) {
-	 printk(KERN_INFO"[pci_%x_read]: !!!!!!!!ERROR got invalid read count %zu\n", minor, count);
+	 	printk(KERN_INFO"[pci_%x_read]: !!!!!!!!ERROR got invalid read count %zu\n", minor, count);
 		return EINVAL;
 	}
 
