@@ -1684,13 +1684,17 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 					}
 					break;
 
+					default:printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR, improper mode type!\n", minor);
+				}
+			break;
+
 		case FILE_ACTIVATE:
 			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Activate file!\n", minor);
-		break;
+			break;
 
 		case FILE_DEACTIVATE:
 			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Deactivate file!\n", minor);
-		break;
+			break;
 
 		default:printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR, no command found.\n", minor);
 	}
