@@ -125,7 +125,6 @@ MODULE_PARM_DESC(pcie_use_xdma, "USE XDMA Instead of CDMA");/**< Insmod Paramete
 struct pci_dev * pci_dev_struct = NULL; /**<pci device struct */
 struct platform_device * platform_dev_struct = NULL; /**< Platform device struct (for zynq) */
 struct device *	dev_struct = NULL;
-
 char pci_driver_name[20]; //name of the device
 
 
@@ -769,7 +768,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 	* mapping is 1-1 and should be written directly to the returned DMA handle */
 
 	//request IRQ last
-	if(0 > request_irq(svd_global->irq_num, &pci_isr, IRQF_TRIGGER_RISING | IRQF_SHARED, plat_name, pdev)){
+	if(0 > request_irq(svd_global->irq_num, &pci_isr, IRQF_TRIGGER_HIGH | IRQF_SHARED, plat_name, pdev)){
 		printk(KERN_INFO"[probe:%s]: request IRQ error\n", plat_name);
 		goto free_alloc;
 	}
