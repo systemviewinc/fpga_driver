@@ -524,9 +524,29 @@ void axi_lodc_init(struct sv_mod_dev *svd, uint axi_address)
 		printk(KERN_INFO"[axi_lodc_init]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
 		return;
 	}
-
 	svd->lod_set = true;
 }
+
+/**
+ * This function performs calls appropriate functions for writing to the AXI Streaming FIFO.
+ * count The number of bytes to write to the AXI streaming FIFO.
+ * file_desc The struct containing all the file variables.
+ * ring_pointer_offset The current offset of the ring pointer in memory for data to write.
+ * return ERROR for error, 0 otherwise
+ */
+int hls_block_init(struct file_desc * file_desc)
+{
+  u32 slave_address = file_desc->svd->dma_addr_base + file_desc->dma_offset_read;    //address of the hw space buffer we are writing to
+	printk(KERN_INFO"[hls_block_init]: Setting HLS block slave address to to 0x%08x\n", slave_address);
+	if(direct_write(file_desc->axi_addr_ctl + HLS_SLAVE_ADDR, (void *)&slave_address, 4, NORMAL_WRITE) ) {
+		printk(KERN_INFO"[hls_block_init]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
+    return ERROR;
+	}
+	return 0;
+}
+
+
+
 
 void axi_lodc_activate(struct file_desc * file_desc)
 {

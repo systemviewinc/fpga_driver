@@ -270,6 +270,9 @@ extern struct xdma_dev *xdma_dev_s;
 #define INT_CTRL_MER		0x1c	 /**< Interrupt Controller Register Offset, see Xilinx doc. */
 #define INT_CTRL_ILR		0x24	 /**< Interrupt Controller Register Offset, see Xilinx doc. */
 
+/********************************* HLS Register Offsets ***********************************/
+#define HLS_SLAVE_ADDR		0x10	 /**< SLAVE address offset. */
+
 /********************************************************************************************/
 
 
@@ -585,21 +588,27 @@ void axi_intc_init(struct sv_mod_dev *svd, uint axi_address);
 void axi_lodc_init(struct sv_mod_dev *svd, uint axi_address);
 
 /**
- * @brief This function activates the load on demand controller for a secion in the FPGA.
- * @param axi_address The 64b AXI address of the LOD Controller (set through insmod).
+* @brief This function initialized a HLS block setup for NODMA
+* @param file_desc the struct containing all the file variables.
+*/
+int hls_block_init(struct file_desc * file_desc);
+
+/**
+* @brief This function activates the load on demand controller for a secion in the FPGA.
+* @param file_desc the struct containing all the file variables.
 */
 void axi_lodc_activate(struct file_desc * file_desc);
 
 /**
 * @brief This function deactivates the load on demand controller for a secion in the FPGA.
- * @param axi_address The 64b AXI address of the LOD Controller (set through insmod).
+* @param file_desc the struct containing all the file variables.
 */
 void axi_lodc_deactivate(struct file_desc * file_desc);
 
 
 /**
- * @brief This function deinitialized the interrupt controller in the FPGA.
- * @param axi_address The 64b AXI address of the Interrupt Controller (set through insmod).
+* @brief This function deinitialized the interrupt controller in the FPGA.
+* @param axi_address The 64b AXI address of the Interrupt Controller (set through insmod).
 */
 void axi_intc_deinit(struct sv_mod_dev *svd);
 

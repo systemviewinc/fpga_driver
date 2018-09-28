@@ -1649,6 +1649,13 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 					break;
 				case MASTER:
 					verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to MASTER\n", minor);
+                    if(!svd_global->lod_set){
+                        verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the HLS slave address\n", minor);
+                        if( hls_block_init(file_desc) ) {
+                          printk(KERN_INFO"[pci_%x_ioctl]: axi_stream_fifo_init failed!\n", minor);
+                          return ERROR;
+                        }
+                    }
 					break;
 				case CONTROL:
 					verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to CONTROL\n", minor);
@@ -1662,8 +1669,8 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 						//Initialize the ring buffer and AXI_STREAM_FIFO
 						ring_buffer_init(file_desc);
 						if( axi_stream_fifo_init(file_desc) ) {
-							printk(KERN_INFO"[pci_%x_ioctl]: axi_stream_fifo_init failed!\n", minor);
-							return ERROR;
+                            printk(KERN_INFO"[pci_%x_ioctl]: axi_stream_fifo_init failed!\n", minor);
+                            return ERROR;
 						}
 					}
 					break;
@@ -1680,6 +1687,13 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 				axi_lodc_activate(file_desc);
 				//run init step that can only be ran while the file is active
 				switch(file_desc->mode){
+                    case MASTER:
+                        verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the HLS slave address\n", minor);
+                        if( hls_block_init(file_desc) ) {
+                            printk(KERN_INFO"[pci_%x_ioctl]: axi_stream_fifo_init failed!\n", minor);
+                            return ERROR;
+                        }
+                    break;
 					case AXI_STREAM_PACKET :
 					case AXI_STREAM_FIFO :
 						verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to AXI_STREAM_FIFO\n", minor);
@@ -2445,6 +2459,7 @@ int pci_mmap(struct file *filep, struct vm_area_struct *vma) {
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: ******************************* MMAP END *******************************\n", minor);
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \t\tmmap length : 0x%zx\n", minor, length);
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \t\tmmap address : 0x%lx\n", minor, vma->vm_start);
+  verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \t\tmmap HW address : 0x%lx\n", minor, svd_global->dma_addr_base+file_desc->dma_offset_read);
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \t\tmmap end address : 0x%lx\n", minor, vma->vm_end);
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: ************************************************************************\n", minor);
 
