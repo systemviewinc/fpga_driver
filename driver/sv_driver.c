@@ -498,11 +498,10 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		printk(KERN_INFO"[probe:%s]: char driver not registered rc: 0x%x\n", pci_name, rc);
 		printk(KERN_INFO"[probe:%s]: char driver major number: %d\n", pci_name, major);
 		goto rmv_cdev;
-	}
-    else if(major == 0){
-        major = rc;
-        printk(KERN_INFO"[probe:%s]: char driver major number: %d\n", pci_name, major);
-    }
+	} else if(major == 0){
+                major = rc;
+                printk(KERN_INFO"[probe:%s]: char driver major number: %d\n", pci_name, major);
+        }
 
 	if(skel_get_revision(dev) == 0x42)
 		goto rmv_cdev;
@@ -622,12 +621,11 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 	verbose_printk(KERN_INFO"[probe:%s]: ******************************** PROBE PARAMETERS *****************************************\n", plat_name);
 	verbose_printk(KERN_INFO"[probe:%s]: device_id: 0x%x \n", plat_name, device_id);
-    if(major == 0) {
-        verbose_printk(KERN_INFO"[probe:%s]: major: dynamic \n", plat_name);
-    }
-    else {
-    	verbose_printk(KERN_INFO"[probe:%s]: major: %d \n", plat_name, major);
-    }
+        if(major == 0) {
+                verbose_printk(KERN_INFO"[probe:%s]: major: dynamic \n", plat_name);
+        } else {
+    	           verbose_printk(KERN_INFO"[probe:%s]: major: %d \n", plat_name, major);
+        }
 	if(cdma_count > CDMA_MAX_NUM) {
 		verbose_printk(KERN_INFO"[probe:%s]: given more CDMA address than max allowed, setting cdma_count to %d\n", plat_name, CDMA_MAX_NUM);
 		cdma_count = CDMA_MAX_NUM;
