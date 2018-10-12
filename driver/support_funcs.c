@@ -268,29 +268,36 @@ struct task_struct* create_thread_read(struct sv_mod_dev * svd) {
 	return kthread_heap;
 }
 
-
-
 /**
  * This function allocates the DMA regions for the peripheral.
  * file_desc the struct containing all the file variables.
  * dma_buffer_base the current DMA allocated region offset to be assigned
  * dma_buffer_size The size of the DMA buffer.
  */
-int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, size_t dma_size, int flags, int xdma) {
+int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, int xdma) {
 	int size;
 	unsigned long offset = 0;
-	int minor = file_desc->minor;
 
-	file_desc->dma_size = size = (size_t)PAGE_ALIGN(dma_size);
-	printk(KERN_INFO"[dma_%x_init]: Setting Peripheral DMA size:0x%zx\n", minor, file_desc->dma_size);
+  //in case we have streaming make the DMA big enough to contain everything we need
+  if(file_desc->mode == AXI_STREAM_FIFO || file_desc->mode == AXI_STREAM_PACKET){
+    file_desc->dma_size = size = (size_t)PAGE_ALIGN(file_desc->dma_size + 2 * sizeof(size_t) + dma_byte_width);
+    file_desc->max_dma_read_write = file_desc->dma_size - 2 * sizeof(size_t) - dma_byte_width;    //the max you can read/write in stream mode is the dma size - 2 headers (sizeof size_t)
+                                                                  //use this in pci read/write to determine if we can read/write and resize
+  }
+  else{
+    file_desc->dma_size = size = (size_t)PAGE_ALIGN(file_desc->dma_size);
+    file_desc->max_dma_read_write = file_desc->dma_size;
+  }
+  printk(KERN_INFO"[dma_%x_init]: Setting Peripheral DMA size:0x%zx\n", file_desc->minor, file_desc->dma_size);
+  printk(KERN_INFO"[dma_%x_init]: Max DMA read/write size:0x%zx\n", file_desc->minor, file_desc->max_dma_read_write);
 
 	//for xdma buffers also initialize a vmalloc_32 for the sg
 	if(xdma) {
-		if((flags & O_ACCMODE) == O_RDONLY){
-			verbose_printk(KERN_INFO"[dma_%x_init]: vmalloc for xdma read buffer.\n", minor);
+		if((file_desc->f_flags & O_ACCMODE) == O_RDONLY){
+			verbose_printk(KERN_INFO"[dma_%x_init]: vmalloc for xdma read buffer.\n", file_desc->minor);
 			file_desc->read_buffer = vmalloc_32(file_desc->dma_size);
 			if (!file_desc->read_buffer) {
-				printk(KERN_INFO"[dma_%x_init]: ERROR vmalloc for xdma read failed.\n", minor);
+				printk(KERN_INFO"[dma_%x_init]: ERROR vmalloc for xdma read failed.\n", file_desc->minor);
 				return ERROR;
 			}
 
@@ -300,14 +307,14 @@ int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, size_t dma
 				size -= PAGE_SIZE;
 			}
 
-			verbose_printk(KERN_INFO"[dma_%x_init]: XDMA read address set to:0x%p\n", minor, file_desc->read_buffer);
-			verbose_printk(KERN_INFO"[dma_%x_init]: XDMA write address set to:0x%p\n", minor, file_desc->write_buffer);
+			verbose_printk(KERN_INFO"[dma_%x_init]: XDMA read address set to:0x%p\n", file_desc->minor, file_desc->read_buffer);
+			verbose_printk(KERN_INFO"[dma_%x_init]: XDMA write address set to:0x%p\n", file_desc->minor, file_desc->write_buffer);
 		}
-		else if((flags & O_ACCMODE) == O_WRONLY){
-			verbose_printk(KERN_INFO"[dma_%x_init]: vmalloc for xdma write buffer.\n", minor);
+		else if((file_desc->f_flags & O_ACCMODE) == O_WRONLY){
+			verbose_printk(KERN_INFO"[dma_%x_init]: vmalloc for xdma write buffer.\n", file_desc->minor);
 			file_desc->write_buffer = vmalloc_32(file_desc->dma_size);
 			if (!file_desc->write_buffer){
-				printk(KERN_INFO"[dma_%x_init]: ERROR vmalloc for xdma write failed.\n", minor);
+				printk(KERN_INFO"[dma_%x_init]: ERROR vmalloc for xdma write failed.\n", file_desc->minor);
 				return ERROR;
 			}
 
@@ -317,20 +324,20 @@ int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, size_t dma
 				size -= PAGE_SIZE;
 			}
 
-			verbose_printk(KERN_INFO"[dma_%x_init]: XDMA read address set to:0x%p\n", minor, file_desc->read_buffer);
-			verbose_printk(KERN_INFO"[dma_%x_init]: XDMA write address set to:0x%p\n", minor, file_desc->write_buffer);
+			verbose_printk(KERN_INFO"[dma_%x_init]: XDMA read address set to:0x%p\n", file_desc->minor, file_desc->read_buffer);
+			verbose_printk(KERN_INFO"[dma_%x_init]: XDMA write address set to:0x%p\n", file_desc->minor, file_desc->write_buffer);
 		}
-		else if((flags & O_ACCMODE) == O_RDWR){
+		else if((file_desc->f_flags & O_ACCMODE) == O_RDWR){
 
-			verbose_printk(KERN_INFO"[dma_%x_init]: vmalloc for xdma read and write buffer.\n", minor);
+			verbose_printk(KERN_INFO"[dma_%x_init]: vmalloc for xdma read and write buffer.\n", file_desc->minor);
 			file_desc->read_buffer = vmalloc_32(file_desc->dma_size);
 			if (!file_desc->read_buffer) {
-				printk(KERN_INFO"[dma_%x_init]: ERROR vmalloc for xdma read failed.\n", minor);
+				printk(KERN_INFO"[dma_%x_init]: ERROR vmalloc for xdma read failed.\n", file_desc->minor);
 				return ERROR;
 			}
 			file_desc->write_buffer = vmalloc_32(file_desc->dma_size);
 			if (!file_desc->write_buffer){
-				printk(KERN_INFO"[dma_%x_init]: ERROR vmalloc for xdma write failed.\n", minor);
+				printk(KERN_INFO"[dma_%x_init]: ERROR vmalloc for xdma write failed.\n", file_desc->minor);
 				return ERROR;
 			}
 
@@ -341,70 +348,68 @@ int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, size_t dma
 				size -= PAGE_SIZE;
 			}
 
-			verbose_printk(KERN_INFO"[dma_%x_init]: XDMA read address set to:0x%p\n", minor, file_desc->read_buffer);
-			verbose_printk(KERN_INFO"[dma_%x_init]: XDMA write address set to:0x%p\n", minor, file_desc->write_buffer);
+			verbose_printk(KERN_INFO"[dma_%x_init]: XDMA read address set to:0x%p\n", file_desc->minor, file_desc->read_buffer);
+			verbose_printk(KERN_INFO"[dma_%x_init]: XDMA write address set to:0x%p\n", file_desc->minor, file_desc->write_buffer);
 		}
 		else{
-			printk(KERN_INFO"[dma_%x_init]: ERROR unknown flags\n", minor);
+			printk(KERN_INFO"[dma_%x_init]: ERROR unknown flags\n", file_desc->minor);
 			return ERROR;
 		}
 	}
 
-	if((flags & O_ACCMODE) == O_RDONLY){
-		verbose_printk(KERN_INFO"[dma_%x_init]: The current system memory dma offset:0x%x\n", minor, file_desc->svd->dma_current_offset);
+	if((file_desc->f_flags & O_ACCMODE) == O_RDONLY){
+		verbose_printk(KERN_INFO"[dma_%x_init]: The current system memory dma offset:0x%x\n", file_desc->minor, file_desc->svd->dma_current_offset);
 		file_desc->dma_offset_read = file_desc->svd->dma_current_offset;				//set the dma start address for the peripheral read
 		file_desc->dma_read_addr = dma_buffer_base + file_desc->dma_offset_read;				//actual pointer to kernel buffer
-		verbose_printk(KERN_INFO"[dma_%x_init]: DMA kernel write address set to:0x%p\n", minor, file_desc->dma_write_addr);
+		verbose_printk(KERN_INFO"[dma_%x_init]: DMA kernel write address set to:0x%p\n", file_desc->minor, file_desc->dma_write_addr);
 		file_desc->svd->dma_current_offset += (u32)file_desc->dma_size;				//update the current dma allocation pointer, 2 buffers (R/W)
 		file_desc->set_dma_flag = 1;
-		printk(KERN_INFO"[dma_%x_init]: Success setting peripheral DMA(read only) size %zu\n", minor, file_desc->dma_size);
+		printk(KERN_INFO"[dma_%x_init]: Success setting peripheral DMA(read only) size %zu\n", file_desc->minor, file_desc->dma_size);
 
 	}
-	else if((flags & O_ACCMODE) == O_WRONLY){
-		verbose_printk(KERN_INFO"[dma_%x_init]: The current system memory dma offset:0x%x\n", minor, file_desc->svd->dma_current_offset);
+	else if((file_desc->f_flags & O_ACCMODE) == O_WRONLY){
+		verbose_printk(KERN_INFO"[dma_%x_init]: The current system memory dma offset:0x%x\n", file_desc->minor, file_desc->svd->dma_current_offset);
 		file_desc->dma_offset_write = file_desc->svd->dma_current_offset + file_desc->dma_size; //set the dma start address for the peripheral write
 		file_desc->dma_write_addr = dma_buffer_base + file_desc->dma_offset_write;				//actual pointer to kernel buffer
-		verbose_printk(KERN_INFO"[dma_%x_init]: DMA kernel write address set to:0x%p\n", minor, file_desc->dma_write_addr);
+		verbose_printk(KERN_INFO"[dma_%x_init]: DMA kernel write address set to:0x%p\n", file_desc->minor, file_desc->dma_write_addr);
 		file_desc->svd->dma_current_offset += (u32)file_desc->dma_size;				//update the current dma allocation pointer, 2 buffers (R/W)
 		file_desc->set_dma_flag = 1;
-		printk(KERN_INFO"[dma_%x_init]: Success setting peripheral DMA(write only) size %zu\n", minor, file_desc->dma_size);
+		printk(KERN_INFO"[dma_%x_init]: Success setting peripheral DMA(write only) size %zu\n", file_desc->minor, file_desc->dma_size);
 
 	}
-	else if((flags & O_ACCMODE) == O_RDWR){
-		verbose_printk(KERN_INFO"[dma_%x_init]: The current system memory dma offset:0x%x\n", minor, file_desc->svd->dma_current_offset);
+	else if((file_desc->f_flags & O_ACCMODE) == O_RDWR){
+		verbose_printk(KERN_INFO"[dma_%x_init]: The current system memory dma offset:0x%x\n", file_desc->minor, file_desc->svd->dma_current_offset);
 		file_desc->dma_offset_read = file_desc->svd->dma_current_offset;				//set the dma start address for the peripheral read
 		file_desc->dma_offset_write = file_desc->svd->dma_current_offset + file_desc->dma_size; //set the dma start address for the peripheral write
 		file_desc->dma_read_addr = dma_buffer_base + file_desc->dma_offset_read;				//actual pointer to kernel buffer
 		file_desc->dma_write_addr = dma_buffer_base + file_desc->dma_offset_write;				//actual pointer to kernel buffer
-		verbose_printk(KERN_INFO"[dma_%x_init]: DMA kernel read address set to:0x%p\n", minor, file_desc->dma_read_addr);
-		verbose_printk(KERN_INFO"[dma_%x_init]: DMA kernel write address set to:0x%p\n", minor, file_desc->dma_write_addr);
+		verbose_printk(KERN_INFO"[dma_%x_init]: DMA kernel read address set to:0x%p\n", file_desc->minor, file_desc->dma_read_addr);
+		verbose_printk(KERN_INFO"[dma_%x_init]: DMA kernel write address set to:0x%p\n", file_desc->minor, file_desc->dma_write_addr);
 		file_desc->svd->dma_current_offset += (u32)(2*file_desc->dma_size);				//update the current dma allocation pointer, 2 buffers (R/W)
 		file_desc->set_dma_flag = 1;
-		printk(KERN_INFO"[dma_%x_init]: Success setting peripheral DMA size %zu\n", minor, file_desc->dma_size);
+		printk(KERN_INFO"[dma_%x_init]: Success setting peripheral DMA size %zu\n", file_desc->minor, file_desc->dma_size);
 
 	}
 	else{
-		printk(KERN_INFO"[dma_%x_init]: ERROR unknown flags\n", minor);
+		printk(KERN_INFO"[dma_%x_init]: ERROR unknown flags\n", file_desc->minor);
 		return ERROR;
 	}
 	return 0;
 }
 
 
-int dma_file_deinit(struct file_desc *file_desc, size_t dma_size) {
-	int minor = file_desc->minor;
-	unsigned long adr, size;
-
+int dma_file_deinit(struct file_desc *file_desc) {
+	unsigned long addr, size;
 
 	file_desc->set_dma_flag = 0;
 
 	if(file_desc->read_buffer) {
-		verbose_printk(KERN_INFO"[dma_%x_deinit]: XDMA freeing read_buffer :0x%p\n", minor, file_desc->read_buffer);
-		size = (unsigned long)dma_size;
-		adr = (unsigned long)file_desc->read_buffer;
+		verbose_printk(KERN_INFO"[dma_%x_deinit]: XDMA freeing read_buffer :0x%p\n", file_desc->minor, file_desc->read_buffer);
+		size = (unsigned long)file_desc->dma_size;
+		addr = (unsigned long)file_desc->read_buffer;
 		while ((long) size > 0) {
-			ClearPageReserved(vmalloc_to_page((void *)adr));
-			adr += PAGE_SIZE;
+			ClearPageReserved(vmalloc_to_page((void *)addr));
+			addr += PAGE_SIZE;
 			size -= PAGE_SIZE;
 		}
 		vfree(file_desc->read_buffer);
@@ -412,19 +417,19 @@ int dma_file_deinit(struct file_desc *file_desc, size_t dma_size) {
 	}
 
 	if(file_desc->write_buffer) {
-		verbose_printk(KERN_INFO"[dma_%x_deinit]: XDMA freeing write_buffer :0x%p\n", minor, file_desc->write_buffer);
-		size = (unsigned long)dma_size;
-		adr = (unsigned long)file_desc->write_buffer;
+		verbose_printk(KERN_INFO"[dma_%x_deinit]: XDMA freeing write_buffer :0x%p\n", file_desc->minor, file_desc->write_buffer);
+    size = (unsigned long)file_desc->dma_size;
+		addr = (unsigned long)file_desc->write_buffer;
 		while ((long) size > 0) {
-			ClearPageReserved(vmalloc_to_page((void *)adr));
-			adr += PAGE_SIZE;
+			ClearPageReserved(vmalloc_to_page((void *)addr));
+			addr += PAGE_SIZE;
 			size -= PAGE_SIZE;
 		}
 		vfree(file_desc->write_buffer);
 
 	}
 
-	verbose_printk(KERN_INFO"[dma_%x_deinit]: Deinit done!\n", minor);
+	verbose_printk(KERN_INFO"[dma_%x_deinit]: Deinit done!\n", file_desc->minor);
 
 	return 0;
 }

@@ -1240,7 +1240,8 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->dma_offset_write = -1;
 	s->dma_read_addr = NULL;
 	s->dma_write_addr = NULL;
-	s->dma_size = dma_file_size;
+	s->dma_size = 0;
+	s->max_dma_read_write = 0;
 	s->file_size = 4096;	//default to 4K
 	s->tx_bytes = 0;
 	s->rx_bytes = 0;
@@ -1358,10 +1359,7 @@ int pci_release(struct inode *inode, struct file *filep)
 		atomic_dec(file_desc->in_write_fifo_count);
 	}
 
-	dma_file_deinit(file_desc, file_desc->dma_size);
-
-
-
+	dma_file_deinit(file_desc);
 
 	kfree((const void*)file_desc->start_time);
 	kfree((const void*)file_desc->stop_time);
@@ -1480,19 +1478,17 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			break;
 
 		case SET_DMA_SIZE:
-			if( dma_file_init(file_desc, svd_global->dma_buffer_base, arg_loc, file_desc->f_flags, pcie_use_xdma) ) {
-				printk(KERN_INFO"[pci_%x_ioctl]: \t!!!!set dma FAILURE!!!!.\n", minor);
-				return ERROR;
-			}
+			//set the value for the file here, we will alloc the dma in set_mode
+			file_desc->dma_size = (size_t)arg_loc;
 			break;
 
 		case RESET_DMA_ALLOC:
-			svd_global->dma_current_offset = 0;	//we want to leave the first 4k for the kernel to use internally.
+			svd_global->dma_current_offset = 0;	//reset current offset to 0
 			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Reset the DMA Allocation\n", minor);
 			break;
 
 		case SET_INTERRUPT:
-			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting device as an Interrupt source with vector:%llx\n", minor, arg_loc);
+			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting device as an Interrupt source with vector:0x%llx\n", minor, arg_loc);
 
 			/*Store the Interrupt Vector*/
 			file_desc->interrupt_vec = (u32)arg_loc;
@@ -1504,20 +1500,23 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 			break;
 
+		case GET_DMA_SIZE:
+			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Returning dma size:0x%zx\n", minor, file_desc->max_dma_read_write);
+			if( copy_to_user((void *)arg, &(file_desc->max_dma_read_write), sizeof(size_t)) ) {
+				verbose_printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR copy_to_user\n", minor);
+				return ERROR;
+			}
+			break;
+
 		case SET_FILE_SIZE:
 			file_desc->file_size = ((loff_t)arg_loc & 0xffffffffffffffff);
-			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting device file size:%llu\n", minor, file_desc->file_size);
+			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting device file size:0x%llu\n", minor, file_desc->file_size);
 
-			/*initialize the DMA for the file*/
-			if(file_desc->set_dma_flag == 0) {
-				if( dma_file_init(file_desc, svd_global->dma_buffer_base, file_desc->dma_size, file_desc->f_flags, pcie_use_xdma) ) {
-					printk(KERN_INFO"[pci_%x_ioctl]: \t!!!! DMA init FAILURE!!!!\n", minor);
-					return ERROR;
-				 }
+			if(file_desc->dma_size == 0) {
+				verbose_printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR dma not set\n", minor);
+				return ERROR;
 			}
-
-			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Returning dma size:%zu\n", minor, file_desc->dma_size);
-
+			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Returning dma size:0x%zu\n", minor, file_desc->dma_size);
 			if( copy_to_user((void *)arg, &(file_desc->dma_size), sizeof(size_t)) ) {
 				verbose_printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR copy_to_user\n", minor);
 				return ERROR;
@@ -1640,6 +1639,13 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		case SET_MODE:
 			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral\n", minor);
 			file_desc->mode = (u32)arg_loc;
+
+			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Initialize the dma buffer\n", minor);
+			if( dma_file_init(file_desc, svd_global->dma_buffer_base, pcie_use_xdma) ) {
+				printk(KERN_INFO"[pci_%x_ioctl]: \t!!!!set dma FAILURE!!!!.\n", minor);
+				return ERROR;
+			}
+
 			switch(file_desc->mode){
 				case SLAVE:
 					verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to SLAVE\n", minor);
@@ -1662,7 +1668,6 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 					verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to AXI_STREAM_FIFO\n", minor);
 					//setup init here if there is no LOD
 					if(!svd_global->lod_set){
-						verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to AXI_STREAM_FIFO\n", minor);
 						//Initialize the ring buffer and AXI_STREAM_FIFO
 						ring_buffer_init(file_desc);
 						if( axi_stream_fifo_init(file_desc) ) {
@@ -1859,7 +1864,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	}
 
 	if(file_desc->set_dma_flag == 0) {
-		if( dma_file_init(file_desc, svd_global->dma_buffer_base, file_desc->dma_size, file_desc->f_flags, pcie_use_xdma) ) {
+		if( dma_file_init(file_desc, svd_global->dma_buffer_base, pcie_use_xdma) ) {
 			printk(KERN_INFO"[pci_%x_write]: \t!!!! DMA init FAILURE!!!!\n", minor);
 			return ERROR;
 			 }
@@ -1884,8 +1889,8 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			/*Stay until requested transmission is complete*/
 			while (bytes_written < count && file_desc->file_activate) {
 
-				if(count > file_desc->dma_size) {
-					printk(KERN_INFO"[pci_%x_write]: count > dma_size \n", minor);
+				if(count > file_desc->max_dma_read_write) {
+					printk(KERN_INFO"[pci_%x_write]: count > max_dma_read_write \n", minor);
 					return ERROR;
 				}
 
@@ -2140,7 +2145,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	}
 
 	if(file_desc->set_dma_flag == 0) {
-	 if( dma_file_init(file_desc, svd_global->dma_buffer_base, file_desc->dma_size, file_desc->f_flags, pcie_use_xdma) ) {
+		if( dma_file_init(file_desc, svd_global->dma_buffer_base, pcie_use_xdma) ) {
 			printk(KERN_INFO"[pci_%x_read]: \t!!!! DMA init FAILURE!!!!.\n", minor);
 			return ERROR;
 		}
@@ -2160,10 +2165,10 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 		atomic_set(&svd_global->driver_start_flag, 0);
 	}
 
-	if(count > file_desc->dma_size) {
-		verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: Attempting to read more than the allocated DMA size of:%zu\n", minor, file_desc->dma_size);
-		verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: readjusting the read amount to:%zu\n", minor, file_desc->dma_size);
-		count = (size_t)file_desc->dma_size;
+	if(count > file_desc->max_dma_read_write) {
+		verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: Attempting to read more than the allocated DMA size of:%zu\n", minor, file_desc->max_dma_read_write);
+		verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: readjusting the read amount to:%zu\n", minor, file_desc->max_dma_read_write);
+		count = file_desc->max_dma_read_write;
 	}
 
 
@@ -2352,19 +2357,10 @@ int pci_mmap(struct file *filep, struct vm_area_struct *vma) {
 	file_desc = filep->private_data;
 	minor = file_desc->minor;
 	length = vma->vm_end - vma->vm_start;
-
-	// if(pcie_use_xdma == 1){
-	//	 buffer = file_desc->read_buffer;
-	// }
-	// else{
-		 buffer = file_desc->dma_read_addr;
-	// }
-
-
+	buffer = file_desc->dma_read_addr;
 
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: ************************************************************************\n", minor);
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: ****************************** MMAP BEGIN ******************************\n", minor);
-
 
 	switch(file_desc->mode){
 		case AXI_STREAM_FIFO :
@@ -2407,29 +2403,6 @@ int pci_mmap(struct file *filep, struct vm_area_struct *vma) {
 		printk(KERN_INFO "[pci_%x_mmap]: WARNING: vm_pgoff != 0, vm_pg_off ignored \n", minor);
 	}
 
-
-// if(pcie_use_xdma == 1){
-//	 /*
-//	  * pages must not be cached as this would result in cache line sized
-//	  * accesses to the end point
-//	  */
-//	 vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
-// 	/*
-// 	 * prevent touching the pages (byte access) for swap-in,
-// 	 * and prevent the pages from being swapped out
-// 	 */
-// 	vma->vm_flags |= VMEM_FLAGS;
-// 	/* make MMIO accessible to user space */
-// 	rc = io_remap_pfn_range(vma, vma->vm_start, phys >> PAGE_SHIFT,
-// 			vsize, vma->vm_page_prot);
-// 	dbg_sg("vma=0x%p, vma->vm_start=0x%lx, phys=0x%lx, size=%lu = %d\n",
-// 		vma, vma->vm_start, phys >> PAGE_SHIFT, vsize, rc);
-//
-// 	if (rc)
-// 		return -EAGAIN;
-// 	return 0;
-//
-// } else {
 	//fix me, using the "read" buffer for everything, change to 1 buffer
 		if((vma->vm_flags & VM_READ) == VM_READ || (vma->vm_flags & VM_WRITE) == VM_WRITE){
 			verbose_mmap_printk(KERN_INFO "[pci_%x_mmap]: Using dma_mmap_coherent for read/write space\n", minor);

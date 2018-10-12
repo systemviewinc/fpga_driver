@@ -24,25 +24,25 @@
 #define RING_BUFF_SIZE_MULTIPLIER 2
 /********* printk statements *********/
 #define verbose_printk printk
-//#define verbose_data_xfer_printk printk
-//#define verbose_cdma_printk printk
-//#define verbose_dma_printk printk
-// #define verbose_cdmaq_printk printk
-// #define verbose_dmaq_printk printk
-//#define verbose_axi_fifo_read_printk printk
-//#define verbose_axi_fifo_write_printk printk
-//#define verbose_isr_printk printk
+#define verbose_data_xfer_printk printk
+#define verbose_cdma_printk printk
+#define verbose_dma_printk printk
+#define verbose_cdmaq_printk printk
+#define verbose_dmaq_printk printk
+#define verbose_axi_fifo_read_printk printk
+#define verbose_axi_fifo_write_printk printk
+#define verbose_isr_printk printk
 //#define verbose_poll_printk printk
-// #define very_verbose_poll_printk printk
-//#define verbose_axi_fifo_d2r_printk printk
+//#define very_verbose_poll_printk printk
+#define verbose_axi_fifo_d2r_printk printk
 //#define verbose_direct_write_printk printk
 //#define verbose_direct_read_printk printk
 // #define verbose_llseek_printk printk
-//#define verbose_pci_read_printk printk
-//#define verbose_pci_write_printk printk
+#define verbose_pci_read_printk printk
+#define verbose_pci_write_printk printk
 #define verbose_mmap_printk printk
-//#define verbose_read_thread_printk printk
-//#define verbose_write_thread_printk printk
+#define verbose_read_thread_printk printk
+#define verbose_write_thread_printk printk
 #define pr_bar 1
 
 #ifndef verbose_llseek_printk
@@ -122,6 +122,7 @@
 #define SET_AXI_INT_CTRL 54 /**< IOCTL Magic Number */
 #define SET_AXI_DEV_SI 55	/**< IOCTL Magic Number */
 #define SET_AXI_DEV_M 56	/**< IOCTL Magic Number */
+#define GET_DMA_SIZE 57	/**< IOCTL Magic Number */
 #define SET_CDMA_KEYHOLE_WRITE 58	/**< IOCTL Magic Number */
 #define SET_CDMA_KEYHOLE_READ 59	/**< IOCTL Magic Number */
 #define CLEAR_AXI_INTERRUPT_CTLR 60	/**< IOCTL Magic Number */
@@ -395,6 +396,7 @@ struct file_desc {
 	bool file_activate;							/**< True if file is open, used to process the file_desc (or throw it away) in read/write threads */
 
 	size_t dma_size;				/**< The size of allocated DMA buffer */
+	size_t max_dma_read_write;				/**< The the largest possible DMA (normally dma_size, but not for steaming) */
 	loff_t file_size;	/**< This is the size of the axi_streaming FIFO for streaming peripherals or size of ram for memory peripherals */
 
 
@@ -618,7 +620,8 @@ void axi_intc_deinit(struct sv_mod_dev *svd);
  * @param dma_buffer_base the current DMA allocated region offset to be assigned
  * @param dma_buffer_size The size of the DMA buffer.
 */
-int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, size_t dma_size, int flags, int xdma);
+int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, int xdma);
+
 /**
  * @brief This function performs calls appropriate functions for Reading from the AXI Streaming FIFO and puts the data into the ring buffer.
  * @param count The number of bytes to read from the AXI streaming FIFO.
@@ -734,7 +737,7 @@ int copy_to_ring_buffer(struct file_desc * file_desc, void* buf, size_t count, v
 
 int copy_from_ring_buffer(struct file_desc * file_desc, void* buf, size_t count, void * buffer_addr);
 
-int dma_file_deinit(struct file_desc *file_desc, size_t dma_size);
+int dma_file_deinit(struct file_desc *file_desc);
 
 int align_dma(int addr, int dma_byte_width);
 
