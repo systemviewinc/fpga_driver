@@ -1511,16 +1511,6 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		case SET_FILE_SIZE:
 			file_desc->file_size = ((loff_t)arg_loc & 0xffffffffffffffff);
 			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting device file size:0x%llu\n", minor, file_desc->file_size);
-
-			if(file_desc->dma_size == 0) {
-				verbose_printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR dma not set\n", minor);
-				return ERROR;
-			}
-			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Returning dma size:0x%zu\n", minor, file_desc->dma_size);
-			if( copy_to_user((void *)arg, &(file_desc->dma_size), sizeof(size_t)) ) {
-				verbose_printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR copy_to_user\n", minor);
-				return ERROR;
-			}
 			break;
 
 		case SET_CDMA_KEYHOLE_WRITE:
