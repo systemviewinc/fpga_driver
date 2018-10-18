@@ -114,29 +114,30 @@
  							printk(KERN_INFO"[read_thread]: kfifo is full, not writing mod desc\n");
  						}
 
-						 wait_event_interruptible_timeout(svd->thread_q_head_read, atomic_read(&svd->thread_q_read) == 1 || kthread_should_stop(), msecs_to_jiffies(1000) );
+						wait_event_interruptible_timeout(svd->thread_q_head_read, atomic_read(&svd->thread_q_read) == 1 || kthread_should_stop(), msecs_to_jiffies(1000) );
  						schedule();
 
  						d2r = 0;
 
  					} else if(file_desc->file_activate && is_packet_full_interrupt(file_desc)){
+            //clear ISR if it was from packet full
 						clear_fifo_isr(file_desc);
-						d2r = 0;
+            d2r = axi_stream_fifo_d2r(file_desc);
  						verbose_read_thread_printk(KERN_INFO"[read_thread]: file is closed: %d d2r: %d\n", file_desc->minor, d2r);
 					}
 					else if(file_desc->file_activate){
- 						//read more data if the file is open
+            //read more data if the file is open
  						d2r = axi_stream_fifo_d2r(file_desc);
-						 //if we have read all the data from the fifo (only true if d2r is zero from d2r function)
-						 if(d2r == 0){
-						 }
+						//if we have read all the data from the fifo (only true if d2r is zero from d2r function)
+						if(d2r == 0){
+						}
  						verbose_read_thread_printk(KERN_INFO"[read_thread]: read more! file_desc minor: %d d2r: %d\n", file_desc->minor, d2r);
  					} else {
  						d2r = 0;
  						verbose_read_thread_printk(KERN_INFO"[read_thread]: file is closed: %d d2r: %d\n", file_desc->minor, d2r);
  					}
  				}
-            	clear_fifo_isr(file_desc);
+      	clear_fifo_isr(file_desc);
  				verbose_read_thread_printk(KERN_INFO"[read_thread]: No more data to read.....\n");
  			} else if(sz == 1 && !file_desc->file_activate) {
  				verbose_read_thread_printk(KERN_INFO"[read_thread]: file is not open\n");
@@ -828,7 +829,7 @@ int axi_stream_fifo_init(struct file_desc * file_desc)
 	//enable interupt from axi_stream_fifo if we are using the axi_stream_packet
 	if(file_desc->mode == AXI_STREAM_PACKET) {
 		verbose_printk(KERN_INFO"[axi_stream_fifo_%x_init]: Setting AXI_STREAM_IER register for AXI_STREAM_PACKET.\n", file_desc->minor);
-		//Set IER Register for interrupt on read -MM
+		//Set IER Register for interrupt on read
 		axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_IER;
 		buf = AXI_INTR_RC_MASK;
 		if( direct_write(axi_dest, (void*)(&buf), 4, NORMAL_WRITE) ) {
@@ -839,7 +840,7 @@ int axi_stream_fifo_init(struct file_desc * file_desc)
 	//enable interupt from axi_stream_fifo if we are using the axi_stream_packet
 	else {
 		verbose_printk(KERN_INFO"[axi_stream_fifo_%x_init]: Setting AXI_STREAM_IER register for AXI_STREAM.\n", file_desc->minor);
-		//Set IER Register for interrupt on read -MM
+		//Set IER Register for interrupt on read
 		axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_IER;
 		buf = AXI_INTR_RFPF_MASK;
 		if( direct_write(axi_dest, (void*)(&buf), 4, NORMAL_WRITE) ) {
@@ -978,32 +979,35 @@ int copy_from_ring_buffer(struct file_desc * file_desc, void* buf, size_t count,
 
 			if(bytes_to_copy > room_till_end) { //need to do two read since we are at the edge
 				remaining = bytes_to_copy - room_till_end;
-				verbose_pci_read_printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: copy_to_user 1(0x%p, 0x%p + 0x%x, 0x%zx)\n", file_desc->minor, &buf, buffer_addr, rfu, room_till_end);
-        rc = copy_to_user(buf, buffer_addr + rfu, room_till_end);
-        bytes_copied = bytes_copied + room_till_end - rc;
-        room_till_end = rc;
+        bytes_to_copy = room_till_end;
+
+				verbose_pci_read_printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: copy_to_user 1(0x%p, 0x%p + 0x%x, 0x%zx)\n", file_desc->minor, &buf, buffer_addr, rfu, bytes_to_copy);
+        rc = copy_to_user(buf, buffer_addr + rfu, bytes_to_copy);
+        bytes_copied = bytes_copied + bytes_to_copy - rc;
+        bytes_to_copy = rc;
         while(rc){
-          verbose_pci_read_printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: copy_to_user 1(0x%p, 0x%p + 0x%x, 0x%zx)\n", file_desc->minor, &buf + bytes_copied, buffer_addr, rfu + bytes_copied, room_till_end);
-          rc = copy_to_user(buf + bytes_copied, buffer_addr + rfu + bytes_copied, room_till_end);
-          bytes_copied = bytes_copied + room_till_end - rc;
-          room_till_end = rc;
+          verbose_pci_read_printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: copy_to_user 1(0x%p, 0x%p + 0x%x, 0x%zx)\n", file_desc->minor, &buf + bytes_copied, buffer_addr, rfu + bytes_copied, bytes_to_copy);
+          rc = copy_to_user(buf + bytes_copied, buffer_addr + rfu + bytes_copied, bytes_to_copy);
+          bytes_copied = bytes_copied + bytes_to_copy - rc;
+          bytes_to_copy = rc;
         }
 
 				//extra verbose debug message
 				verbose_pci_read_printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: first 4 bytes 0x%08x\n", file_desc->minor, *((u32*)(buffer_addr+rfu)));
 
 				rfu = 0;
+        bytes_to_copy = remaining;
 				//end of buffer reached
-				verbose_pci_read_printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: copy_to_user 2(0x%p, 0x%p + 0x%x, 0x%zx)\n", file_desc->minor, &buf+room_till_end, buffer_addr, rfu, remaining);
-        rc = copy_to_user(buf+room_till_end, buffer_addr + rfu, remaining);
-        bytes_copied = bytes_copied + remaining - rc;
-        remaining = rc;
+				verbose_pci_read_printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: copy_to_user 2(0x%p, 0x%p + 0x%x, 0x%zx)\n", file_desc->minor, &buf+room_till_end, buffer_addr, rfu, bytes_to_copy);
+        rc = copy_to_user(buf+room_till_end, buffer_addr + rfu, bytes_to_copy);
+        bytes_copied = bytes_copied + bytes_to_copy - rc;
+        bytes_to_copy = rc;
 
         while(rc){
-          verbose_pci_read_printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: copy_to_user 1(0x%p, 0x%p + 0x%x, 0x%zx)\n", file_desc->minor, &buf + bytes_copied, buffer_addr, rfu + bytes_copied, remaining);
+          verbose_pci_read_printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: copy_to_user 1(0x%p, 0x%p + 0x%x, 0x%zx)\n", file_desc->minor, &buf + bytes_copied, buffer_addr, rfu + bytes_copied, bytes_to_copy);
           rc = copy_to_user(buf + bytes_copied, buffer_addr + rfu + bytes_copied, room_till_end);
-          bytes_copied = bytes_copied + remaining - rc;
-          remaining = rc;
+          bytes_copied = bytes_copied + bytes_to_copy - rc;
+          bytes_to_copy = rc;
         }
 
 				rfu = get_new_ring_pointer((int)remaining, rfu, (int)file_desc->dma_size, dma_byte_width);

@@ -770,7 +770,6 @@ static int sv_plat_probe(struct platform_device *pdev)
 		printk(KERN_INFO"[probe:%s]: request IRQ error\n", plat_name);
 		goto free_alloc;
 	}
-	printk(KERN_INFO"[test]: post request IRQ \n");
 
 	if(int_ctlr_address != -1) {
 		axi_intc_init(svd_global, int_ctlr_address);
@@ -1083,7 +1082,6 @@ static irqreturn_t pci_isr(int irq, void *dev_id)
 
 			if(device_mode == AXI_STREAM_FIFO || device_mode == AXI_STREAM_PACKET) {
 				verbose_isr_printk(KERN_INFO"[pci_isr]: this interrupt is from a streaming peripheral\n");
-				clear_fifo_isr(irq_file);
 				//Put streaming types into the kfifo for read thread
 				if(atomic_read(irq_file->in_read_fifo_count) == 0 && irq_file->file_activate) {
 					//debug message
@@ -2419,7 +2417,7 @@ int pci_mmap(struct file *filep, struct vm_area_struct *vma) {
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: ******************************* MMAP END *******************************\n", minor);
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \t\tmmap length : 0x%zx\n", minor, length);
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \t\tmmap address : 0x%lx\n", minor, vma->vm_start);
-  verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \t\tmmap HW address : 0x%lx\n", minor, svd_global->dma_addr_base+file_desc->dma_offset_read);
+	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \t\tmmap HW address : 0x%lx\n", minor, svd_global->dma_addr_base+file_desc->dma_offset_read);
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \t\tmmap end address : 0x%lx\n", minor, vma->vm_end);
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: ************************************************************************\n", minor);
 

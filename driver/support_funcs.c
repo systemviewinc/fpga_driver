@@ -1047,7 +1047,7 @@ static int cdma_query(void)
 			return i;
 		}
 	}
-	verbose_cdmaq_printk(KERN_INFO "\t\t\t[cdma_query]: \t!!!!!!!!! all CDMAs in use !!!!!!!!\n");
+	verbose_dmaq_printk(KERN_INFO "\t\t\t[cdma_query]: \t!!!!!!!!! all CDMAs in use !!!!!!!!\n");
 	return -1;
 }
 
