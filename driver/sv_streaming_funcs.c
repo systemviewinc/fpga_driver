@@ -757,7 +757,7 @@ void ring_buffer_init(struct file_desc * file_desc)
     /*set the pointer defaults*/
     verbose_printk(KERN_INFO"[pci_%x_ioctl]: read ring_buffer: RFU : %d RFH %d\n", file_desc->minor, 0, 0);
     atomic_set(file_desc->wtk, 0);
-    atomic_set(file_desc->wtk, 0);
+    atomic_set(file_desc->wth, 0);
     verbose_printk(KERN_INFO"[pci_%x_ioctl]: write ring_buffer: WTH: %d WTK: %d\n", file_desc->minor, 0, 0);
     atomic_set(file_desc->rfh, 0);
     atomic_set(file_desc->rfu, 0);
@@ -1085,7 +1085,7 @@ int copy_to_ring_buffer(struct file_desc * file_desc, void* buf, size_t count, v
 	wtk = atomic_read(file_desc->wtk);
 	wth = atomic_read(file_desc->wth);
 	full = atomic_read(file_desc->write_ring_buf_full);
-
+	verbose_pci_write_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]:wtk %d wth %d full %d dma_byte_size %d room_in_buffer %d active %d\n",file_desc->minor,wtk,wth,full,dma_byte_width,room_in_buffer(wtk, wth, full, file_desc->dma_size),file_desc->file_activate);
 	//we are going to write the whole count + header
 	if( (count + dma_byte_width + 2*sizeof(count)) > room_in_buffer(wtk, wth, full, file_desc->dma_size) && file_desc->file_activate ) {
 		 return 0;
