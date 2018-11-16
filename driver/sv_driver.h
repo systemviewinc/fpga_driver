@@ -22,23 +22,24 @@
 
 /********* printk statements *********/
 #define verbose_printk printk
-//#define verbose_cdma_printk printk
-//#define verbose_dma_printk printk
+#define verbose_cdma_printk printk
+#define verbose_dma_printk printk
 // #define verbose_dmaq_printk printk
 // #define verbose_axi_fifo_read_printk printk
 // #define verbose_axi_fifo_write_printk printk
-//#define verbose_isr_printk printk
+#define verbose_isr_printk printk
 // #define verbose_poll_printk printk
 // #define very_verbose_poll_printk printk
-//#define verbose_axi_fifo_d2r_printk printk
-//#define verbose_direct_write_printk printk
-//#define verbose_direct_read_printk printk
+#define verbose_axi_fifo_d2r_printk printk
+#define verbose_direct_write_printk printk
+#define verbose_direct_read_printk printk
 // #define verbose_llseek_printk printk
-//#define verbose_pci_read_printk printk
-//#define verbose_pci_write_printk printk
+#define verbose_pci_read_printk printk
+#define verbose_pci_write_printk printk
 // #define verbose_mmap_printk printk
-//#define verbose_read_thread_printk printk
-//#define verbose_write_thread_printk printk
+#define verbose_read_thread_printk printk
+#define verbose_write_thread_printk printk
+
 #define pr_bar 1
 
 #ifndef verbose_llseek_printk
@@ -134,6 +135,7 @@
 
 #define FILE_ACTIVATE 75		/**< IOCTL Magic Number */
 #define FILE_DEACTIVATE 76		/**< IOCTL Magic Number */
+#define SET_DECOUPLER 77		/**< IOCTL Magic Number */
 
 #define ERROR	-1
 #define SUCCESS 0
@@ -375,6 +377,7 @@ struct file_desc {
 	int master_num;				 /**< For future master peripherals, currently UNUSED */
 	int keyhole_config;			/**< The Keyhole R/W configuration for associated IP */
 	u32 interrupt_vec;			 /**< The Interrupt Vector */
+	u32 decoupler_vec;			 /**< The Decoupler Vector */
 
 	atomic_t * in_read_fifo_count;		/**< The number of times the file_desc is in the read fifo, once it reaches 0 we can kfree it */
 	atomic_t * in_write_fifo_count;		/**< The number of times the file_desc is in the write fifo, once it reaches 0 we can kfree it */
@@ -437,6 +440,7 @@ struct file_desc {
 	int in_fifo_read_flag;			/**< Flag variable to tell if it already exists in the READ FIFO */
 	int in_fifo_write_flag;	 /**< Flag variable to tell if it already exists in the WRITE FIFO */
 	int has_interrupt_vec;	/**< This file has an interrupt associated with it */
+	int has_decoupler_vec;	/**< This file has an decoupler associated with it */
 	int axi_fifo_rlr;	/**< Last read RLR value if non-zero this has to be used */
 	int axi_fifo_rdfo;	/**< Last read RDFO value if non-zero this has to be used */
 	size_t read_header_size; 	/**< Last read_header_size value if non-zero this has to be used */

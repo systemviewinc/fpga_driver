@@ -559,10 +559,16 @@ void axi_lodc_activate(struct file_desc * file_desc)
    u64 axi_dest;
 
    printk(KERN_INFO"[axi_lodc_activate]: Setting Load on demand Controller to activate\n");
-
-   //write all 1s to the output to deactiave all regions
-   status = 0x000000;               //to-do add multiple sections
    axi_dest = svd_global->axi_lodc_addr + 0;
+   //write all 1s to the output to deactiave all regions
+   if( direct_read(axi_dest, (void *)&status, 4, NORMAL_READ) ) {
+      printk(KERN_INFO"[axi_lodc_activate]: \t!!!!!!!!ERROR: in direct_read!!!!!!!\n");
+      return;
+   }
+
+   printk(KERN_INFO"[axi_lodc_activate]: \tCurrent decoupler controller status: 0x%08X\n", status);
+   status &= !(file_desc->decoupler_vec);
+   printk(KERN_INFO"[axi_lodc_activate]: \tTry to write new decoupler status: 0x%08X\n", status);
    if( direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
        printk(KERN_INFO"[axi_lodc_activate]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
        return;
@@ -576,10 +582,16 @@ void axi_lodc_deactivate(struct file_desc * file_desc)
    u64 axi_dest;
 
    printk(KERN_INFO"[axi_lodc_deactivate]: Setting Load on demand Controller to deactivate\n");
-
-   //write all 1s to the output to deactiave all regions
-   status = 0xFFFFFFFF;
    axi_dest = svd_global->axi_lodc_addr + 0;
+   //write all 1s to the output to deactiave all regions
+   if( direct_read(axi_dest, (void *)&status, 4, NORMAL_READ) ) {
+      printk(KERN_INFO"[axi_lodc_deactivate]: \t!!!!!!!!ERROR: in direct_read!!!!!!!\n");
+      return;
+   }
+
+   printk(KERN_INFO"[axi_lodc_deactivate]: \tCurrent decoupler controller status: 0x%08X\n", status);
+   status |= file_desc->decoupler_vec;
+   printk(KERN_INFO"[axi_lodc_deactivate]: \tTry to write new decoupler status: 0x%08X\n", status);
    if( direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
        printk(KERN_INFO"[axi_lodc_deactivate]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
        return;
