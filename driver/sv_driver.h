@@ -27,12 +27,12 @@
 // #define verbose_dmaq_printk printk
 // #define verbose_axi_fifo_read_printk printk
 // #define verbose_axi_fifo_write_printk printk
-#define verbose_isr_printk printk
-// #define verbose_poll_printk printk
-// #define very_verbose_poll_printk printk
+//#define verbose_isr_printk printk
+#define verbose_poll_printk printk
+//#define very_verbose_poll_printk printk
 #define verbose_axi_fifo_d2r_printk printk
-#define verbose_direct_write_printk printk
-#define verbose_direct_read_printk printk
+//#define verbose_direct_write_printk printk
+//#define verbose_direct_read_printk printk
 // #define verbose_llseek_printk printk
 #define verbose_pci_read_printk printk
 #define verbose_pci_write_printk printk
@@ -298,6 +298,7 @@ extern struct sv_mod_dev *svd_global;
 struct sv_mod_dev {
 	dma_addr_t dma_addr_base; /**< The hardware DMA Allocation Address */
 	char * dma_buffer_base;	/**< This is the start of the DMA region virtual address */
+	char * dma_buffer_end;  /**< End of the buffer */
 	u32 dma_current_offset;	/**< This variable holds the current offset of the DMA Allocation */
 	u64 dma_buffer_size; /**< Default value for size of DMA Allocation, Max is 4MB, this is set through insmod */
 

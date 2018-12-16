@@ -232,6 +232,7 @@ MODULE_DEVICE_TABLE(pci, ids);
 
 static const struct of_device_id sv_driver_match[] = {
 	{ .compatible = "xlnx,sv_driver_plat", },
+//	{ .compatible =  "xlnx,vsi-common-interface-iveia-1.0"},
 	{},
 };
 
@@ -436,7 +437,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 				printk(KERN_INFO"%s:[probe]request IRQ error\n", pci_name);
 				goto disable_device;
 			}
-            verbose_printk(KERN_INFO"[probe:%s]: Using IRQ#%d\n", pci_name, pci_dev_struct->irq);
+			verbose_printk(KERN_INFO"[probe:%s]: Using IRQ#%d\n", pci_name, pci_dev_struct->irq);
 
 		} else {
 			//LEGACY
@@ -499,23 +500,23 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		printk(KERN_INFO"[probe:%s]: char driver major number: %d\n", pci_name, major);
 		goto rmv_cdev;
 	} else if(major == 0){
-                major = rc;
-                printk(KERN_INFO"[probe:%s]: char driver major number: %d\n", pci_name, major);
-        }
+				major = rc;
+				printk(KERN_INFO"[probe:%s]: char driver major number: %d\n", pci_name, major);
+		}
 
 	if(skel_get_revision(dev) == 0x42)
 		goto rmv_cdev;
 
 	/*allocate the DMA buffer*/
 	svd_global->dma_buffer_base = dma_alloc_coherent(dev_struct, (size_t)svd_global->dma_buffer_size, &svd_global->dma_addr_base, GFP_KERNEL);
-
+	svd_global->dma_buffer_end  = svd_global->dma_buffer_base +  svd_global->dma_buffer_size;
 	if(NULL == svd_global->dma_buffer_base) {
 		printk(KERN_INFO"[probe:%s]: DMA buffer base allocation ERROR\n", pci_name);
 		printk(KERN_INFO"[probe:%s]: typical max DMA size is 4M, check your linux settings\n", pci_name);
 		goto free_alloc;
 	} else {
 		verbose_printk(KERN_INFO"[probe:%s]: dma kernel buffer base address is:0x%p\n", pci_name, svd_global->dma_buffer_base);
-		verbose_printk(KERN_INFO"[probe:%s]: dma system memory buffer base address is:0x%p\n", pci_name, (void *)svd_global->dma_addr_base);
+		verbose_printk(KERN_INFO"[probe:%s]: dma system memory buffer base address is:0x%p : 0x%p\n", pci_name, (void *)svd_global->dma_addr_base,svd_global->dma_buffer_end );
 		svd_global->dma_current_offset = 0;	//we want to leave the first 4k for the kernel to use internally.
 	}
 
@@ -621,11 +622,11 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 	verbose_printk(KERN_INFO"[probe:%s]: ******************************** PROBE PARAMETERS *****************************************\n", plat_name);
 	verbose_printk(KERN_INFO"[probe:%s]: device_id: 0x%x \n", plat_name, device_id);
-        if(major == 0) {
-                verbose_printk(KERN_INFO"[probe:%s]: major: dynamic \n", plat_name);
-        } else {
-    	           verbose_printk(KERN_INFO"[probe:%s]: major: %d \n", plat_name, major);
-        }
+		if(major == 0) {
+				verbose_printk(KERN_INFO"[probe:%s]: major: dynamic \n", plat_name);
+		} else {
+				   verbose_printk(KERN_INFO"[probe:%s]: major: %d \n", plat_name, major);
+		}
 	if(cdma_count > CDMA_MAX_NUM) {
 		verbose_printk(KERN_INFO"[probe:%s]: given more CDMA address than max allowed, setting cdma_count to %d\n", plat_name, CDMA_MAX_NUM);
 		cdma_count = CDMA_MAX_NUM;
@@ -733,11 +734,12 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 	/*allocate the DMA buffer*/
 	svd_global->dma_buffer_base = dma_alloc_coherent(dev_struct, (size_t)svd_global->dma_buffer_size, &svd_global->dma_addr_base, GFP_KERNEL);
+	svd_global->dma_buffer_end  = svd_global->dma_buffer_base +  svd_global->dma_buffer_size;
 	if(NULL == svd_global->dma_buffer_base) {
 		printk(KERN_INFO"[probe:%s]: DMA buffer base allocation ERROR\n", plat_name);
 		goto rmv_cdev;
 	} else {
-		printk(KERN_INFO"[probe:%s]: dma buffer base address is:0x%p\n", plat_name, svd_global->dma_buffer_base);
+		printk(KERN_INFO"[probe:%s]: dma buffer base address is:0x%p - 0x%p\n", plat_name, svd_global->dma_buffer_base, svd_global->dma_buffer_end);
 		printk(KERN_INFO"[probe:%s]: dma system memory HW base address is:%llx\n", plat_name, (u64)svd_global->dma_addr_base);
 		printk(KERN_INFO"[probe:%s]: dma system memory buffer size is:%llx\n", plat_name, (u64)svd_global->dma_buffer_size);
 		svd_global->dma_current_offset = 0;
@@ -1653,13 +1655,13 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 					break;
 				case MASTER:
 					verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to MASTER\n", minor);
-                    if(!svd_global->lod_set || !file_desc->has_decoupler_vec){
-                        verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the HLS slave address\n", minor);
-                        if( hls_block_init(file_desc) ) {
-                          printk(KERN_INFO"[pci_%x_ioctl]: axi_stream_fifo_init failed!\n", minor);
-                          return ERROR;
-                        }
-                    }
+					if(!svd_global->lod_set || !file_desc->has_decoupler_vec){
+						verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the HLS slave address\n", minor);
+						if( hls_block_init(file_desc) ) {
+						  printk(KERN_INFO"[pci_%x_ioctl]: axi_stream_fifo_init failed!\n", minor);
+						  return ERROR;
+						}
+					}
 					break;
 				case CONTROL:
 					verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to CONTROL\n", minor);
@@ -1672,8 +1674,8 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 						//Initialize the ring buffer and AXI_STREAM_FIFO
 						ring_buffer_init(file_desc);
 						if( axi_stream_fifo_init(file_desc) ) {
-                            printk(KERN_INFO"[pci_%x_ioctl]: axi_stream_fifo_init failed!\n", minor);
-                            return ERROR;
+							printk(KERN_INFO"[pci_%x_ioctl]: axi_stream_fifo_init failed!\n", minor);
+							return ERROR;
 						}
 					}
 					break;
@@ -1690,13 +1692,13 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 				axi_lodc_activate(file_desc);
 				//run init step that can only be ran while the file is active
 				switch(file_desc->mode){
-                    case MASTER:
-                        verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the HLS slave address\n", minor);
-                        if( hls_block_init(file_desc) ) {
-                            printk(KERN_INFO"[pci_%x_ioctl]: axi_stream_fifo_init failed!\n", minor);
-                            return ERROR;
-                        }
-                    break;
+					case MASTER:
+						verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the HLS slave address\n", minor);
+						if( hls_block_init(file_desc) ) {
+							printk(KERN_INFO"[pci_%x_ioctl]: axi_stream_fifo_init failed!\n", minor);
+							return ERROR;
+						}
+					break;
 					case AXI_STREAM_PACKET :
 					case AXI_STREAM_FIFO :
 						verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to AXI_STREAM_FIFO\n", minor);
@@ -2141,7 +2143,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	}
 
 	if(count == 0) {
-	 	printk(KERN_INFO"[pci_%x_read]: !!!!!!!!ERROR got invalid read count %zu\n", minor, count);
+		printk(KERN_INFO"[pci_%x_read]: !!!!!!!!ERROR got invalid read count %zu\n", minor, count);
 		return EINVAL;
 	}
 
@@ -2405,16 +2407,15 @@ int pci_mmap(struct file *filep, struct vm_area_struct *vma) {
 	}
 
 	//fix me, using the "read" buffer for everything, change to 1 buffer
-		if((vma->vm_flags & VM_READ) == VM_READ || (vma->vm_flags & VM_WRITE) == VM_WRITE){
-			verbose_mmap_printk(KERN_INFO "[pci_%x_mmap]: Using dma_mmap_coherent for read/write space\n", minor);
-			ret = dma_mmap_coherent(NULL, vma, buffer, svd_global->dma_addr_base+file_desc->dma_offset_read, length);
-			file_desc->mmap_start_addr = vma->vm_start;
-
-		}
-		else {
-			printk(KERN_INFO "[pci_%x_mmap]: ERROR unknown flags\n", minor);
-			return ERROR;
-		}
+	if((vma->vm_flags & VM_READ) == VM_READ || (vma->vm_flags & VM_WRITE) == VM_WRITE){
+		verbose_mmap_printk(KERN_INFO "[pci_%x_mmap]: Using dma_mmap_coherent for read/write space\n", minor);
+		ret = dma_mmap_coherent(NULL, vma, buffer, svd_global->dma_addr_base+file_desc->dma_offset_read, length);
+		file_desc->mmap_start_addr = vma->vm_start;
+	}
+	else {
+		printk(KERN_INFO "[pci_%x_mmap]: ERROR unknown flags\n", minor);
+		return ERROR;
+	}
 	//}
 	/* map the whole physically contiguous area in one piece */
 	if (ret < 0) {

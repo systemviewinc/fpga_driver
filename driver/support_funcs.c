@@ -278,18 +278,18 @@ int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, int xdma) 
 	int size;
 	unsigned long offset = 0;
 
-  //in case we have streaming make the DMA big enough to contain everything we need
-  if(file_desc->mode == AXI_STREAM_FIFO || file_desc->mode == AXI_STREAM_PACKET){
-    file_desc->dma_size = size = (size_t)PAGE_ALIGN(file_desc->dma_size + 2 * sizeof(size_t) + dma_byte_width);
-    file_desc->max_dma_read_write = file_desc->dma_size - 2 * sizeof(size_t) - dma_byte_width;    //the max you can read/write in stream mode is the dma size - 2 headers (sizeof size_t)
-                                                                  //use this in pci read/write to determine if we can read/write and resize
-  }
-  else{
-    file_desc->dma_size = size = (size_t)PAGE_ALIGN(file_desc->dma_size);
-    file_desc->max_dma_read_write = file_desc->dma_size;
-  }
-  printk(KERN_INFO"[dma_%x_init]: Setting Peripheral DMA size:0x%zx\n", file_desc->minor, file_desc->dma_size);
-  printk(KERN_INFO"[dma_%x_init]: Max DMA read/write size:0x%zx\n", file_desc->minor, file_desc->max_dma_read_write);
+	//in case we have streaming make the DMA big enough to contain everything we need
+	if(file_desc->mode == AXI_STREAM_FIFO || file_desc->mode == AXI_STREAM_PACKET){
+		file_desc->dma_size = size = (size_t)PAGE_ALIGN(file_desc->dma_size + 2 * sizeof(size_t) + dma_byte_width);
+		file_desc->max_dma_read_write = file_desc->dma_size - 2 * sizeof(size_t) - dma_byte_width;  //the max you can read/write in stream mode is the dma size - 2 headers (sizeof size_t)
+																									//use this in pci read/write to determine if we can read/write and resize
+	}
+	else {
+		file_desc->dma_size = size = (size_t)PAGE_ALIGN(file_desc->dma_size);
+		file_desc->max_dma_read_write = file_desc->dma_size;
+	}
+	printk(KERN_INFO"[dma_%x_init]: Setting Peripheral DMA size:0x%zx\n", file_desc->minor, file_desc->dma_size);
+	printk(KERN_INFO"[dma_%x_init]: Max DMA read/write size:0x%zx\n", file_desc->minor, file_desc->max_dma_read_write);
 
 	//for xdma buffers also initialize a vmalloc_32 for the sg
 	if(xdma) {
@@ -365,7 +365,8 @@ int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, int xdma) 
 		file_desc->svd->dma_current_offset += (u32)file_desc->dma_size;				//update the current dma allocation pointer, 2 buffers (R/W)
 		file_desc->set_dma_flag = 1;
 		printk(KERN_INFO"[dma_%x_init]: Success setting peripheral DMA(read only) size %zu\n", file_desc->minor, file_desc->dma_size);
-
+		if ((file_desc->dma_read_addr + file_desc->dma_size) > file_desc->svd->dma_buffer_end)
+			printk(KERN_INFO"[dma_%x_init] ERROR: Exceeded DMA BUFFER increase dma_file_size parameter\n",file_desc->minor);
 	}
 	else if((file_desc->f_flags & O_ACCMODE) == O_WRONLY){
 		verbose_printk(KERN_INFO"[dma_%x_init]: The current system memory dma offset:0x%x\n", file_desc->minor, file_desc->svd->dma_current_offset);
@@ -375,7 +376,8 @@ int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, int xdma) 
 		file_desc->svd->dma_current_offset += (u32)file_desc->dma_size;				//update the current dma allocation pointer, 2 buffers (R/W)
 		file_desc->set_dma_flag = 1;
 		printk(KERN_INFO"[dma_%x_init]: Success setting peripheral DMA(write only) size %zu\n", file_desc->minor, file_desc->dma_size);
-
+		if ((file_desc->dma_write_addr + file_desc->dma_size) > file_desc->svd->dma_buffer_end)
+			printk(KERN_INFO"[dma_%x_init] ERROR: Exceeded DMA BUFFER increase dma_file_size parameter\n",file_desc->minor);
 	}
 	else if((file_desc->f_flags & O_ACCMODE) == O_RDWR){
 		verbose_printk(KERN_INFO"[dma_%x_init]: The current system memory dma offset:0x%x\n", file_desc->minor, file_desc->svd->dma_current_offset);
@@ -388,7 +390,10 @@ int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, int xdma) 
 		file_desc->svd->dma_current_offset += (u32)(2*file_desc->dma_size);				//update the current dma allocation pointer, 2 buffers (R/W)
 		file_desc->set_dma_flag = 1;
 		printk(KERN_INFO"[dma_%x_init]: Success setting peripheral DMA size %zu\n", file_desc->minor, file_desc->dma_size);
-
+		if ((file_desc->dma_read_addr + file_desc->dma_size) > file_desc->svd->dma_buffer_end)
+			printk(KERN_INFO"[dma_%x_init] ERROR: Exceeded DMA BUFFER increase dma_file_size parameter\n",file_desc->minor);
+		if ((file_desc->dma_write_addr + file_desc->dma_size) > file_desc->svd->dma_buffer_end)
+			printk(KERN_INFO"[dma_%x_init] ERROR: Exceeded DMA BUFFER increase dma_file_size parameter\n",file_desc->minor);
 	}
 	else{
 		printk(KERN_INFO"[dma_%x_init]: ERROR unknown flags\n", file_desc->minor);
@@ -418,7 +423,7 @@ int dma_file_deinit(struct file_desc *file_desc) {
 
 	if(file_desc->write_buffer) {
 		verbose_printk(KERN_INFO"[dma_%x_deinit]: XDMA freeing write_buffer :0x%p\n", file_desc->minor, file_desc->write_buffer);
-    size = (unsigned long)file_desc->dma_size;
+	size = (unsigned long)file_desc->dma_size;
 		addr = (unsigned long)file_desc->write_buffer;
 		while ((long) size > 0) {
 			ClearPageReserved(vmalloc_to_page((void *)addr));
@@ -541,11 +546,11 @@ void axi_lodc_init(struct sv_mod_dev *svd, uint axi_address)
  */
 int hls_block_init(struct file_desc * file_desc)
 {
-  u32 slave_address = file_desc->svd->dma_addr_base + file_desc->dma_offset_read;    //address of the hw space buffer we are writing to
+	u32 slave_address = file_desc->svd->dma_addr_base + file_desc->dma_offset_read;    //address of the hw space buffer we are writing to
 	printk(KERN_INFO"[hls_block_init]: Setting HLS block slave address to to 0x%08x\n", slave_address);
 	if(direct_write(file_desc->axi_addr_ctl + HLS_SLAVE_ADDR, (void *)&slave_address, 4, NORMAL_WRITE) ) {
 		printk(KERN_INFO"[hls_block_init]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
-    return ERROR;
+	return ERROR;
 	}
 	return 0;
 }
@@ -562,41 +567,41 @@ void axi_lodc_activate(struct file_desc * file_desc)
    axi_dest = svd_global->axi_lodc_addr + 0;
    //write all 1s to the output to deactiave all regions
    if( direct_read(axi_dest, (void *)&status, 4, NORMAL_READ) ) {
-      printk(KERN_INFO"[axi_lodc_activate]: \t!!!!!!!!ERROR: in direct_read!!!!!!!\n");
-      return;
+	  printk(KERN_INFO"[axi_lodc_activate]: \t!!!!!!!!ERROR: in direct_read!!!!!!!\n");
+	  return;
    }
 
    printk(KERN_INFO"[axi_lodc_activate]: \tCurrent decoupler controller status: 0x%08X\n", status);
    status &= !(file_desc->decoupler_vec);
    printk(KERN_INFO"[axi_lodc_activate]: \tTry to write new decoupler status: 0x%08X\n", status);
    if( direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
-       printk(KERN_INFO"[axi_lodc_activate]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
-       return;
+		printk(KERN_INFO"[axi_lodc_activate]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
+		return;
    }
    file_desc->file_activate = true;
 }
 
 void axi_lodc_deactivate(struct file_desc * file_desc)
 {
-   u32 status;
-   u64 axi_dest;
+	u32 status;
+	u64 axi_dest;
 
-   printk(KERN_INFO"[axi_lodc_deactivate]: Setting Load on demand Controller to deactivate\n");
-   axi_dest = svd_global->axi_lodc_addr + 0;
-   //write all 1s to the output to deactiave all regions
-   if( direct_read(axi_dest, (void *)&status, 4, NORMAL_READ) ) {
-      printk(KERN_INFO"[axi_lodc_deactivate]: \t!!!!!!!!ERROR: in direct_read!!!!!!!\n");
-      return;
-   }
+	printk(KERN_INFO"[axi_lodc_deactivate]: Setting Load on demand Controller to deactivate\n");
+	axi_dest = svd_global->axi_lodc_addr + 0;
+	//write all 1s to the output to deactiave all regions
+	if( direct_read(axi_dest, (void *)&status, 4, NORMAL_READ) ) {
+	  printk(KERN_INFO"[axi_lodc_deactivate]: \t!!!!!!!!ERROR: in direct_read!!!!!!!\n");
+	  return;
+	}
 
-   printk(KERN_INFO"[axi_lodc_deactivate]: \tCurrent decoupler controller status: 0x%08X\n", status);
-   status |= file_desc->decoupler_vec;
-   printk(KERN_INFO"[axi_lodc_deactivate]: \tTry to write new decoupler status: 0x%08X\n", status);
-   if( direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
-       printk(KERN_INFO"[axi_lodc_deactivate]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
-       return;
-   }
-   file_desc->file_activate = false;
+	printk(KERN_INFO"[axi_lodc_deactivate]: \tCurrent decoupler controller status: 0x%08X\n", status);
+	status |= file_desc->decoupler_vec;
+	printk(KERN_INFO"[axi_lodc_deactivate]: \tTry to write new decoupler status: 0x%08X\n", status);
+	if( direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
+		printk(KERN_INFO"[axi_lodc_deactivate]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
+		return;
+	}
+	file_desc->file_activate = false;
 }
 
 
@@ -1518,7 +1523,7 @@ struct sv_mod_dev *alloc_sv_dev_instance(u64 dma_size)
 	sv_dev->bars = NULL;
 	atomic_set(&sv_dev->sw_interrupt_rx, 0);
 	sv_dev->interrupt_set = false;
-    sv_dev->lod_set = false;
+	sv_dev->lod_set = false;
 
 	init_waitqueue_head(&sv_dev->thread_q_head_write);
 	init_waitqueue_head(&sv_dev->thread_q_head_read);
