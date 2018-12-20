@@ -27,17 +27,6 @@ MODULE_LICENSE("GPL v2");
 #else
 MODULE_LICENSE("Copyright (C) 2009-2017 Sidebranch and Xilinx, Inc.");
 #endif
-MODULE_AUTHOR(	"Leon Woestenberg <leon@sidebranch.com>,"
-		"Sonal Santan <sonal.santan@xilinx.com>,"
-		"Richard Tobin <richard.tobin@xilinx.com>");
-
-MODULE_VERSION(DRV_MODULE_VERSION);
-
-/* SECTION: Module parameters */
-//
-// unsigned int major;
-// module_param(major, uint, 0644);
-// MODULE_PARM_DESC(major, "Device major number, default is 0 (dynamic value)");
 
 unsigned int poll_mode = 1;
 module_param(poll_mode, uint, 0644);

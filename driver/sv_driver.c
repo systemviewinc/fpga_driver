@@ -44,6 +44,8 @@
  #include "sv_driver.h"
  #include "xdma/sv_xdma.h"
 
+MODULE_DESCRIPTION(HEAD_COMMIT);
+MODULE_AUTHOR(	"System View Inc.");
 
 /***********Set default values for insmod parameters***************************/
 int vendor_id = PCI_VENDOR_ID_XILINX;	 /**< Insmod Patameter - PCIe vendor	*/
@@ -956,6 +958,7 @@ static int __init sv_driver_init(void)
 	sprintf(pci_driver_name, "vsi_driver_0x%x", device_id);
 	memset(file_desc_arr, 0, sizeof(file_desc_arr));
 
+	printk(KERN_INFO"[sv_driver_init]: Driver Head commit ID: %s\n", HEAD_COMMIT);
 	printk(KERN_INFO"[sv_driver_init]: Initializing driver type %d\n", driver_type);
 	switch(driver_type){
 		case PCI:
@@ -1283,10 +1286,10 @@ int pci_open(struct inode *inode, struct file *filep)
 	s->tx_dest = 0x2;
 	s->rx_dest = 0x0;
 
-	if(svd_global->lod_set)
-		s->file_activate = false;
-	else
-		s->file_activate = true;
+	// if(svd_global->lod_set)
+	s->file_activate = false;
+	// else
+	// 	s->file_activate = true;
 
 	s->xdma_dev = lro_global;
 
@@ -1503,14 +1506,14 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			break;
 
 		case SET_DECOUPLER:
-			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting decoupler:0x%llx\n", minor, arg_loc);
 			/*Store the Interrupt Vector*/
-			file_desc->decoupler_vec = (u32)arg_loc;
-			file_desc->has_decoupler_vec = 1;
-			// interrupt_num = vec2num((u32)arg_loc);
-			// file_desc->int_num = interrupt_num;
-			// verbose_printk(KERN_INFO"[pci_%x_ioctl]: Interrupt Number:%d\n", minor, interrupt_num);
-			// file_desc_arr[interrupt_num] = file_desc;
+			if( svd_global->lod_set ) {
+				verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting decoupler:0x%llx\n", minor, arg_loc);
+				file_desc->has_decoupler_vec = 1;
+				file_desc->decoupler_vec = (u32)arg_loc;
+			} else {
+				verbose_printk(KERN_INFO"[pci_%x_ioctl]: Cant set decoupler vector without LOD address.\n", minor);
+			}
 			break;
 
 		case GET_DMA_SIZE:
@@ -1649,13 +1652,18 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 				return ERROR;
 			}
 
+			if (!file_desc->has_decoupler_vec) {
+				file_desc->file_activate = true;
+				
+			}
+
 			switch(file_desc->mode){
 				case SLAVE:
 					verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to SLAVE\n", minor);
 					break;
 				case MASTER:
 					verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to MASTER\n", minor);
-					if(!svd_global->lod_set || !file_desc->has_decoupler_vec){
+					if(!file_desc->has_decoupler_vec){
 						verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the HLS slave address\n", minor);
 						if( hls_block_init(file_desc) ) {
 						  printk(KERN_INFO"[pci_%x_ioctl]: axi_stream_fifo_init failed!\n", minor);
@@ -1670,7 +1678,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 				case AXI_STREAM_FIFO :
 					verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral to AXI_STREAM_FIFO\n", minor);
 					//setup init here if there is no LOD
-					if(!svd_global->lod_set || !file_desc->has_decoupler_vec){
+					if(!file_desc->has_decoupler_vec){
 						//Initialize the ring buffer and AXI_STREAM_FIFO
 						ring_buffer_init(file_desc);
 						if( axi_stream_fifo_init(file_desc) ) {
