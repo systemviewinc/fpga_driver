@@ -19,8 +19,8 @@ Within the created module template make a symbolic link to driver files
 		$ ln -s ~/<<VSI_FPGA_DIR>>/driver/*.c .
 		$ ln -s ~/<<VSI_FPGA_DIR>>/driver/*.h .
 		$ ln -s ~/<<VSI_FPGA_DIR>>/driver/Makefile .
-		$ ln -s ~/<<VSI_FPGA_DIR>>/xdma/*.c xdma/.
-		$ ln -s ~/<<VSI_FPGA_DIR>>r/xdma/*.h xdma/.
+		$ ln -s ~/<<VSI_FPGA_DIR>>/driver/xdma/*.c xdma/.
+		$ ln -s ~/<<VSI_FPGA_DIR>>r/driver/xdma/*.h xdma/.
 
 
 Modify the *recipe_name.bb* as shown below (or use [vsidriver.bb](vsi_driver.bb) as and example):
