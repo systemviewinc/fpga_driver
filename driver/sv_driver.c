@@ -45,7 +45,7 @@
  #include "xdma/sv_xdma.h"
 
 MODULE_DESCRIPTION(HEAD_COMMIT);
-MODULE_AUTHOR(	"System View Inc.");
+MODULE_AUTHOR("System View Inc.");
 
 /***********Set default values for insmod parameters***************************/
 int vendor_id = PCI_VENDOR_ID_XILINX;	 /**< Insmod Patameter - PCIe vendor	*/

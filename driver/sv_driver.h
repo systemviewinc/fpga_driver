@@ -101,7 +101,9 @@
 #define dbg_bar(fmt, ...) pr_debug("%s():" fmt, __func__, ##__VA_ARGS__)
 #endif
 
-
+#ifndef HEAD_COMMIT
+#define HEAD_COMMIT "Undefine."
+#endif
 
 /******************************/
 
