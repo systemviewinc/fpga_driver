@@ -24,22 +24,26 @@ ifeq (, $(shell which ${GIT_EXEC}))
 	COMMIT_STATUS = ""
 	DEATTACH_STATUS = `echo `
 else
-	git_location_args = --work-tree=${PROJECT_ROOT} --git-dir=${GIT_DIR}
-	ifeq (, $(${GIT_EXEC} ${git_location_args} status --porcelain))
-		# No uncommitted changes
-		# Get current branch
-		DEATTACH_STATUS = `${GIT_EXEC} branch`
+	ifneq ($(wildcard ${GIT_DIR}),)
+		git_location_args = --work-tree=${PROJECT_ROOT} --git-dir=${GIT_DIR}
+		ifeq (, $(${GIT_EXEC} ${git_location_args} status --porcelain))
+			# No uncommitted changes
+			# Get current branch
+			DEATTACH_STATUS = `${GIT_EXEC} branch`
+		else
+			DEATTACH_STATUS = `echo You are in \'detached HEAD\'`
+			# Uncommited changes
+		endif
+		# Get hash
+		HEAD_COMMIT += `${GIT_EXEC} ${git_location_args}  rev-parse --short HEAD`
 	else
-		DEATTACH_STATUS = `echo You are in \'detached HEAD\'`
-		# Uncommited changes
+		HEAD_COMMIT = `echo Not_a_git_repository.`
 	endif
-	# Get hash
-	HEAD_COMMIT += `${GIT_EXEC} ${git_location_args}  rev-parse --short HEAD`
 endif
 CUSTOMDEFINES+=-DHEAD_COMMIT=\"$(HEAD_COMMIT)\"
 
 all:
-	echo ${CUSTOMDEFINES}
+	@echo ${CUSTOMDEFINES}
 	make CFLAGS_MODULE='$(CUSTOMDEFINES)'  -C ${KERNEL_SRC} M=$(PWD) modules
 modules_install:
 	make -C ${KERNEL_SRC} ${CUSTOMDEFINES} M=$(PWD) modules_install
