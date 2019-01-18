@@ -368,7 +368,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	}
 
 	//set DMA mask
-	if(0 != dma_set_coherent_mask(&dev->dev, 0x00000000FFFFFFFF)){
+	if(0 != dma_set_coherent_mask(&dev->dev, DMA_BIT_MASK(24))){
 		printk(KERN_INFO"[probe:%s]: set DMA mask error\n", pci_name);
 		goto disable_device;
 	}
@@ -721,9 +721,6 @@ static int sv_plat_probe(struct platform_device *pdev)
 	}
 	printk(KERN_INFO"[probe:%s]: dma mask set\n", plat_name);
 
-	svd_global->irq_num = platform_get_irq(pdev, 0);
-	printk(KERN_INFO"[probe:%s]: IRQ number is:%d\n", plat_name, svd_global->irq_num);
-
 	//register the char device
 	rc = register_chrdev(major, "sv_driver", &pci_fops);
 
@@ -769,6 +766,9 @@ static int sv_plat_probe(struct platform_device *pdev)
 	* is not handled by the core by writing to a register. For Zynq, the axi to DDR address
 	* mapping is 1-1 and should be written directly to the returned DMA handle */
 
+
+	svd_global->irq_num = platform_get_irq(pdev, 0);
+	printk(KERN_INFO"[probe:%s]: IRQ number is:%d\n", plat_name, svd_global->irq_num);
 	//request IRQ last
 	if(0 > request_irq(svd_global->irq_num, &pci_isr, IRQF_TRIGGER_HIGH | IRQF_SHARED, plat_name, pdev)){
 		printk(KERN_INFO"[probe:%s]: request IRQ error\n", plat_name);
@@ -785,7 +785,6 @@ static int sv_plat_probe(struct platform_device *pdev)
 		int_ctrl_set = 1;
 	}
 
-	printk(KERN_INFO"[probe:%s]: Using IRQ#%d with 0x%p\n", plat_name, svd_global->irq_num, &platform_dev_struct);
 
 	svd_global->axi_pcie_m = (u64)svd_global->dma_addr_base;	//cdma 1
 
@@ -794,9 +793,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 		svd_global->cdma_capable += ( svd_global->cdma_set[i] & int_ctrl_set ) ;
 	}
 
-
 	printk(KERN_INFO"[probe:%s]: cdma_capable = 0x%x\n", plat_name, svd_global->cdma_capable);
-
 	printk(KERN_INFO"[probe:%s]: ***********************PROBE FINISHED SUCCESSFULLY**************************************\n", plat_name);
 	return 0;
 
@@ -833,7 +830,6 @@ static void sv_pci_remove(struct pci_dev *dev)
 		for (i = 0 ; i < MAX_INTERRUPTS; i++)
 			free_irq(svd_global->sv_msix_entry[i].vector, dev);
 
-
 		printk(KERN_INFO"%s[sv_pci_remove]: free_irq done\n", pci_name);
 		pci_disable_msix(dev);
 		printk(KERN_INFO"%s[sv_pci_remove]: MSI-X disabled\n", pci_name);
@@ -851,12 +847,6 @@ static void sv_pci_remove(struct pci_dev *dev)
 		pci_disable_msi(dev);
 		printk(KERN_INFO"%s[sv_pci_remove]: MSI disabled\n", pci_name);
 	}
-
-
-
-
-
-
 
 	/*Destroy the read thread*/
 	printk(KERN_INFO"[sv_pci_remove]: Stopping read thead\n");
@@ -946,6 +936,7 @@ static int sv_plat_remove(struct platform_device *pdev)
 	for(i = 0; i < svd_global->bars->num_bars; i++){
 		iounmap(svd_global->bars->pci_bar_vir_addr[i]);
 	}
+
 	dma_free_coherent(dev_struct, (size_t)svd_global->dma_buffer_size, svd_global->dma_buffer_base, svd_global->dma_addr_base);
 
 	printk(KERN_INFO"[sv_plat_remove]: ***********************PLATFORM DEVICE REMOVED**************************************\n");
