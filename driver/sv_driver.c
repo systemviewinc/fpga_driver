@@ -1307,13 +1307,12 @@ int pci_release(struct inode *inode, struct file *filep)
 	//printk(KERN_INFO"[pci_release]: Attempting to close file minor number: %d\n", file_desc->minor);
 
 	file_desc = filep->private_data;
-
-	if(file_desc->mode == AXI_STREAM_FIFO || file_desc->mode == AXI_STREAM_PACKET)	{
+	
+	if ((file_desc->mode == AXI_STREAM_FIFO || file_desc->mode == AXI_STREAM_PACKET) && file_desc->file_activate) {
 		//turn off interupts from fifo
 		axi_stream_fifo_deinit(file_desc);
 	}
 
-	file_desc->file_activate = false;
 
 	//reset ring_buffers incase anything was help up on them being too full
 	atomic_set(file_desc->rfh, 0);
@@ -1354,8 +1353,11 @@ int pci_release(struct inode *inode, struct file *filep)
 	while(atomic_read(file_desc->in_write_fifo_count) > 0) {
 		atomic_dec(file_desc->in_write_fifo_count);
 	}
-
-	dma_file_deinit(file_desc);
+	
+	if ( !file_desc->file_activate) {
+		dma_file_deinit(file_desc);
+	}
+	file_desc->file_activate = false;
 
 	kfree((const void*)file_desc->start_time);
 	kfree((const void*)file_desc->stop_time);
@@ -2408,7 +2410,7 @@ int pci_mmap(struct file *filep, struct vm_area_struct *vma) {
 	//fix me, using the "read" buffer for everything, change to 1 buffer
 	if((vma->vm_flags & VM_READ) == VM_READ || (vma->vm_flags & VM_WRITE) == VM_WRITE){
 		verbose_mmap_printk(KERN_INFO "[pci_%x_mmap]: Using dma_mmap_coherent for read/write space\n", minor);
-		ret = dma_mmap_coherent(NULL, vma, buffer, svd_global->dma_addr_base+file_desc->dma_offset_read, length);
+		ret = dma_mmap_coherent(dev_struct, vma, buffer, svd_global->dma_addr_base+file_desc->dma_offset_read, length);
 		file_desc->mmap_start_addr = vma->vm_start;
 	}
 	else {
