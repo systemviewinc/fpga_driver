@@ -114,7 +114,7 @@
  							printk(KERN_INFO"[read_thread]: kfifo is full, not writing mod desc\n");
  						}
 
-						wait_event_interruptible_timeout(svd->thread_q_head_read, atomic_read(&svd->thread_q_read) == 1 || kthread_should_stop(), msecs_to_jiffies(1000) );
+						wait_event_interruptible_timeout(svd->thread_q_head_read, atomic_read(&svd->thread_q_read) == 1 || kthread_should_stop(), msecs_to_jiffies(10000) );
  						schedule();
 
  						d2r = 0;
@@ -260,7 +260,7 @@
 	 	printk(KERN_INFO"[is_packet_full_interrupt]: !!!!!!!!ERROR direct_read\n");
 	 	return ERROR;
 	 }
-	 verbose_printk(KERN_INFO"[is_packet_full_interrupt]: Stream FIFO ISR status: 0x%08x\n", status);
+	 verbose_isr_printk(KERN_INFO"[is_packet_full_interrupt]: Stream FIFO ISR status: 0x%08x\n", status);
 
 	 if((status&AXI_INTR_RFPF_MASK) == AXI_INTR_RFPF_MASK){
 		 return true;
@@ -280,14 +280,14 @@
 	 	return ERROR;
 	 }
 
-	 verbose_printk(KERN_INFO"[clear_fifo_isr]: Stream FIFO ISR status: 0x%08x\n", status);
+	 verbose_isr_printk(KERN_INFO"[clear_fifo_isr]: Stream FIFO ISR status: 0x%08x\n", status);
 	 /*clear the axi fifo ISR*/
 	 if(direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
 	 	printk(KERN_INFO"[clear_fifo_isr]: !!!!!!!!ERROR direct_write\n");
 	 	return ERROR;
 	 }
 
-	 verbose_printk(KERN_INFO"[clear_fifo_isr]: Clear fifo ISR sucessful!\n");
+	 verbose_isr_printk(KERN_INFO"[clear_fifo_isr]: Clear fifo ISR sucessful!\n");
 	 return 0;
 
  }
