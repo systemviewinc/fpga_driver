@@ -202,7 +202,7 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 			//	 return ERROR;
 			// }
 			//
-			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: xdma xfer read address 0x%p offset 0x%x\n",  buf+dma_offset, (u32)pos);
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: xdma xfer write address 0x%p offset 0x%x\n",  buf+dma_offset, (u32)pos);
 			rc = sv_char_sgdma_read_write(file_desc, file_desc->xdma_dev->sgdma_char_dev[xdma_channel][1], buf+dma_offset, l_btt, &pos, 0);
 			//
 			// if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[xdma_channel][1]->engine, 0) ) {
@@ -280,13 +280,13 @@ int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, int xdma) 
 
   //in case we have streaming make the DMA big enough to contain everything we need
   if(file_desc->mode == AXI_STREAM_FIFO || file_desc->mode == AXI_STREAM_PACKET){
-    file_desc->dma_size = size = (size_t)PAGE_ALIGN(file_desc->dma_size + 2 * sizeof(size_t) + dma_byte_width);
-    file_desc->max_dma_read_write = file_desc->dma_size - 2 * sizeof(size_t) - dma_byte_width;    //the max you can read/write in stream mode is the dma size - 2 headers (sizeof size_t)
-                                                                  //use this in pci read/write to determine if we can read/write and resize
+	file_desc->dma_size = size = (size_t)PAGE_ALIGN(file_desc->dma_size + 2 * sizeof(size_t) + dma_byte_width);
+	file_desc->max_dma_read_write = file_desc->dma_size - 2 * sizeof(size_t) - dma_byte_width;		//the max you can read/write in stream mode is the dma size - 2 headers (sizeof size_t)
+															//use this in pci read/write to determine if we can read/write and resize
   }
   else{
-    file_desc->dma_size = size = (size_t)PAGE_ALIGN(file_desc->dma_size);
-    file_desc->max_dma_read_write = file_desc->dma_size;
+	file_desc->dma_size = size = (size_t)PAGE_ALIGN(file_desc->dma_size);
+	file_desc->max_dma_read_write = file_desc->dma_size;
   }
   printk(KERN_INFO"[dma_%x_init]: Setting Peripheral DMA size:0x%zx\n", file_desc->minor, file_desc->dma_size);
   printk(KERN_INFO"[dma_%x_init]: Max DMA read/write size:0x%zx\n", file_desc->minor, file_desc->max_dma_read_write);
@@ -386,10 +386,10 @@ int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, int xdma) 
 		return ERROR;
 	}
   if(file_desc->svd->dma_current_offset > file_desc->svd->dma_buffer_size) {  //used too much memory
-    printk(KERN_INFO"[dma_%x_init]: ERROR File needs more memory than system allocated\n", file_desc->minor);
-    printk(KERN_INFO"[dma_%x_init]: Total system Memory: %08x, Memory Used: %08x\n", file_desc->minor, file_desc->svd->dma_buffer_size, file_desc->svd->dma_current_offset);
-    printk(KERN_INFO"[dma_%x_init]: Increase memory allocated by the driver DMA_SYSTEM_SIZE or adjust file DMA sizes\n", file_desc->minor);
-    return ERROR;
+	printk(KERN_INFO"[dma_%x_init]: ERROR File needs more memory than system allocated\n", file_desc->minor);
+	printk(KERN_INFO"[dma_%x_init]: Total system Memory: %08llx, Memory Used: %08x\n", file_desc->minor, file_desc->svd->dma_buffer_size, file_desc->svd->dma_current_offset);
+	printk(KERN_INFO"[dma_%x_init]: Increase memory allocated by the driver DMA_SYSTEM_SIZE or adjust file DMA sizes\n", file_desc->minor);
+	return ERROR;
   }
   file_desc->set_dma_flag = 1;
   printk(KERN_INFO"[dma_%x_init]: Success setting peripheral DMA size %zu\n", file_desc->minor, file_desc->dma_size);
@@ -417,7 +417,7 @@ int dma_file_deinit(struct file_desc *file_desc) {
 
 	if(file_desc->write_buffer) {
 		verbose_printk(KERN_INFO"[dma_%x_deinit]: XDMA freeing write_buffer :0x%p\n", file_desc->minor, file_desc->write_buffer);
-    size = (unsigned long)file_desc->dma_size;
+		size = (unsigned long)file_desc->dma_size;
 		addr = (unsigned long)file_desc->write_buffer;
 		while ((long) size > 0) {
 			ClearPageReserved(vmalloc_to_page((void *)addr));
@@ -522,7 +522,7 @@ void axi_lodc_init(struct sv_mod_dev *svd, uint axi_address)
 	svd->axi_lodc_addr = axi_address;
 
 	//write all 1s to the output to deactiave all regions
-	status = 0xFFFFFFFF;               ///to-do add multiple sections
+	status = 0xFFFFFFFF;///to-do add multiple sections
 	axi_dest = svd->axi_lodc_addr + 0;
 	if( direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
 		printk(KERN_INFO"[axi_lodc_init]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
@@ -540,7 +540,7 @@ void axi_lodc_init(struct sv_mod_dev *svd, uint axi_address)
  */
 int hls_block_init(struct file_desc * file_desc)
 {
-	u32 slave_address = file_desc->svd->dma_addr_base + file_desc->dma_offset_read;    //address of the hw space buffer we are writing to
+	u32 slave_address = file_desc->svd->dma_addr_base + file_desc->dma_offset_read;		//address of the hw space buffer we are writing to
 	printk(KERN_INFO"[hls_block_init]: Setting HLS block slave address to to 0x%08x\n", slave_address);
 	if(direct_write(file_desc->axi_addr_ctl + HLS_SLAVE_ADDR, (void *)&slave_address, 4, NORMAL_WRITE) ) {
 		printk(KERN_INFO"[hls_block_init]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");

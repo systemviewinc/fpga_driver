@@ -1307,7 +1307,7 @@ int pci_release(struct inode *inode, struct file *filep)
 	//printk(KERN_INFO"[pci_release]: Attempting to close file minor number: %d\n", file_desc->minor);
 
 	file_desc = filep->private_data;
-	
+
 	if ((file_desc->mode == AXI_STREAM_FIFO || file_desc->mode == AXI_STREAM_PACKET) && file_desc->file_activate) {
 		//turn off interupts from fifo
 		axi_stream_fifo_deinit(file_desc);
@@ -1330,7 +1330,7 @@ int pci_release(struct inode *inode, struct file *filep)
 		verbose_printk(KERN_INFO"[pci_%x_release]: in_read_fifo_count(%d) is not zero! waking thread\n", file_desc->minor, in_read_fifo_count);
 		atomic_set(&svd_global->thread_q_read, 1);
 		wake_up_interruptible(&file_desc->svd->thread_q_head_read);
-		schedule();					//think we want to schedule here to give thread time to do work
+		yield();                            //yeild to read thread
 		in_read_fifo_count = atomic_read(file_desc->in_read_fifo_count);
 	}
 	//remove items from the in_read_fifo
@@ -1346,14 +1346,14 @@ int pci_release(struct inode *inode, struct file *filep)
 		verbose_printk(KERN_INFO"[pci_%x_release]: in_write_fifo_count(%d) is not zero! waking thread\n", file_desc->minor, in_write_fifo_count);
 		atomic_set(&svd_global->thread_q_write, 1);
 		wake_up_interruptible(&file_desc->svd->thread_q_head_write);
-		schedule();					//think we want to schedule here to give thread time to do work
+		yield();                            //yeild to write thread
 		in_write_fifo_count = atomic_read(file_desc->in_write_fifo_count);
 	}
 	//remove items from the in_read_fifo
 	while(atomic_read(file_desc->in_write_fifo_count) > 0) {
 		atomic_dec(file_desc->in_write_fifo_count);
 	}
-	
+
 	if ( !file_desc->file_activate) {
 		dma_file_deinit(file_desc);
 	}
@@ -1647,7 +1647,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 			if (!file_desc->has_decoupler_vec) {
 				file_desc->file_activate = true;
-				
+
 			}
 
 			switch(file_desc->mode){
@@ -2432,7 +2432,7 @@ int pci_mmap(struct file *filep, struct vm_area_struct *vma) {
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: ******************************* MMAP END *******************************\n", minor);
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \t\tmmap length : 0x%zx\n", minor, length);
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \t\tmmap address : 0x%lx\n", minor, vma->vm_start);
-	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \t\tmmap HW address : 0x%lx\n", minor, svd_global->dma_addr_base+file_desc->dma_offset_read);
+	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \t\tmmap HW address : 0x%llx\n", minor, svd_global->dma_addr_base+file_desc->dma_offset_read);
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: \t\tmmap end address : 0x%lx\n", minor, vma->vm_end);
 	verbose_mmap_printk(KERN_INFO"[pci_%x_mmap]: ************************************************************************\n", minor);
 
