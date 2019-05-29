@@ -8,10 +8,10 @@ vsi_driver-y += support_funcs.o
 vsi_driver-y += sv_streaming_funcs.o
 vsi_driver-y += sv_driver.o
 
-CFLAGS_xdma-core.o := -DDEBUG
-CFLAGS_xdma-sgm.o := -DDEBUG
-CFLAGS_sv_xdma.o := -DDEBUG
-CFLAGS_support_funcs.o := -DDEBUG
+#CFLAGS_xdma-core.o := -DDEBUG
+#CFLAGS_xdma-sgm.o := -DDEBUG
+#CFLAGS_sv_xdma.o := -DDEBUG
+#CFLAGS_support_funcs.o := -DDEBUG
 
 KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
 # Get head commit
