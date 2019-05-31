@@ -1477,6 +1477,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 		case SET_DMA_SIZE:
 			//set the value for the file here, we will alloc the dma in set_mode
+			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting DMA size to: 0x%llx\n", minor, arg_loc);
 			file_desc->dma_size = (size_t)arg_loc;
 			break;
 
@@ -1639,6 +1640,11 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Setting the mode of the peripheral\n", minor);
 			file_desc->mode = (u32)arg_loc;
 
+			if( file_desc->dma_size == 0 ) {
+				printk(KERN_INFO"[pci_%x_ioctl]: ERROR! DMA_SIZE must be set!!!.\n", minor);
+				return ERROR;
+			}
+
 			verbose_printk(KERN_INFO"[pci_%x_ioctl]: Initialize the dma buffer\n", minor);
 			if( dma_file_init(file_desc, svd_global->dma_buffer_base, pcie_use_xdma) ) {
 				printk(KERN_INFO"[pci_%x_ioctl]: \t!!!!set dma FAILURE!!!!.\n", minor);
@@ -1647,7 +1653,6 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 			if (!file_desc->has_decoupler_vec) {
 				file_desc->file_activate = true;
-
 			}
 
 			switch(file_desc->mode){
@@ -2139,7 +2144,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: Read offset param: %llx , count requested %zd\n", minor, *f_pos, count);
 
 	if(!file_desc->file_activate){
-		printk(KERN_INFO"[pci_%x_read]: File is not activate cannot x_read !\n", minor);
+		printk(KERN_INFO"[pci_%x_read]: File is not activate cannot read !\n", minor);
 		return 0;
 	}
 
@@ -2193,11 +2198,11 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 				} else {
 
 					if(bytes <= count){
-						bytes = axi_stream_fifo_read_direct(file_desc, (size_t)bytes, buffer, file_desc->svd->axi_pcie_m + file_desc->dma_offset_read, file_desc->dma_size);
+						bytes = axi_stream_fifo_read_direct(file_desc, (size_t)bytes, buffer, file_desc->dma_size);
 						count = bytes;
 					}
 					else if(count < bytes) {
-						bytes = axi_stream_fifo_read_direct(file_desc, (size_t)count, buffer, file_desc->svd->axi_pcie_m + file_desc->dma_offset_read, file_desc->dma_size);
+						bytes = axi_stream_fifo_read_direct(file_desc, (size_t)count, buffer, file_desc->dma_size);
 					}
 
 					verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: copy_to_user (0x%p, 0x%p, 0x%zx)\n" , minor, &buf, buffer, count);

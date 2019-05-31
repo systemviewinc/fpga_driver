@@ -448,7 +448,7 @@ int write_data(struct file_desc * file_desc, void * buffer_addr)
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: dma_transfer 1 ring_buff address: 0x%p + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
 							buffer_addr, wth, axi_dest, room_till_end);
 
-		if(dma_transfer(file_desc, axi_dest, buffer_addr, room_till_end, KEYHOLE_WRITE, wth) ) { //unsuccessful CDMA transmission
+		if(dma_transfer(file_desc, axi_dest, buffer_addr, room_till_end, KEYHOLE_WRITE, wth) ) { //unsuccessful DMA transmission
 			verbose_printk(KERN_INFO"[write_data]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 		}
 		//extra verbose debug message
@@ -457,7 +457,7 @@ int write_data(struct file_desc * file_desc, void * buffer_addr)
 
 		verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: dma_transfer 2 ring_buff address: 0x%p + 0x%x, AXI Address: %llx, len: 0x%zx)\n",
 							buffer_addr, wth, axi_dest, remaining);
-		if(dma_transfer(file_desc, axi_dest, buffer_addr, remaining, KEYHOLE_WRITE, wth) ) { //unsuccessful CDMA transmission
+		if(dma_transfer(file_desc, axi_dest, buffer_addr, remaining, KEYHOLE_WRITE, wth) ) { //unsuccessful DMA transmission
 			verbose_axi_fifo_write_printk(KERN_INFO"[write_data]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 		}
 		wth = get_new_ring_pointer(remaining, wth, (int)(file_desc->dma_size), dma_byte_width);
@@ -697,7 +697,7 @@ size_t axi_stream_fifo_read(struct file_desc * file_desc, size_t count, void * b
  * ring_pointer_offset: The current offset of the ring pointer in memory to store data.
  * returns the number of bytes read
  */
-size_t axi_stream_fifo_read_direct(struct file_desc * file_desc, size_t count, char * buf_base_addr, u64 hw_base_addr, size_t buf_size) {
+size_t axi_stream_fifo_read_direct(struct file_desc * file_desc, size_t count, char * buf_base_addr, size_t buf_size) {
 	u64 axi_dest;
 
 	//clear values in file_desc
@@ -719,9 +719,9 @@ size_t axi_stream_fifo_read_direct(struct file_desc * file_desc, size_t count, c
 
 	}
 	//only 1 cdma transfer
-	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: dma_transfer AXI Address: 0x%llx, ring_buff address: 0x%llx, len: 0x%zx\n", axi_dest, hw_base_addr , count);
+	verbose_axi_fifo_read_printk(KERN_INFO"[axi_stream_fifo_read_direct]: dma_transfer AXI Address: 0x%llx, ring_buff address: 0x%p, len: 0x%zx\n", axi_dest, (void *)buf_base_addr, count);
 
-	if(dma_transfer(file_desc, axi_dest, (void *)hw_base_addr, count, KEYHOLE_READ, 0) ) { //unsuccessful CDMA transmission
+	if(dma_transfer(file_desc, axi_dest, (void *)buf_base_addr, count, KEYHOLE_READ, 0) ) { //unsuccessful CDMA transmission
 		printk(KERN_INFO"[axi_stream_fifo_read_direct]: !!!!!!!!ERROR on CDMA READ!!!.\n");
 	}
 
