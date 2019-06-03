@@ -632,7 +632,7 @@ size_t axi_stream_fifo_read(struct file_desc * file_desc, size_t count, void * b
  * @param file_desc The struct containing all the file variables.
  * @param ring_pointer_offset The current offset of the ring pointer in memory to store data.
 */
-size_t axi_stream_fifo_read_direct(struct file_desc * file_desc, size_t count, char * buf_base_addr, u64 hw_base_addr, size_t buf_size);
+size_t axi_stream_fifo_read_direct(struct file_desc * file_desc, size_t count, char * buf_base_addr, size_t buf_size);
 
 /**
  * @brief This function initializes the AXI Streaming FIFO.
