@@ -176,7 +176,7 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 			//	 }
 			// }
 
-			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: xdma xfer write address 0x%p offset 0x%x\n",  buf+dma_offset, (u32)pos);
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: xdma xfer write address 0x%p offset 0x%x\n", buf+dma_offset, (u32)pos);
 			rc = sv_char_sgdma_read_write(file_desc, file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0], buf+dma_offset, l_btt, &pos, 1);
 
 			if(rc == l_btt) {	//successfully transfered all bytes
@@ -202,7 +202,7 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 			//	 return ERROR;
 			// }
 			//
-			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: xdma xfer write address 0x%p offset 0x%x\n",  buf+dma_offset, (u32)pos);
+			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: xdma xfer write address 0x%p offset 0x%x\n", buf+dma_offset, (u32)pos);
 			rc = sv_char_sgdma_read_write(file_desc, file_desc->xdma_dev->sgdma_char_dev[xdma_channel][1], buf+dma_offset, l_btt, &pos, 0);
 			//
 			// if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[xdma_channel][1]->engine, 0) ) {
@@ -278,18 +278,18 @@ int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, int xdma) 
 	int size;
 	unsigned long offset = 0;
 
-  //in case we have streaming make the DMA big enough to contain everything we need
-  if(file_desc->mode == AXI_STREAM_FIFO || file_desc->mode == AXI_STREAM_PACKET){
+	//in case we have streaming make the DMA big enough to contain everything we need
+	if(file_desc->mode == AXI_STREAM_FIFO || file_desc->mode == AXI_STREAM_PACKET){
 	file_desc->dma_size = size = (size_t)PAGE_ALIGN(file_desc->dma_size + 2 * sizeof(size_t) + dma_byte_width);
 	file_desc->max_dma_read_write = file_desc->dma_size - 2 * sizeof(size_t) - dma_byte_width;		//the max you can read/write in stream mode is the dma size - 2 headers (sizeof size_t)
 															//use this in pci read/write to determine if we can read/write and resize
-  }
-  else{
+	}
+	else{
 	file_desc->dma_size = size = (size_t)PAGE_ALIGN(file_desc->dma_size);
 	file_desc->max_dma_read_write = file_desc->dma_size;
-  }
-  printk(KERN_INFO"[dma_%x_init]: Setting Peripheral DMA size:0x%zx\n", file_desc->minor, file_desc->dma_size);
-  printk(KERN_INFO"[dma_%x_init]: Max DMA read/write size:0x%zx\n", file_desc->minor, file_desc->max_dma_read_write);
+	}
+	printk(KERN_INFO"[dma_%x_init]: Setting Peripheral DMA size:0x%zx\n", file_desc->minor, file_desc->dma_size);
+	printk(KERN_INFO"[dma_%x_init]: Max DMA read/write size:0x%zx\n", file_desc->minor, file_desc->max_dma_read_write);
 
 	//for xdma buffers also initialize a vmalloc_32 for the sg
 	if(xdma) {
@@ -385,14 +385,14 @@ int dma_file_init(struct file_desc *file_desc, char *dma_buffer_base, int xdma) 
 		printk(KERN_INFO"[dma_%x_init]: ERROR unknown flags\n", file_desc->minor);
 		return ERROR;
 	}
-  if(file_desc->svd->dma_current_offset > file_desc->svd->dma_buffer_size) {  //used too much memory
-	printk(KERN_INFO"[dma_%x_init]: ERROR File needs more memory than system allocated\n", file_desc->minor);
-	printk(KERN_INFO"[dma_%x_init]: Total system Memory: %08llx, Memory Used: %08x\n", file_desc->minor, file_desc->svd->dma_buffer_size, file_desc->svd->dma_current_offset);
-	printk(KERN_INFO"[dma_%x_init]: Increase memory allocated by the driver DMA_SYSTEM_SIZE or adjust file DMA sizes\n", file_desc->minor);
-	return ERROR;
-  }
-  file_desc->set_dma_flag = 1;
-  printk(KERN_INFO"[dma_%x_init]: Success setting peripheral DMA size %zu\n", file_desc->minor, file_desc->dma_size);
+	if(file_desc->svd->dma_current_offset > file_desc->svd->dma_buffer_size) { //used too much memory
+		printk(KERN_INFO"[dma_%x_init]: ERROR File needs more memory than system allocated\n", file_desc->minor);
+		printk(KERN_INFO"[dma_%x_init]: Total system Memory: %08llx, Memory Used: %08x\n", file_desc->minor, file_desc->svd->dma_buffer_size, file_desc->svd->dma_current_offset);
+		printk(KERN_INFO"[dma_%x_init]: Increase memory allocated by the driver DMA_SYSTEM_SIZE or adjust file DMA sizes\n", file_desc->minor);
+		return ERROR;
+	}
+	file_desc->set_dma_flag = 1;
+	printk(KERN_INFO"[dma_%x_init]: Success setting peripheral DMA size %zu\n", file_desc->minor, file_desc->dma_size);
 	return 0;
 }
 
@@ -554,25 +554,25 @@ int hls_block_init(struct file_desc * file_desc)
 
 void axi_lodc_activate(struct file_desc * file_desc)
 {
-   u32 status;
-   u64 axi_dest;
+	u32 status;
+	u64 axi_dest;
 
-   printk(KERN_INFO"[axi_lodc_activate]: Setting Load on demand Controller to activate\n");
-   axi_dest = svd_global->axi_lodc_addr + 0;
-   //write all 1s to the output to deactiave all regions
-   if( direct_read(axi_dest, (void *)&status, 4, NORMAL_READ) ) {
-	  printk(KERN_INFO"[axi_lodc_activate]: \t!!!!!!!!ERROR: in direct_read!!!!!!!\n");
-	  return;
-   }
+	printk(KERN_INFO"[axi_lodc_activate]: Setting Load on demand Controller to activate\n");
+	axi_dest = svd_global->axi_lodc_addr + 0;
+	//write all 1s to the output to deactiave all regions
+	if( direct_read(axi_dest, (void *)&status, 4, NORMAL_READ) ) {
+		printk(KERN_INFO"[axi_lodc_activate]: \t!!!!!!!!ERROR: in direct_read!!!!!!!\n");
+		return;
+	}
 
-   printk(KERN_INFO"[axi_lodc_activate]: \tCurrent decoupler controller status: 0x%08X\n", status);
-   status &= !(file_desc->decoupler_vec);
-   printk(KERN_INFO"[axi_lodc_activate]: \tTry to write new decoupler status: 0x%08X\n", status);
-   if( direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
+	printk(KERN_INFO"[axi_lodc_activate]: \tCurrent decoupler controller status: 0x%08X\n", status);
+	status &= !(file_desc->decoupler_vec);
+	printk(KERN_INFO"[axi_lodc_activate]: \tTry to write new decoupler status: 0x%08X\n", status);
+	if( direct_write(axi_dest, (void *)&status, 4, NORMAL_WRITE) ) {
 		printk(KERN_INFO"[axi_lodc_activate]: \t!!!!!!!!ERROR: in direct_write!!!!!!!\n");
 		return;
-   }
-   file_desc->file_activate = true;
+	}
+	file_desc->file_activate = true;
 }
 
 void axi_lodc_deactivate(struct file_desc * file_desc)
@@ -584,8 +584,8 @@ void axi_lodc_deactivate(struct file_desc * file_desc)
 	axi_dest = svd_global->axi_lodc_addr + 0;
 	//write all 1s to the output to deactiave all regions
 	if( direct_read(axi_dest, (void *)&status, 4, NORMAL_READ) ) {
-	  printk(KERN_INFO"[axi_lodc_deactivate]: \t!!!!!!!!ERROR: in direct_read!!!!!!!\n");
-	  return;
+		printk(KERN_INFO"[axi_lodc_deactivate]: \t!!!!!!!!ERROR: in direct_read!!!!!!!\n");
+		return;
 	}
 
 	printk(KERN_INFO"[axi_lodc_deactivate]: \tCurrent decoupler controller status: 0x%08X\n", status);
@@ -996,7 +996,7 @@ int direct_read(u64 axi_address, void *buf, size_t count, int transfer_type)
 		newaddr_dest = buf + offset;
 		newaddr_src = virt_addr + offset;
 		*newaddr_dest = ioread32(newaddr_src);
-		verbose_direct_read_printk(KERN_INFO"\t\t[direct_read]: read: ('0x%08x')@0x%p from kernel address 0x%p.\n", *newaddr_dest, newaddr_dest,  newaddr_src);
+		verbose_direct_read_printk(KERN_INFO"\t\t[direct_read]: read: ('0x%08x')@0x%p from kernel address 0x%p.\n", *newaddr_dest, newaddr_dest, newaddr_src);
 		if(transfer_type != KEYHOLE_WRITE)
 			offset += 4;
 	}
@@ -1102,8 +1102,9 @@ int cdma_transfer(struct file_desc * file_desc, u64 SA, u64 DA, u32 BTT, int key
 	u32 SA_LSB;
 	u32 DA_MSB;
 	u32 DA_LSB;
+	int dma_usage_cnt = file_desc->svd->dma_usage_cnt++;
 
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: **** Starting CDMA %d transfer ****\n", file_desc->svd->dma_usage_cnt);
+	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: **** Starting CDMA %d transfer ****\n", dma_usage_cnt);
 
 	SA_MSB = (u32)(SA>>32);
 	SA_LSB = (u32)SA;
@@ -1140,7 +1141,7 @@ int cdma_transfer(struct file_desc * file_desc, u64 SA, u64 DA, u32 BTT, int key
 	}
 
 	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: Using CDMA %d\n", cdma_num);
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: ********* CDMA TRANSFER %d INITIALIZATION *************\n", file_desc->svd->dma_usage_cnt);
+	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: ********* CDMA TRANSFER %d INITIALIZATION *************\n", dma_usage_cnt);
 
 	// Step 3. Write the desired transfer source address to the Source Address (SA) register. The
 	// transfer data at the source address must be valid and ready for transfer. If the address
@@ -1201,7 +1202,7 @@ int cdma_transfer(struct file_desc * file_desc, u64 SA, u64 DA, u32 BTT, int key
 		}
 	}
 
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: ********* CDMA TRANSFER %d FINISHED *************\n", file_desc->svd->dma_usage_cnt++);
+	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: ********* CDMA TRANSFER %d FINISHED *************\n", dma_usage_cnt);
 
 	return 0;
 }

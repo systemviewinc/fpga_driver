@@ -95,6 +95,9 @@
 #ifndef verbose_write_thread_printk
 #define verbose_write_thread_printk(...)
 #endif
+#ifndef verbose_copy_ring_buf_printk
+#define verbose_copy_ring_buf_printk(...)
+#endif
 
 #ifndef dbg_bar
 #define dbg_bar(fmt, ...) pr_debug("%s():" fmt, __func__, ##__VA_ARGS__)
@@ -450,6 +453,8 @@ struct file_desc {
 
 	u32 tx_dest;	/**< Last wrote RLR value if non-zero this has to be used */
 	u32 rx_dest;	/**< Last read RLR value if non-zero this has to be used */
+
+	u32 tx_fifo_size;	/**< size of the tx fifo */
 
 	struct xdma_dev *xdma_dev;
 

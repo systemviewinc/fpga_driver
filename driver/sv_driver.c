@@ -1824,8 +1824,6 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	file_desc = filep->private_data;
 	minor = file_desc->minor;
 
-	bytes_written = 0;
-
 	if(pcie_use_xdma == 1){
 		buffer = file_desc->write_buffer;
 	}
@@ -1894,16 +1892,21 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 	switch(file_desc->mode) {
 		case AXI_STREAM_FIFO :
-		case AXI_STREAM_PACKET :
+			//start trying to read the whole count
+			partial_count = count;
+
 			/*Stay until requested transmission is complete*/
 			while (bytes_written < count && file_desc->file_activate) {
 
-				if(count > file_desc->max_dma_read_write) {
-					printk(KERN_INFO"[pci_%x_write]: count > max_dma_read_write \n", minor);
-					return ERROR;
+				if(partial_count > file_desc->tx_fifo_size) {
+					printk(KERN_INFO"[pci_%x_write]: count > max_dma_read_write(%d) \n", minor, file_desc->tx_fifo_size);
+					partial_count = file_desc->tx_fifo_size;
+				}
+				else {
+					partial_count = partial_count;
 				}
 
-				while(copy_to_ring_buffer(file_desc, (void *)buf, count, buffer) == 0 ) {
+				while(copy_to_ring_buffer(file_desc, (void *)buf + bytes_written, partial_count, buffer) == 0 ) {
 					//wake up write thread
 					atomic_set(&svd_global->thread_q_write, 1);
 					wake_up_interruptible(&file_desc->svd->thread_q_head_write);
@@ -1938,12 +1941,61 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				atomic_set(&svd_global->thread_q_write, 1);
 				wake_up_interruptible(&file_desc->svd->thread_q_head_write);
 				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: waking up write thread b\n", minor);
+				printk(KERN_INFO"[pci_%x_write]: Wrote %zu bytes in this pass.\n", minor, partial_count);
 
-				partial_count = count;
+				bytes_written += partial_count;
+				partial_count = count - bytes_written;
 
-				bytes_written = bytes_written + partial_count;
-				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: Wrote %zu bytes in this pass.\n", minor, partial_count);
 			}
+			break;
+		case AXI_STREAM_PACKET :
+
+			// can't copy if there isn't enough room for the entire packet
+			if(count > file_desc->max_dma_read_write) {
+				printk(KERN_INFO"[pci_%x_write]: count > max_dma_read_write \n", minor);
+				return ERROR;
+			}
+
+			//copy the whole packet to the ring buffer
+			while(copy_to_ring_buffer(file_desc, (void *)buf, count, buffer) == 0 ) {
+				//wake up write thread
+				atomic_set(&svd_global->thread_q_write, 1);
+				wake_up_interruptible(&file_desc->svd->thread_q_head_write);
+				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: not enough room in the the write ring buffer, waking up write thread a\n", file_desc->minor);
+
+				//verbose_pci_write_printk(KERN_INFO"[pci_%x_write]:: pci_write is going to sleep ZzZzZzZzZzZzZz, room in buffer: %d\n", file_desc->minor, room_in_buffer(wtk, wth, full, file_desc->dma_size));
+				if( wait_event_interruptible(file_desc->svd->pci_write_head, atomic_read(file_desc->pci_write_q) == 1) ) {
+					printk(KERN_INFO"[pci_%x_write]: !!!!!!!!ERROR wait_event_interruptible\n", file_desc->minor);
+					return ERROR;
+				}
+				atomic_set(file_desc->pci_write_q, 0);
+				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: woke up the sleeping pci_write function!!\n", file_desc->minor);
+			}
+
+			//write the file_desc to the write FIFO
+			if(atomic_read(file_desc->in_write_fifo_count) == 0) {
+				//debug message
+				if(kfifo_len(&file_desc->svd->write_fifo) > 4) {
+					verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: kfifo write stored elements: %d\n", minor, kfifo_len(&file_desc->svd->write_fifo));
+				}
+
+				if(!kfifo_is_full(&file_desc->svd->write_fifo) && file_desc->file_activate) {
+					atomic_inc(file_desc->in_write_fifo_count);
+					kfifo_in_spinlocked(&file_desc->svd->write_fifo, &file_desc, 1, &file_desc->svd->fifo_lock_write);
+				}
+				else {
+					verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: write kfifo is full, not writing mod desc\n", minor);
+				}
+			}
+
+			//wake up write thread
+			atomic_set(&svd_global->thread_q_write, 1);
+			wake_up_interruptible(&file_desc->svd->thread_q_head_write);
+			verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: waking up write thread b\n", minor);
+
+			bytes_written = count;
+			verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: Wrote %zu bytes in this pass.\n", minor, count);
+
 			break;
 
 		case CONTROL:
@@ -2188,13 +2240,13 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			// if AXI streaming fifo set with no interrupt then just read
 			if(!file_desc->has_interrupt_vec) {
 				if (count == 0) {
-					printk(KERN_INFO"[pci_%x_read] illegal to read 0 bytes\n",minor);
+					verbose_pci_read_printk(KERN_INFO"[pci_%x_read] illegal to read 0 bytes\n",minor);
 					break;
 				}
 				bytes = axi_stream_fifo_d2r(file_desc);
 
 				if(bytes == 0) {
-					verbose_axi_fifo_write_printk(KERN_INFO"[pci_%x_read]: No data to read from axi stream fifo\n" , minor);
+					verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: No data to read from axi stream fifo\n" , minor);
 				} else {
 
 					if(bytes <= count){

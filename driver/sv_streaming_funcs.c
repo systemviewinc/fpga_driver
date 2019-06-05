@@ -760,7 +760,7 @@ void ring_buffer_init(struct file_desc * file_desc)
 int axi_stream_fifo_init(struct file_desc * file_desc)
 {
 	u64 axi_dest;
-	u32 buf, read_reg;
+	u32 buf;
 
 	if((file_desc->axi_addr == -1) | (file_desc->axi_addr_ctl == -1)) {
 		printk(KERN_INFO"[pci_%x_ioctl]: !!!!!!!!ERROR: axi addresses of AXI STREAM FIFO not set\n", file_desc->minor);
@@ -835,21 +835,16 @@ int axi_stream_fifo_init(struct file_desc * file_desc)
 		}
 	}
 
-	buf = 0x0;
-
 	axi_dest = file_desc->axi_addr_ctl + AXI_STREAM_TDFV; // the transmit FIFO vacancy
 	if( direct_read(axi_dest, (void*)(&buf), 4, NORMAL_READ) ) {
 		printk(KERN_INFO"[axi_stream_fifo_%x_init]: !!!!!!!!ERROR reading tx side vacancy\n", file_desc->minor);
 		return ERROR;
 	}
-
-	//this is a hack until I fix the data_transfer function to only use 1 buffer. regardless of cdma use
-	read_reg = buf;
-
+	file_desc->tx_fifo_size = buf*dma_byte_width;
 	/*Check to see if the calculated fifo empty level via the DMA data byte width (aka the axi-s fifo byte width)
 	 * and file size (aka the fifo size) is equal to the actual fifo empty level when read */
 	printk(KERN_INFO"[axi_stream_fifo_%x_init]: file size: ('0x%08x')\n", file_desc->minor, (u32)file_desc->file_size);
-	printk(KERN_INFO"[axi_stream_fifo_%x_init]: register read size: ('0x%08x')\n", file_desc->minor, read_reg);
+	printk(KERN_INFO"[axi_stream_fifo_%x_init]: register read size: ('0x%08x')\n", file_desc->minor, file_desc->tx_fifo_size);
 	printk(KERN_INFO"[axi_stream_fifo_%x_init]: Receive axi-s fifo initialized\n", file_desc->minor);
 
 	return 0;
@@ -920,7 +915,7 @@ int copy_from_ring_buffer(struct file_desc * file_desc, void* buf, size_t count,
 			room_till_end = file_desc->dma_size - rfu;
 			//If the header will not fit in 1 chuck of the ring buffer (in the room till end) then just put it at the start
 			if(sizeof(read_header_size) > room_till_end) {
-		  		rfu = 0;
+				rfu = 0;
 			}
 			verbose_pci_read_printk(KERN_INFO"\t[copy_from_ring_buffer_%x]: header copy(0x%p, 0x%p + 0x%x, 0x%zx)\n", file_desc->minor, &read_header_size, buffer_addr, rfu, sizeof(read_header_size));
 			memcpy(&read_header_size, buffer_addr+rfu, sizeof(read_header_size));
@@ -1048,12 +1043,12 @@ int copy_to_ring_buffer(struct file_desc * file_desc, void* buf, size_t count, v
 	int wtk, wth, full, rc, bytes = 0;
 	size_t room_till_end, remaining;
 
-	verbose_pci_write_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]: the amount of bytes being copied to the ring buffer: %zu\n", file_desc->minor, count);
+	verbose_copy_ring_buf_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]: the amount of bytes being copied to the ring buffer: %zu\n", file_desc->minor, count);
 
 	wtk = atomic_read(file_desc->wtk);
 	wth = atomic_read(file_desc->wth);
 	full = atomic_read(file_desc->write_ring_buf_full);
-	verbose_pci_write_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]:wtk %d wth %d full %d dma_byte_size %d room_in_buffer %d active %d\n",file_desc->minor,wtk,wth,full,dma_byte_width,room_in_buffer(wtk, wth, full, file_desc->dma_size),file_desc->file_activate);
+	verbose_copy_ring_buf_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]: wtk %d wth %d full %d dma_byte_size %d room_in_buffer %d active %d\n",file_desc->minor,wtk,wth,full,dma_byte_width,room_in_buffer(wtk, wth, full, file_desc->dma_size),file_desc->file_activate);
 	//we are going to write the whole count + header
 	if( (count + dma_byte_width + 2*sizeof(count)) > room_in_buffer(wtk, wth, full, file_desc->dma_size) && file_desc->file_activate ) {
 		 return 0;
@@ -1066,7 +1061,7 @@ int copy_to_ring_buffer(struct file_desc * file_desc, void* buf, size_t count, v
 		wtk = 0;
 	}
 
-	verbose_pci_write_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]: header memcpy(0x%p + 0x%x, 0x%p, 0x%zx)\n", file_desc->minor, buffer_addr, wtk, (void * )&count, sizeof(count));
+	verbose_copy_ring_buf_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]: header memcpy(0x%p + 0x%x, 0x%p, 0x%zx)\n", file_desc->minor, buffer_addr, wtk, (void * )&count, sizeof(count));
 	memcpy(buffer_addr+wtk, (void * )&count, sizeof(count));
 	wtk = get_new_ring_pointer((int)sizeof(count), wtk, (int)file_desc->dma_size, dma_byte_width);
 
@@ -1074,7 +1069,7 @@ int copy_to_ring_buffer(struct file_desc * file_desc, void* buf, size_t count, v
 	if(count > room_till_end) {		//if header size is larger than room till the end, write in two steps
 		remaining = count-room_till_end;
 		//write the room_till_end
-		verbose_pci_write_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]: copy_from_user 1(0x%p + 0x%x, 0x%p, 0x%zx)\n", file_desc->minor, buffer_addr, wtk, buf, room_till_end);
+		verbose_copy_ring_buf_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]: copy_from_user 1(0x%p + 0x%x, 0x%p, 0x%zx)\n", file_desc->minor, buffer_addr, wtk, buf, room_till_end);
 		rc = copy_from_user(buffer_addr+wtk, buf, room_till_end);
 		if(rc) {
 			printk(KERN_INFO"[copy_to_ring_buffer_%x]: !!!!!!!!ERROR copy_from_user rc: 0x%x\n", file_desc->minor, rc);
@@ -1083,7 +1078,7 @@ int copy_to_ring_buffer(struct file_desc * file_desc, void* buf, size_t count, v
 		bytes += room_till_end;
 		wtk = 0;																																										//end of buffer reached
 
-		verbose_pci_write_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]: copy_from_user 2(0x%p + 0x%x, 0x%p, 0x%zx)\n", file_desc->minor, buffer_addr, wtk, buf+room_till_end, remaining);
+		verbose_copy_ring_buf_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]: copy_from_user 2(0x%p + 0x%x, 0x%p, 0x%zx)\n", file_desc->minor, buffer_addr, wtk, buf+room_till_end, remaining);
 		rc = copy_from_user(buffer_addr+wtk, buf+room_till_end, remaining);
 		if(rc) {
 			printk(KERN_INFO"[copy_to_ring_buffer_%x]: !!!!!!!!ERROR copy_from_user rc: 0x%x\n", file_desc->minor, rc);
@@ -1092,7 +1087,7 @@ int copy_to_ring_buffer(struct file_desc * file_desc, void* buf, size_t count, v
 		bytes += remaining;
 		wtk = get_new_ring_pointer((int)remaining, wtk, (int)file_desc->dma_size, dma_byte_width);
 	} else {
-		verbose_pci_write_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]: copy_from_user(0x%p + 0x%x, 0x%p, 0x%zx)\n", file_desc->minor, buffer_addr, wtk, buf, count);
+		verbose_copy_ring_buf_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]: copy_from_user(0x%p + 0x%x, 0x%p, 0x%zx)\n", file_desc->minor, buffer_addr, wtk, buf, count);
 		rc = copy_from_user(buffer_addr+wtk, buf, count);
 		if(rc) {
 			printk(KERN_INFO"[copy_to_ring_buffer_%x]: !!!!!!!!ERROR copy_from_user rc: 0x%x\n", file_desc->minor, rc);
@@ -1107,14 +1102,15 @@ int copy_to_ring_buffer(struct file_desc * file_desc, void* buf, size_t count, v
 	/*This says that if the wtk pointer has caught up to the WTH pointer, give priority to the WTH*/
 	if(atomic_read(file_desc->wth) == wtk) {
 		atomic_set(file_desc->write_ring_buf_full, 1);
-		verbose_pci_write_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]: ring_point_%d: ring buff priority: %d\n", file_desc->minor, file_desc->minor, atomic_read(file_desc->write_ring_buf_full));
+		verbose_copy_ring_buf_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]: ring_point_%d: ring buff priority: %d\n", file_desc->minor, file_desc->minor, atomic_read(file_desc->write_ring_buf_full));
 	}
 
-	verbose_pci_write_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]: copied 0x%x to the ring buffer\n", file_desc->minor, bytes);
-	verbose_pci_write_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]: write ring_buffer: WTH: %d WTK: %d\n", file_desc->minor, atomic_read(file_desc->wth), wtk);
+	verbose_copy_ring_buf_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]: copied 0x%x to the ring buffer\n", file_desc->minor, bytes);
+	verbose_copy_ring_buf_printk(KERN_INFO"\t[copy_to_ring_buffer_%x]: write ring_buffer: WTH: %d WTK: %d\n", file_desc->minor, atomic_read(file_desc->wth), wtk);
 
 	return bytes;
 }
+
 
 int align_dma(int addr, int dma_byte_width)
 {
