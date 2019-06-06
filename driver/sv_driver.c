@@ -1899,7 +1899,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 			while (bytes_written < count && file_desc->file_activate) {
 
 				if(partial_count > file_desc->tx_fifo_size) {
-					printk(KERN_INFO"[pci_%x_write]: count > max_dma_read_write(%d) \n", minor, file_desc->tx_fifo_size);
+					verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: count > max_dma_read_write(%d) \n", minor, file_desc->tx_fifo_size);
 					partial_count = file_desc->tx_fifo_size;
 				}
 				else {
@@ -1941,7 +1941,7 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 				atomic_set(&svd_global->thread_q_write, 1);
 				wake_up_interruptible(&file_desc->svd->thread_q_head_write);
 				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: waking up write thread b\n", minor);
-				printk(KERN_INFO"[pci_%x_write]: Wrote %zu bytes in this pass.\n", minor, partial_count);
+				verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: Wrote %zu bytes in this pass.\n", minor, partial_count);
 
 				bytes_written += partial_count;
 				partial_count = count - bytes_written;
