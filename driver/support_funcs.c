@@ -1118,10 +1118,10 @@ int cdma_transfer(struct file_desc * file_desc, u64 SA, u64 DA, u32 BTT, int key
 
 	// Step 2. Program the CDMACR.IOC_IrqEn bit to the desired state for interrupt generation on
 	// transfer completion. Also set the error interrupt enable (CDMACR.ERR_IrqEn), if so desired.
-
+	// TODO: Remove keyhole.
 	switch(keyhole_en){
-
-		case KEYHOLE_READ:
+		// 5, 6 - should never heppend (disabling of keyhole)
+		case 5:
 			bit_vec = 0x00000010;	//the bit for KEYHOLE READ
 			verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: Setting the CDMA Keyhole READ as ENABLED\n");
 			if( cdma_config_set(bit_vec, 1, cdma_num) ) {	//value of one means we want to SET the register
@@ -1129,7 +1129,7 @@ int cdma_transfer(struct file_desc * file_desc, u64 SA, u64 DA, u32 BTT, int key
 			}
 			break;
 
-		case KEYHOLE_WRITE:
+		case 6:
 			bit_vec = 0x00000020;	//the bit for KEYHOLE WRITE
 			verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: Setting the CDMA Keyhole WRITE as ENABLED\n");
 			if( cdma_config_set(bit_vec, 1, cdma_num) ) {	//value of one means we want to SET the register
