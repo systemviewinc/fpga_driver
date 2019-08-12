@@ -8,3 +8,5 @@ modules.order
 .AppleDouble
 
 yocto/poky/meta-vsi/\.DS_Store
+
+\.vscode/
