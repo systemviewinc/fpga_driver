@@ -42,7 +42,10 @@
  #include <linux/kfifo.h>
  #include <linux/spinlock.h>
  #include "sv_driver.h"
+ 
+#ifdef _JIM_H_
  #include "xdma/sv_xdma.h"
+#endif 
 
 MODULE_DESCRIPTION(HEAD_COMMIT);
 MODULE_AUTHOR("System View Inc.");
@@ -210,9 +213,13 @@ struct vm_operations_struct mmap_vm_ops = {
 /* ************************device init and exit *********************** */
 static int __init sv_driver_init(void);
 static void sv_driver_exit(void);
+#ifdef _PCIE_ENABLED_
 static int sv_pci_probe(struct pci_dev * dev, const struct pci_device_id * id);
+#endif
 static int sv_plat_probe(struct platform_device *pdev);
+#ifdef _PCIE_ENABLED_
 static void sv_pci_remove(struct pci_dev * dev);
+#endif
 static int sv_plat_remove(struct platform_device * dev);
 static unsigned char skel_get_revision(struct pci_dev * dev);
 /************************** ISR functions **************************** */
@@ -247,6 +254,7 @@ static struct platform_driver sv_plat_driver = {
 	},
 };
 
+#ifdef _PCIE_ENABLED_
 static struct pci_driver sv_pci_driver = {
 	//.name = "vsi_driver",
 	.name = "vsi_driver",
@@ -254,6 +262,7 @@ static struct pci_driver sv_pci_driver = {
 	.probe = sv_pci_probe,
 	.remove = sv_pci_remove,
 };
+#endif
 
 MODULE_DEVICE_TABLE(of, sv_driver_match);
 
@@ -265,6 +274,7 @@ static unsigned char skel_get_revision(struct pci_dev *dev)
 	return revision;
 }
 
+#ifdef _PCIE_ENABLED_
 /**
  * @brief This is the Probe function called for PCIe Devices
 */
@@ -464,7 +474,6 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		xdma_init_sv(lro_global);
 
 		/* enable user interrupts */
-		//printk(KERN_INFO"[probe:%s]: Using IRQ#%d with 0x%p\n", pci_name, pci_dev_struct->irq, &pci_dev_struct);
 		user_interrupts_enable(lro_global, ~0);
 
 	}
@@ -610,6 +619,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		return -1;
 
 }
+#endif /* _PCIE_ENABLED_ */
 
 /**
  * @brief This is the Probe function called for Platform Devices (ie Zynq)
@@ -810,6 +820,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 
 }
 
+#ifdef _PCIE_ENABLED_
 static void sv_pci_remove(struct pci_dev *dev)
 {
 	const char * pci_name = dev->driver->name;
@@ -891,6 +902,7 @@ static void sv_pci_remove(struct pci_dev *dev)
 	printk(KERN_INFO"[sv_pci_remove]: ***********************PCIE DEVICE REMOVED**************************************\n");
 
 }
+#endif /* _PCIE_ENABLED_ */
 
 static int sv_plat_remove(struct platform_device *pdev)
 {
@@ -954,6 +966,7 @@ static int __init sv_driver_init(void)
 	switch(driver_type){
 		case PCI:
 		case AWS:
+			#ifdef _PCIE_ENABLED_
 			printk(KERN_INFO"[pci_init]: Device ID: ('0x%x')\n", device_id);
 			printk(KERN_INFO"[pci_init]: Major Number: ('%d')\n", major);
 			printk(KERN_INFO"[pci_init]: Name: ('%s')\n", pci_driver_name);
@@ -964,7 +977,10 @@ static int __init sv_driver_init(void)
 
 
 			return pci_register_driver(&sv_pci_driver);
-			break;
+			#else
+			printk(KERN_ERR"[pci_init]: Current driver do not support PCI.)\n");
+			#endif
+			return 0;
 
 		case PLATFORM:
 
@@ -983,6 +999,7 @@ static int __init sv_driver_init(void)
 static void __exit sv_driver_exit(void)
 {
 	switch(driver_type){
+		#ifdef _PCIE_ENABLED_
 		case PCI:
 		case AWS:
 			printk(KERN_INFO"[sv_driver_exit]: pci_driver_unregister started \n");
@@ -990,6 +1007,7 @@ static void __exit sv_driver_exit(void)
 			printk(KERN_INFO"[sv_driver_exit]: pci_driver_unregister done \n");
 
 			break;
+		#endif
 
 		case PLATFORM:
 			printk(KERN_INFO"[sv_driver_exit]: platform_driver_unregister started \n");

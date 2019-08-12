@@ -39,7 +39,10 @@
  #include <linux/atomic.h>
  #include <linux/spinlock.h>
  #include "sv_driver.h"
+
+#ifdef _JIM_H_
  #include "xdma/sv_xdma.h"
+#endif 
 
  //debug
  #include <linux/time.h>

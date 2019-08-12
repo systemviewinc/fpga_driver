@@ -1,9 +1,9 @@
 
 obj-m += vsi_driver.o
 
-vsi_driver-y += xdma/sv_xdma.o
-vsi_driver-y += xdma/xdma-core.o
-vsi_driver-y += xdma/xdma-sgm.o
+# vsi_driver-y += xdma/sv_xdma.o
+# vsi_driver-y += xdma/xdma-core.o
+# vsi_driver-y += xdma/xdma-sgm.o
 vsi_driver-y += support_funcs.o
 vsi_driver-y += sv_streaming_funcs.o
 vsi_driver-y += sv_driver.o

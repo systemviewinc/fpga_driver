@@ -15,10 +15,24 @@
 #ifndef SV_DRIVER_H
 #define SV_DRIVER_H
 
+#undef CONFIG_PCI_MSI
+#undef _PCIE_ENABLED_
+
 #include <linux/kthread.h>
 #include <linux/kfifo.h>
+
+#ifdef _PCIE_ENABLED_
 #include "xdma/xdma-core.h"
 #include "xdma/sv_xdma.h"
+#endif
+
+#ifndef XDMA_BAR_NUM
+#define XDMA_BAR_NUM (6)
+#endif
+
+#ifndef XDMA_CHANNEL_NUM_MAX
+#define XDMA_CHANNEL_NUM_MAX (4)
+#endif
 
 /********* printk statements *********/
 #define verbose_printk printk

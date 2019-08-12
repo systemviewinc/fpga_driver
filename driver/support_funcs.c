@@ -39,7 +39,11 @@
  #include <linux/spinlock.h>
  //#include <stdint.h>
  #include "sv_driver.h"
+
+#ifdef _PCIE_ENABLED_
  #include "xdma/sv_xdma.h"
+#endif
+
 
  //debug
  #include <linux/time.h>
@@ -142,6 +146,7 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 		//----------------------------------------------------------------------
 		//--------------------------do a XDMA Transfer--------------------------
 		//----------------------------------------------------------------------
+#ifdef _PCIE_ENABLED_
 		loff_t pos = axi_address;
 		int rc = 0;
 
@@ -153,28 +158,6 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 				xdma_channel = xdma_query(DMA_TO_DEVICE);
 				if(xdma_channel == -1) schedule();
 			}
-			//
-			// //if keyhole read/write set address mode to non_incr_mode
-			// if(transfer_type == KEYHOLE_WRITE) || (transfer_type == KEYHOLE_READ) {
-			//	 if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0]->engine, 1) ) {
-			//		 printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma failed to set address mode\n");
-			//		 return ERROR;
-			//	 }
-			//
-			//	 if(l_btt < (int)file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0]->engine->len_granularity){
-			//		 verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: setting BTT to len_granularity\n");
-			//		 l_btt = (int)file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0]->engine->len_granularity;
-			//
-			//	 }
-			//
-			// }
-			// //else set it to normal (incrementing) mode
-			// else {
-			//	 if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0]->engine, 0) ) {
-			//		 printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma failed to se address mode\n");
-			//		 return ERROR;
-			//	 }
-			// }
 
 			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: xdma xfer write address 0x%p offset 0x%x\n", buf+dma_offset, (u32)pos);
 			rc = sv_char_sgdma_read_write(file_desc, file_desc->xdma_dev->sgdma_char_dev[xdma_channel][0], buf+dma_offset, l_btt, &pos, 1);
@@ -197,18 +180,8 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 				if(xdma_channel == -1) schedule();
 			}
 
-			// if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[xdma_channel][1]->engine, 1) ) {
-			//	 printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma failed to se address mode\n");
-			//	 return ERROR;
-			// }
-			//
 			verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: xdma xfer write address 0x%p offset 0x%x\n", buf+dma_offset, (u32)pos);
 			rc = sv_char_sgdma_read_write(file_desc, file_desc->xdma_dev->sgdma_char_dev[xdma_channel][1], buf+dma_offset, l_btt, &pos, 0);
-			//
-			// if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[xdma_channel][1]->engine, 0) ) {
-			//	 printk(KERN_INFO"\t\t[dma_transfer]: ERROR xdma failed to se address mode\n");
-			//	 return ERROR;
-			// }
 
 			if(rc == l_btt) {	//successfully transfered all bytes
 				verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: unlock c2h %i\n", xdma_channel);
@@ -226,6 +199,10 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 			return ret;
 		}
 		return rc;
+#else
+		printk(KERN_ERR "XDMA Transfer do not support.\n");
+		return ERROR;
+#endif
 		//----------------------------------------------------------------------
 		//--------------------------XDMA Transfer done--------------------------
 		//----------------------------------------------------------------------
@@ -715,7 +692,7 @@ int pcie_ctl_init(u64 axi_pcie_ctl, u64 dma_addr_base)
 	return 0;
 }
 
-
+#ifdef _PCIE_ENABLED_
 /**
  * This function will intiialize the XDMA channels
  */
@@ -742,7 +719,7 @@ int xdma_init_sv(struct xdma_dev *lro)
 	}
 	return 0;
 }
-
+#endif
 
 
 
@@ -1415,7 +1392,11 @@ success:
 	return rc;
 }
 
-int sv_map_single_bar(struct bar_info *bars, struct xdma_dev *lro, struct pci_dev *dev, int idx)
+#ifdef _PCIE_ENABLED_
+int sv_map_single_bar(struct bar_info *bars, 
+                      struct xdma_dev *lro, 
+                      struct pci_dev *dev, 
+                      int idx)
 {
 	resource_size_t bar_start;
 	resource_size_t bar_len;
@@ -1466,6 +1447,7 @@ int sv_map_single_bar(struct bar_info *bars, struct xdma_dev *lro, struct pci_de
 
 	return (int)map_len;
 }
+#endif
 
 /*
  * Unmap the BAR regions that had been mapped earlier using map_bars()
