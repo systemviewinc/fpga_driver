@@ -1062,6 +1062,50 @@ static int cdma_query(void)
 	return -1;
 }
 
+/**
+ * set_cdma_keyhole() - Enable keyhole for CDMA procedure.
+ * @arg1: keyhole_en - procedure type.
+ * @arg2: cdma_num - CDMA number.
+ */
+void set_cdma_keyhole(int keyhole_en, int cdma_num) {
+	u32 bit_vec;
+	switch(keyhole_en) {
+		case KEYHOLE_READ:
+			bit_vec = 0x00000010;	//the bit for KEYHOLE READ
+			verbose_cdma_printk(KERN_INFO"\t\t[%s]: Setting the CDMA Keyhole READ as ENABLED\n", __func__);
+			if( cdma_config_set(bit_vec, 1, cdma_num) ) {	//value of one means we want to SET the register
+				printk(KERN_INFO"[%s]: !!!!!!!!ERROR on CDMA WRITE!!!.\n", __func__);
+			}
+			break;
+
+		case KEYHOLE_WRITE:
+			bit_vec = 0x00000020;	//the bit for KEYHOLE WRITE
+			verbose_cdma_printk(KERN_INFO"\t\t[%s]: Setting the CDMA Keyhole WRITE as ENABLED\n", __func__);
+			if( cdma_config_set(bit_vec, 1, cdma_num) ) {	//value of one means we want to SET the register
+				printk(KERN_INFO"[%s]: !!!!!!!!ERROR on CDMA WRITE!!!.\n", __func__);
+			}	//value of one means we want to SET the register
+			break;
+
+		default:
+			verbose_cdma_printk(KERN_INFO"\t\t[%s]: no keyhole setting will be used.\n", __func__);
+	}
+}
+
+/**
+ * unset_cdma_keyhole() - Unset keyhole for CDMA procedure.
+ * @arg1: keyhole_en - procedure type.
+ * @arg2: cdma_num - CDMA number.
+ */
+void unset_cdma_keyhole(int keyhole_en, int cdma_num) {
+	if((keyhole_en == KEYHOLE_READ) | (keyhole_en == KEYHOLE_WRITE)) {
+		u32 bit_vec;
+		bit_vec = 0x20 | 0x10;	// "0x30" unset both CDMA keyhole read and write
+		if( cdma_config_set(bit_vec, 0, cdma_num) ) {	//unsets the keyhole configuration
+			printk(KERN_INFO"[%s]: !!!!!!!!ERROR on CDMA WRITE!!!.\n", __func__);
+		}
+	}
+}
+
 
 /**
  * This function is used to initiate a CDMA Transfer. It requires
@@ -1096,7 +1140,6 @@ static int cdma_query(void)
  */
 int cdma_transfer(struct file_desc * file_desc, u64 SA, u64 DA, u32 BTT, int keyhole_en, int cdma_num)
 {
-	u32 bit_vec;
 	u32 axi_dest;
 	u32 SA_MSB;
 	u32 SA_LSB;
@@ -1104,7 +1147,7 @@ int cdma_transfer(struct file_desc * file_desc, u64 SA, u64 DA, u32 BTT, int key
 	u32 DA_LSB;
 	int dma_usage_cnt = file_desc->svd->dma_usage_cnt++;
 
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: **** Starting CDMA %d transfer ****\n", dma_usage_cnt);
+	verbose_cdma_printk(KERN_INFO"\t\t[%s]: **** Starting CDMA %d transfer ****\n", __func__, dma_usage_cnt);
 
 	SA_MSB = (u32)(SA>>32);
 	SA_LSB = (u32)SA;
@@ -1115,42 +1158,23 @@ int cdma_transfer(struct file_desc * file_desc, u64 SA, u64 DA, u32 BTT, int key
 	//Step 1. Verify CDMASR.IDLE = 1.
 	cdma_idle_poll(cdma_num);
 
-
 	// Step 2. Program the CDMACR.IOC_IrqEn bit to the desired state for interrupt generation on
 	// transfer completion. Also set the error interrupt enable (CDMACR.ERR_IrqEn), if so desired.
-	// TODO: Remove keyhole.
-	switch(keyhole_en){
-		// 5, 6 - should never heppend (disabling of keyhole)
-		case 5:
-			bit_vec = 0x00000010;	//the bit for KEYHOLE READ
-			verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: Setting the CDMA Keyhole READ as ENABLED\n");
-			if( cdma_config_set(bit_vec, 1, cdma_num) ) {	//value of one means we want to SET the register
-				printk(KERN_INFO"[cdma_transfer]: !!!!!!!!ERROR on CDMA WRITE!!!.\n");
-			}
-			break;
-
-		case 6:
-			bit_vec = 0x00000020;	//the bit for KEYHOLE WRITE
-			verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: Setting the CDMA Keyhole WRITE as ENABLED\n");
-			if( cdma_config_set(bit_vec, 1, cdma_num) ) {	//value of one means we want to SET the register
-				printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR on CDMA WRITE!!!.\n");
-			}	//value of one means we want to SET the register
-			break;
-
-		default:verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: no keyhole setting will be used.\n");
+	if ( !file_desc->svd->keyhole_prohibited ) {
+		set_cdma_keyhole(keyhole_en, cdma_num);
 	}
 
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: Using CDMA %d\n", cdma_num);
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: ********* CDMA TRANSFER %d INITIALIZATION *************\n", dma_usage_cnt);
+	verbose_cdma_printk(KERN_INFO"\t\t[%s]: Using CDMA %d\n", __func__, cdma_num);
+	verbose_cdma_printk(KERN_INFO"\t\t[%s]: ********* CDMA TRANSFER %d INITIALIZATION *************\n", __func__, dma_usage_cnt);
 
 	// Step 3. Write the desired transfer source address to the Source Address (SA) register. The
 	// transfer data at the source address must be valid and ready for transfer. If the address
 	// space selected is more than 32, write the SA_MSB register also.
 	axi_dest = cdma_address[cdma_num] + CDMA_SA;
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: writing dma SA address ('0x%012llx') to CDMA at axi address:0x%x\n", SA, axi_dest);
+	verbose_cdma_printk(KERN_INFO"\t\t[%s]: writing dma SA address ('0x%012llx') to CDMA at axi address:0x%x\n", __func__, SA, axi_dest);
 	//extra debug messages
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: writing dma SA_LSB address ('0x%08x') to CDMA at axi address:0x%x\n", SA_LSB, axi_dest);
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: writing dma SA_MSB address ('0x%08x') to CDMA at axi address:0x%x\n", SA_MSB, axi_dest+4);
+	verbose_cdma_printk(KERN_INFO"\t\t[%s]: writing dma SA_LSB address ('0x%08x') to CDMA at axi address:0x%x\n", __func__, SA_LSB, axi_dest);
+	verbose_cdma_printk(KERN_INFO"\t\t[%s]: writing dma SA_MSB address ('0x%08x') to CDMA at axi address:0x%x\n", __func__, SA_MSB, axi_dest+4);
 
 	direct_write(axi_dest , (void*)&SA_LSB, 4, NORMAL_WRITE);				//todo add error check
 	direct_write(axi_dest + 4, (void*)&SA_MSB, 4, NORMAL_WRITE);			//todo add error check
@@ -1159,20 +1183,20 @@ int cdma_transfer(struct file_desc * file_desc, u64 SA, u64 DA, u32 BTT, int key
 	// If the address space selected is more than 32, then write the DA_MSB register also.
 	axi_dest = cdma_address[cdma_num] + CDMA_DA;
 
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: writing DA address ('0x%012llx') to CDMA at axi address:0x%x\n", DA, axi_dest);
+	verbose_cdma_printk(KERN_INFO"\t\t[%s]: writing DA address ('0x%012llx') to CDMA at axi address:0x%x\n", __func__, DA, axi_dest);
 	//extra debug messages
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: writing DA_LSB address ('0x%08x') to CDMA at axi address:0x%x\n", DA_LSB, axi_dest);
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: writing DA_MSB address ('0x%08x') to CDMA at axi address:0x%x\n", DA_MSB, axi_dest+4);
+	verbose_cdma_printk(KERN_INFO"\t\t[%s]: writing DA_LSB address ('0x%08x') to CDMA at axi address:0x%x\n", __func__, DA_LSB, axi_dest);
+	verbose_cdma_printk(KERN_INFO"\t\t[%s]: writing DA_MSB address ('0x%08x') to CDMA at axi address:0x%x\n", __func__, DA_MSB, axi_dest+4);
 
 	direct_write(axi_dest, 	(void*)&DA_LSB, 4, NORMAL_WRITE);			//todo add error check
-	direct_write(axi_dest+4, (void*)&DA_MSB, 4, NORMAL_WRITE);			//todo add error check
+	direct_write(axi_dest + 4, (void*)&DA_MSB, 4, NORMAL_WRITE);			//todo add error check
 	//read the status register
 
 	// Step 5. Write the number of bytes to transfer to the CDMA Bytes to Transfer (BTT) register. Up
 	// to 8, 388, 607 bytes can be specified for a single transfer (unless DataMover Lite is being
 	// used). Writing to the BTT register also starts the transfer.
 	axi_dest = cdma_address[cdma_num] + CDMA_BTT;
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: writing bytes to transfer ('0x%x') to CDMA at axi address:0x%x\n", BTT, axi_dest);
+	verbose_cdma_printk(KERN_INFO"\t\t[%s]: writing bytes to transfer ('0x%x') to CDMA at axi address:0x%x\n", __func__, BTT, axi_dest);
 	direct_write(axi_dest, (void*)&BTT, 4, NORMAL_WRITE);			//todo add error chceck
 
 
@@ -1192,17 +1216,14 @@ int cdma_transfer(struct file_desc * file_desc, u64 SA, u64 DA, u32 BTT, int key
 	// Acknowledge the CDMA and check for error status
 	cdma_idle_poll(cdma_num);													//verify idle before checking status
 	if( cdma_ack(cdma_num, SA, DA, BTT) ) {	//value of one means we want to SET the register
-			printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR on CDMA WRITE!!!.\n");
+			printk(KERN_INFO"[%s]: !!!!!!!!ERROR on CDMA WRITE!!!.\n", __func__);
 	}
 
-	if((keyhole_en == KEYHOLE_READ) | (keyhole_en == KEYHOLE_WRITE)) {
-		bit_vec = 0x20 | 0x10;		// "0x30" unset both CDMA keyhole read and write
-		if( cdma_config_set(bit_vec, 0, cdma_num) ) {	//unsets the keyhole configuration
-			printk(KERN_INFO"[data_transfer]: !!!!!!!!ERROR on CDMA WRITE!!!.\n");
-		}
+	if ( !file_desc->svd->keyhole_prohibited ) {
+		unset_cdma_keyhole(keyhole_en, cdma_num);
 	}
 
-	verbose_cdma_printk(KERN_INFO"\t\t[cdma_transfer]: ********* CDMA TRANSFER %d FINISHED *************\n", dma_usage_cnt);
+	verbose_cdma_printk(KERN_INFO"\t\t[%s]: ********* CDMA TRANSFER %d FINISHED *************\n", __func__, dma_usage_cnt);
 
 	return 0;
 }

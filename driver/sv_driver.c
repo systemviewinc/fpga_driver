@@ -68,6 +68,8 @@ uint vsi_reg_intf_addr = -1;/**< Insmod Parameter - This parameter sets the PCIE
 uint interface_crc = 0;/**< Insmod Parameter - This parameter sets whether the READ Ring Buffer should overwrite data or backpressure to HW.*/
 uint interface_crc_check = 0;/**< Insmod Parameter - This parameter sets whether the READ Ring Buffer should overwrite data or backpressure to HW.*/
 uint pcie_use_xdma = 1; /**< Insmod Parameter : will use XDMA instead of CDMA to move data */
+bool keyhole_prohibited; /**< Prohibition of use keyhole in data transfer */
+
 module_param(vendor_id, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
 MODULE_PARM_DESC(vendor_id, "Vendor ID");/**< Insmod Parameter */
 
@@ -121,6 +123,11 @@ MODULE_PARM_DESC(interface_crc_check, "interface_crc_check bool");/**< Insmod Pa
 
 module_param(pcie_use_xdma, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
 MODULE_PARM_DESC(pcie_use_xdma, "USE XDMA Instead of CDMA");/**< Insmod Parameter */
+
+ /**< keyhole_prohibited insmod parameter. */
+module_param(keyhole_prohibited, bool, true);
+MODULE_PARM_DESC(keyhole_prohibited,
+	"Use to allow keyhole. By default keyhole prohibited.");
 
 /*****************************************************************************/
 
@@ -300,6 +307,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	verbose_printk(KERN_INFO"[probe:%s]: interface_crc : 0x%x \n", pci_name, interface_crc);
 	verbose_printk(KERN_INFO"[probe:%s]: interface_crc_check : 0x%x \n", pci_name, interface_crc_check);
 	verbose_printk(KERN_INFO"[probe:%s]: pcie_use_xdma : 0x%x \n", pci_name, pcie_use_xdma);
+	verbose_printk(KERN_INFO"[probe:%s]: keyhole_prohibited : %d \n", pci_name, keyhole_prohibited);
 	verbose_printk(KERN_INFO"[probe:%s]: ******************************** BEGIN PROBE ROUTINE *****************************************\n", pci_name);
 
 	pci_dev_struct = dev;
@@ -335,6 +343,7 @@ static int sv_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		printk(KERN_INFO"[probe:%s]: lro_global: %p\n", pci_name, lro_global);
 	}
 
+	svd_global->keyhole_prohibited = keyhole_prohibited;
 	/*Create Read Thread*/
 	svd_global->thread_struct_read = create_thread_read(svd_global);
 	/*Create Write Thread*/
@@ -656,6 +665,8 @@ static int sv_plat_probe(struct platform_device *pdev)
 		pcie_use_xdma = 0;
 	}
 	verbose_printk(KERN_INFO"[probe:%s]: pcie_use_xdma : 0x%x \n", plat_name, pcie_use_xdma);
+	verbose_printk(KERN_INFO"[probe:%s]: keyhole_prohibited : %d \n", plat_name, keyhole_prohibited);
+
 	verbose_printk(KERN_INFO"[probe:%s]: ******************************** BEGIN PROBE ROUTINE *****************************************\n", plat_name);
 
 	platform_dev_struct = pdev;
@@ -677,6 +688,7 @@ static int sv_plat_probe(struct platform_device *pdev)
 	}
 	svd_global->bars->num_bars = 0;
 
+	svd_global->keyhole_prohibited = keyhole_prohibited;
 	/*Create Read Thread*/
 	svd_global->thread_struct_read = create_thread_read(svd_global);
 	/*Create Write Thread*/
