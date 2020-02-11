@@ -126,6 +126,7 @@ MODULE_PARM_DESC(pcie_use_xdma, "USE XDMA Instead of CDMA");/**< Insmod Paramete
 
  /**< keyhole_prohibited insmod parameter. */
 module_param(keyhole_prohibited, bool, true);
+//module_param(keyhole_prohibited, bool, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(keyhole_prohibited,
 	"Use to allow keyhole. By default keyhole prohibited.");
 
@@ -946,7 +947,7 @@ static int sv_plat_remove(struct platform_device *pdev)
 
 	unregister_chrdev(major, plat_name);
 	for(i = 0; i < svd_global->bars->num_bars; i++){
-		iounmap(svd_global->bars->pci_bar_vir_addr[i]);
+		devm_iounmap(&pdev->dev, svd_global->bars->pci_bar_vir_addr[i]);
 	}
 
 	dma_free_coherent(dev_struct, (size_t)svd_global->dma_buffer_size, svd_global->dma_buffer_base, svd_global->dma_addr_base);

@@ -39,6 +39,7 @@
 // #define verbose_mmap_printk printk
 // #define verbose_read_thread_printk printk
 // #define verbose_write_thread_printk printk
+// #define verbose_copy_ring_buf_printk printk
 #define pr_bar 1
 
 #ifndef verbose_llseek_printk
