@@ -68,7 +68,7 @@ uint vsi_reg_intf_addr = -1;/**< Insmod Parameter - This parameter sets the PCIE
 uint interface_crc = 0;/**< Insmod Parameter - This parameter sets whether the READ Ring Buffer should overwrite data or backpressure to HW.*/
 uint interface_crc_check = 0;/**< Insmod Parameter - This parameter sets whether the READ Ring Buffer should overwrite data or backpressure to HW.*/
 uint pcie_use_xdma = 1; /**< Insmod Parameter : will use XDMA instead of CDMA to move data */
-bool keyhole_prohibited; /**< Prohibition of use keyhole in data transfer */
+uint keyhole_prohibited = 1; /**< Prohibition of use keyhole in data transfer */
 
 module_param(vendor_id, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
 MODULE_PARM_DESC(vendor_id, "Vendor ID");/**< Insmod Parameter */
@@ -124,11 +124,8 @@ MODULE_PARM_DESC(interface_crc_check, "interface_crc_check bool");/**< Insmod Pa
 module_param(pcie_use_xdma, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
 MODULE_PARM_DESC(pcie_use_xdma, "USE XDMA Instead of CDMA");/**< Insmod Parameter */
 
- /**< keyhole_prohibited insmod parameter. */
-module_param(keyhole_prohibited, bool, true);
-//module_param(keyhole_prohibited, bool, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-MODULE_PARM_DESC(keyhole_prohibited,
-	"Use to allow keyhole. By default keyhole prohibited.");
+module_param(keyhole_prohibited, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);/**< Insmod Parameter */
+MODULE_PARM_DESC(keyhole_prohibited, "Use to allow keyhole. By default keyhole prohibited.");/**< Insmod Parameter */
 
 /*****************************************************************************/
 

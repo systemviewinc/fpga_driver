@@ -362,7 +362,7 @@ struct sv_mod_dev {
 	atomic_t driver_stop_flag;/**< Global Atomic Variable for Driver Statistics */
 	struct timespec driver_start_time;/**< Global Struct for Driver Statistics */
 	struct timespec driver_stop_time;/**< Global Struct Variable for Driver Statistics */
-	bool keyhole_prohibited; /**< Prohibition of use keyhole in data transfer */
+	uint keyhole_prohibited; /**< Prohibition of use keyhole in data transfer */
 
 };
 
