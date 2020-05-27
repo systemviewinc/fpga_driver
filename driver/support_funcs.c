@@ -148,10 +148,19 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 		verbose_dma_printk(KERN_INFO"\t\t[dma_transfer]: Using XDMA \n");
 
 		if(xfer_type & HOST_READ) { // host to card AKA WRITE
-
-			while (xdma_channel == -1 && --attempts != 0) {
-				xdma_channel = xdma_query(DMA_TO_DEVICE);
-				if(xdma_channel == -1) schedule();
+			while(1){
+				while(xdma_channel == -1 && --attempts != 0) {
+					xdma_channel = xdma_query(DMA_TO_DEVICE);
+					if(xdma_channel == -1) schedule();
+				}
+				if(xdma_channel == -1){
+					printk(KERN_INFO"\t\t[dma_transfer]: Could not get xdma (hr), sleep 1 ms. \n");
+					wait_event_interruptible_timeout(file_desc->svd->thread_q_head_read,0,msecs_to_jiffies(1));
+					attempts = 10000;
+				}
+				else{
+					break;
+				}
 			}
 			//
 			// //if keyhole read/write set address mode to non_incr_mode
@@ -191,10 +200,19 @@ int dma_transfer(struct file_desc * file_desc, u64 axi_address, void *buf, size_
 
 
 		} else if(xfer_type & HOST_WRITE) { // card to host AKA READ
-
-			while (xdma_channel == -1 && --attempts != 0) {
-				xdma_channel = xdma_query(DMA_FROM_DEVICE);
-				if(xdma_channel == -1) schedule();
+			while(1){
+				while(xdma_channel == -1 && --attempts != 0) {
+					xdma_channel = xdma_query(DMA_FROM_DEVICE);
+					if(xdma_channel == -1) schedule();
+				}
+				if(xdma_channel == -1){
+					printk(KERN_INFO"\t\t[dma_transfer]: Could not get xdma (hw), sleep 1 ms. \n");
+					wait_event_interruptible_timeout(file_desc->svd->thread_q_head_write,0,msecs_to_jiffies(1));
+					attempts = 10000;
+				}
+				else{
+					break;
+				}
 			}
 
 			// if( sv_do_addrmode_set(file_desc->xdma_dev->sgdma_char_dev[xdma_channel][1]->engine, 1) ) {
