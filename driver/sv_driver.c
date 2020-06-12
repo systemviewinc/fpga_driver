@@ -2308,7 +2308,7 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 			}
 
 			/*Check to see if read will go past the boundary*/
-			if(count + *f_pos > (size_t)file_desc->file_size) {
+			if(count + *f_pos > (u64)file_desc->file_size) {
 				verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: Read will overrun the file size because \n", minor);
 				verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: (the current file offset + amount to read)->(%llu) > (%llu)->file_size\n", minor, count + *f_pos, file_desc->file_size);
 				count = (size_t)(file_desc->file_size - *f_pos);
