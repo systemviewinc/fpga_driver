@@ -360,8 +360,8 @@ struct sv_mod_dev {
 	atomic_t driver_rx_bytes;/**< Global Atomic Variable for Driver Statistics */
 	atomic_t driver_start_flag;/**< Global Atomic Variable for Driver Statistics */
 	atomic_t driver_stop_flag;/**< Global Atomic Variable for Driver Statistics */
-	struct timespec driver_start_time;/**< Global Struct for Driver Statistics */
-	struct timespec driver_stop_time;/**< Global Struct Variable for Driver Statistics */
+	struct timespec64 driver_start_time;/**< Global Struct for Driver Statistics */
+	struct timespec64 driver_stop_time;/**< Global Struct Variable for Driver Statistics */
 	uint keyhole_prohibited; /**< Prohibition of use keyhole in data transfer */
 
 };
@@ -413,8 +413,8 @@ struct file_desc {
 	int tx_bytes;				/**< This is the TX byte count for statistics generation */
 	int rx_bytes;				/**< This is the RX byte count for statistics generation */
 
-	struct timespec * start_time;	/**< This holds the start time for statistics generation */
-	struct timespec * stop_time;	 /**< This holds the stop time for statistics generation */
+	struct timespec64 * start_time;	/**< This holds the start time for statistics generation */
+	struct timespec64 * stop_time;	 /**< This holds the stop time for statistics generation */
 	int start_flag;				 /**< This is used internally by the driver for starting the timer */
 	int stop_flag;							/**< This is used internally by the driver for stopping the timer */
 	int cdma_attempt;			 		/**< This is a statictic collected to count number of failed cdma semaphore lock attempts */

@@ -1583,8 +1583,8 @@ struct sv_mod_dev *alloc_sv_dev_instance(u64 dma_size)
 	atomic_set(&sv_dev->driver_rx_bytes, 0);/**< Global Atomic Variable for Driver Statistics */
 	atomic_set(&sv_dev->driver_start_flag, 0);/**< Global Atomic Variable for Driver Statistics */
 	atomic_set(&sv_dev->driver_stop_flag, 0);/**< Global Atomic Variable for Driver Statistics */
-	//struct timespec driver_start_time;/**< Global Struct for Driver Statistics */
-	//struct timespec driver_stop_time;/**< Global Struct Variable for Driver Statistics */
+	//struct timespec64 driver_start_time;/**< Global Struct for Driver Statistics */
+	//struct timespec64 driver_stop_time;/**< Global Struct Variable for Driver Statistics */
 
 	printk(KERN_INFO"probe() sv_dev = 0x%p\n", sv_dev);
 

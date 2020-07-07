@@ -712,7 +712,9 @@ struct xdma_transfer *engine_start(struct xdma_engine *engine)
 
 	dbg_tfr("ioread32(0x%p) (dummy read flushes writes).\n",
 		&engine->regs->status);
+	#if KERNEL_VERSION(5, 1, 0) >= LINUX_VERSION_CODE
 	mmiowb();
+	#endif
 
 	engine_start_mode_config(engine);
 

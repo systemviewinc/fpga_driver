@@ -38,6 +38,8 @@
  #include <linux/mutex.h>
  #include <linux/atomic.h>
  #include <linux/time.h>
+ #include <linux/time64.h>
+ #include <linux/timekeeping.h>
  #include <linux/kthread.h>
  #include <linux/kfifo.h>
  #include <linux/spinlock.h>
@@ -1144,8 +1146,8 @@ int pci_open(struct inode *inode, struct file *filep)
 {
 	//void * interrupt_count;
 	struct file_desc * s;
-	struct timespec * start_time;
-	struct timespec * stop_time;
+	struct timespec64 * start_time;
+	struct timespec64 * stop_time;
 
 	atomic_t * atomic_poll;
 	atomic_t * wth;
@@ -1183,8 +1185,8 @@ int pci_open(struct inode *inode, struct file *filep)
 	ring_pointer_read = (spinlock_t *)kmalloc(sizeof(spinlock_t), GFP_KERNEL);
 	spin_lock_init(ring_pointer_read);
 
-	start_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
-	stop_time = (struct timespec *)kmalloc(sizeof(struct timespec), GFP_KERNEL);
+	start_time = (struct timespec64 *)kmalloc(sizeof(struct timespec64), GFP_KERNEL);
+	stop_time = (struct timespec64 *)kmalloc(sizeof(struct timespec64), GFP_KERNEL);
 
 	atomic_poll = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
 	wtk = (atomic_t *)kmalloc(sizeof(atomic_t), GFP_KERNEL);
@@ -1414,7 +1416,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	//	u32 kern_reg;
 	int interrupt_num;
 	struct statistics * stats; //= kmalloc(sizeof(struct statistics), GFP_KERNEL);
-	struct timespec diff;
+	struct timespec64 diff;
 	int minor;
 	void * buffer;
 
@@ -1586,7 +1588,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 			if(file_desc->stop_flag == 1) {
 				file_desc->stop_flag = 0;
-				diff = timespec_sub(*(file_desc->stop_time), *(file_desc->start_time));
+				diff = timespec64_sub(*(file_desc->stop_time), *(file_desc->start_time));
 				stats->seconds = (unsigned long)diff.tv_sec;
 				stats->ns = (unsigned long)diff.tv_nsec;
 			}
@@ -1615,7 +1617,7 @@ long pci_unlocked_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 			if(atomic_read(&svd_global->driver_stop_flag) == 1) {
 				atomic_set(&svd_global->driver_stop_flag, 0);
-				diff = timespec_sub((svd_global->driver_stop_time), (svd_global->driver_start_time));
+				diff = timespec64_sub((svd_global->driver_stop_time), (svd_global->driver_start_time));
 				stats->seconds = (unsigned long)diff.tv_sec;
 				stats->ns = (unsigned long)diff.tv_nsec;
 			}
@@ -1891,12 +1893,12 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 
 	/*Start timers for statistics*/
 	if(file_desc->start_flag == 1) {
-		getnstimeofday(file_desc->start_time);
+		ktime_get_real_ts64(file_desc->start_time);
 		file_desc->start_flag = 0;
 	}
 
 	if(atomic_read(&svd_global->driver_start_flag) == 1) {
-		getnstimeofday(&svd_global->driver_start_time);
+		ktime_get_real_ts64(&svd_global->driver_start_time);
 		atomic_set(&svd_global->driver_start_flag, 0);
 	}
 
@@ -2133,8 +2135,8 @@ ssize_t pci_write(struct file *filep, const char __user *buf, size_t count, loff
 	verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: total file tx byes: %d \n", minor, file_desc->tx_bytes);
 
 	/*always update the stop_timer*/
-	getnstimeofday(file_desc->stop_time);
-	getnstimeofday(&svd_global->driver_stop_time);
+	ktime_get_real_ts64(file_desc->stop_time);
+	ktime_get_real_ts64(&svd_global->driver_stop_time);
 
 	verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: ************************************************************************\n", minor);
 	verbose_pci_write_printk(KERN_INFO"[pci_%x_write]: ******************** WRITE TRANSACTION END **************************\n", minor);
@@ -2227,12 +2229,12 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 	verbose_pci_read_printk(KERN_INFO"[pci_%x_read]: Attempting to read %zu bytes\n", minor, count);
 
 	if(file_desc->start_flag == 1) {
-		getnstimeofday(file_desc->start_time);
+		ktime_get_real_ts64(file_desc->start_time);
 		file_desc->start_flag = 0;
 	}
 
 	if(atomic_read(&svd_global->driver_start_flag) == 1) {
-		getnstimeofday(&svd_global->driver_start_time);
+		ktime_get_real_ts64(&svd_global->driver_start_time);
 		atomic_set(&svd_global->driver_start_flag, 0);
 	}
 
@@ -2390,8 +2392,8 @@ ssize_t pci_read(struct file *filep, char __user *buf, size_t count, loff_t *f_p
 
 	/*always update the stop_timer*/
 	if(bytes > 0) {
-		getnstimeofday(file_desc->stop_time);
-		getnstimeofday(&svd_global->driver_stop_time);
+		ktime_get_real_ts64(file_desc->stop_time);
+		ktime_get_real_ts64(&svd_global->driver_stop_time);
 		file_desc->rx_bytes = file_desc->rx_bytes + bytes;
 		atomic_add(bytes, &svd_global->driver_rx_bytes);
 	}
